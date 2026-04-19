@@ -5,9 +5,12 @@ import re
 from typing import Iterable
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    BeautifulSoup = None
 
-from src.normalize import normalize_url, normalize_whitespace
+from src.normalize import get_domain, normalize_url, normalize_whitespace
 
 HIGH_VALUE_KEYWORDS: dict[str, float] = {
     "contact": 2.5,
@@ -32,6 +35,28 @@ HIGH_VALUE_KEYWORDS: dict[str, float] = {
     "agenda": 2.0,
     "minutes": 2.0,
     "meeting": 1.5,
+    # Contact-oriented discovery keywords.
+    "town clerk": 3.1,
+    "clerk": 2.2,
+    "first selectman": 3.2,
+    "board of selectmen": 3.2,
+    "mayor": 2.8,
+    "town manager": 2.8,
+    "town administrator": 2.8,
+    "administration": 2.2,
+    "contact us": 2.8,
+    "departments": 2.4,
+    "staff directory": 3.0,
+    "animal control": 2.5,
+    "public works": 2.5,
+    "finance": 2.3,
+    "planning": 2.3,
+    "land use": 2.2,
+    "wetlands": 2.3,
+    "police": 2.0,
+    "fire": 2.0,
+    "registrar": 2.2,
+    "human resources": 2.3,
 }
 
 BROAD_FALLBACK_KEYWORDS: dict[str, float] = {
@@ -49,8 +74,55 @@ BROAD_FALLBACK_KEYWORDS: dict[str, float] = {
     "finance": 0.7,
 }
 
+OFFICIAL_PAGE_KEYWORDS = (
+    "first selectman",
+    "board of selectmen",
+    "selectman",
+    "mayor",
+    "town manager",
+    "town administrator",
+    "administration",
+)
+
+DIRECTORY_PAGE_KEYWORDS = (
+    "staff directory",
+    "directory",
+    "staff",
+)
+
+CONTACT_PAGE_KEYWORDS = (
+    "contact us",
+    "contact",
+)
+
+DEPARTMENT_PAGE_KEYWORDS = (
+    "department",
+    "departments",
+    "town clerk",
+    "clerk",
+    "animal control",
+    "public works",
+    "finance",
+    "assessor",
+    "tax collector",
+    "planning",
+    "zoning",
+    "land use",
+    "wetlands",
+    "building",
+    "police",
+    "fire",
+    "registrar",
+    "human resources",
+)
+
+CONTACT_ORIENTED_PAGE_TYPES = {"official_page", "department_page", "directory_page", "contact_page"}
+NON_HTML_LINK_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".js", ".ico", ".zip", ".pdf", ".doc", ".docx")
+
 
 def extract_links_from_html(html: str, base_url: str) -> list[dict[str, str]]:
+    if BeautifulSoup is None:
+        return _extract_links_html_fallback(html or "", base_url)
     soup = BeautifulSoup(html or "", "html.parser")
     links: list[dict[str, str]] = []
     for anchor in soup.find_all("a", href=True):
@@ -64,6 +136,8 @@ def extract_links_from_html(html: str, base_url: str) -> list[dict[str, str]]:
 
 
 def extract_links_from_sitemap_xml(xml_text: str) -> list[dict[str, str]]:
+    if BeautifulSoup is None:
+        return _extract_links_xml_fallback(xml_text or "")
     soup = BeautifulSoup(xml_text or "", "xml")
     links: list[dict[str, str]] = []
     for loc in soup.find_all("loc"):
@@ -92,6 +166,10 @@ def score_link(url: str, label: str, broad_mode: bool = False) -> tuple[float, l
     if "/departments" in url.lower():
         score += 0.75
         reasons.append("departments_path")
+    page_type = classify_page_type(url, label)
+    if page_type in CONTACT_ORIENTED_PAGE_TYPES:
+        score += 1.2
+        reasons.append(f"page_type:{page_type}")
     return score, reasons
 
 
@@ -124,6 +202,7 @@ def select_high_value_links(
         payload = {
             "url": url,
             "label": label,
+            "page_type": classify_page_type(url, label),
             "score": round(score, 3),
             "reasons": ",".join(sorted(set(reasons))),
             "source_url": source_url,
@@ -144,3 +223,89 @@ def summarize_link_categories(links: Iterable[dict[str, str | float]]) -> dict[s
             if token:
                 buckets[token] += 1
     return dict(sorted(buckets.items(), key=lambda kv: kv[1], reverse=True))
+
+
+def classify_page_type(url: str, label: str | None = None) -> str:
+    blob = f"{label or ''} {url}".lower()
+    if any(keyword_in_text(blob, token) for token in DIRECTORY_PAGE_KEYWORDS):
+        return "directory_page"
+    if any(keyword_in_text(blob, token) for token in CONTACT_PAGE_KEYWORDS):
+        return "contact_page"
+    if any(keyword_in_text(blob, token) for token in OFFICIAL_PAGE_KEYWORDS):
+        return "official_page"
+    if any(keyword_in_text(blob, token) for token in DEPARTMENT_PAGE_KEYWORDS):
+        return "department_page"
+    return "candidate"
+
+
+def is_contact_oriented_page_type(page_type: str | None) -> bool:
+    return str(page_type or "").strip().lower() in CONTACT_ORIENTED_PAGE_TYPES
+
+
+def select_contact_child_links(
+    links: Iterable[dict[str, str]],
+    municipality_domain: str,
+    max_links: int = 8,
+    min_score: float = 1.6,
+) -> list[dict[str, str | float]]:
+    dedup: dict[str, dict[str, str | float]] = {}
+    muni = (municipality_domain or "").strip().lower()
+    for link in links:
+        url = str(link.get("url") or "")
+        if not url:
+            continue
+        if not _is_internal_url(url, muni):
+            continue
+        if url.lower().endswith(NON_HTML_LINK_SUFFIXES):
+            continue
+
+        label = str(link.get("label") or "")
+        page_type = classify_page_type(url, label)
+        score, reasons = score_link(url, label, broad_mode=True)
+        if page_type in CONTACT_ORIENTED_PAGE_TYPES:
+            score += 1.6
+            reasons.append(f"contact_child:{page_type}")
+        if score < min_score and page_type == "candidate":
+            continue
+
+        prior = dedup.get(url)
+        payload = {
+            "url": url,
+            "label": label,
+            "page_type": page_type,
+            "score": round(score, 3),
+            "reasons": ",".join(sorted(set(reasons))),
+            "source_url": str(link.get("source_url") or ""),
+        }
+        if prior is None or float(payload["score"]) > float(prior["score"]):
+            dedup[url] = payload
+
+    ranked = sorted(dedup.values(), key=lambda item: float(item["score"]), reverse=True)
+    return ranked[:max_links]
+
+
+def _is_internal_url(url: str, municipality_domain: str) -> bool:
+    domain = (get_domain(url) or "").lower()
+    if not domain or not municipality_domain:
+        return False
+    return domain == municipality_domain or domain.endswith(f".{municipality_domain}")
+
+
+def _extract_links_html_fallback(html: str, base_url: str) -> list[dict[str, str]]:
+    links: list[dict[str, str]] = []
+    for href in re.findall(r'(?i)<a[^>]+href=["\']([^"\']+)["\']', html):
+        normalized = normalize_url(href, base_url=base_url)
+        if not normalized:
+            continue
+        links.append({"url": normalized, "label": ""})
+    return links
+
+
+def _extract_links_xml_fallback(xml_text: str) -> list[dict[str, str]]:
+    links: list[dict[str, str]] = []
+    for loc in re.findall(r"(?is)<loc>\s*([^<]+)\s*</loc>", xml_text):
+        normalized = normalize_url(loc.strip())
+        if not normalized:
+            continue
+        links.append({"url": normalized, "label": ""})
+    return links

@@ -93,6 +93,28 @@ class ParserDepartmentTests(unittest.TestCase):
         self.assertIn("Monday", rows[0]["hours"] or "")
         self.assertIn("Thursday", rows[0]["hours"] or "")
 
+    def test_staff_page_allows_name_plus_phone_without_email(self) -> None:
+        text = "Jane Doe\nTown Clerk\n(860) 555-1212"
+        contacts = extract_contacts(text, "https://example.org/town-clerk", page_type="department_page")
+        self.assertGreaterEqual(len(contacts), 1)
+        self.assertEqual(contacts[0]["name"], "Jane Doe")
+        self.assertEqual(contacts[0]["phone"], "8605551212")
+
+    def test_structured_contact_block_from_html(self) -> None:
+        html = """
+        <table>
+            <tr>
+                <td>John Smith</td>
+                <td>Assessor</td>
+                <td><a href="mailto:john.smith@townct.gov">Email</a></td>
+                <td>(860) 555-1212 Ext. 210</td>
+            </tr>
+        </table>
+        """
+        contacts = extract_contacts(html, "https://example.org/directory", page_type="directory_page")
+        self.assertTrue(any(c.get("phone") == "8605551212" for c in contacts))
+        self.assertTrue(any((c.get("title") or "").lower() == "assessor" for c in contacts))
+
 
 if __name__ == "__main__":
     unittest.main()

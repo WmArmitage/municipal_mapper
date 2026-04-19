@@ -4,16 +4,27 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import re
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    BeautifulSoup = None
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src import db
-from src.discover import extract_links_from_html, extract_links_from_sitemap_xml, select_high_value_links
+from src.discover import (
+    classify_page_type,
+    extract_links_from_html,
+    extract_links_from_sitemap_xml,
+    is_contact_oriented_page_type,
+    select_contact_child_links,
+    select_high_value_links,
+)
 from src.http_client import FetchResult, candidate_sitemap_urls, create_session, fetch_url
 from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace
 from src.parsers import (
@@ -43,9 +54,16 @@ SEED_TYPE_CONFIG: dict[str, dict[str, str]] = {
         "label": "Tax Payment",
     },
 }
+CONTACT_SECOND_HOP_LINKS_PER_PAGE = 8
+MAX_CONTACT_SECOND_HOP_PAGES = 24
 
 
 def extract_title(html: str) -> str | None:
+    if BeautifulSoup is None:
+        match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html or "")
+        if match:
+            return normalize_whitespace(match.group(1))
+        return None
     soup = BeautifulSoup(html or "", "html.parser")
     if soup.title and soup.title.string:
         return normalize_whitespace(soup.title.string)
@@ -121,13 +139,19 @@ def upsert_crawl_error_signal(
     )
 
 
-def process_text_extractions(conn, municipality_id: str, source_url: str, text: str) -> tuple[int, int]:
+def process_text_extractions(
+    conn,
+    municipality_id: str,
+    source_url: str,
+    text: str,
+    page_type: str | None = None,
+) -> tuple[int, int]:
     contact_count = 0
     location_count = 0
     seen_contacts: set[str] = set()
     seen_locations: set[str] = set()
 
-    for contact in extract_contacts(text, source_url):
+    for contact in extract_contacts(text, source_url, page_type=page_type):
         email = str(contact.get("email") or "").strip().lower()
         phone = str(contact.get("phone") or "").strip()
         if not email and not phone:
@@ -361,9 +385,10 @@ def crawl_single_municipality(
                             )
                     continue
 
+                internal_seed_page_type = classify_page_type(seed_url, seed_label)
                 ok, final_seed_url, seed_text, _, _ = fetch_and_record(
                     seed_url,
-                    "alternate_seed",
+                    internal_seed_page_type,
                     f"seed_fallback:{seed_key}",
                     referer=None,
                 )
@@ -377,7 +402,13 @@ def crawl_single_municipality(
                         encoding="utf-8",
                         errors="ignore",
                     )
-                    c_count, l_count = process_text_extractions(conn, municipality_id, final_seed_url, seed_text)
+                    c_count, l_count = process_text_extractions(
+                        conn,
+                        municipality_id,
+                        final_seed_url,
+                        seed_text,
+                        page_type=internal_seed_page_type,
+                    )
                     stats["contacts"] += c_count
                     stats["locations"] += l_count
 
@@ -396,7 +427,13 @@ def crawl_single_municipality(
     elif home_text:
         raw_dir.mkdir(parents=True, exist_ok=True)
         (raw_dir / f"{municipality_id}_homepage.html").write_text(home_text, encoding="utf-8", errors="ignore")
-        c_count, l_count = process_text_extractions(conn, municipality_id, home_url, home_text)
+        c_count, l_count = process_text_extractions(
+            conn,
+            municipality_id,
+            home_url,
+            home_text,
+            page_type="homepage",
+        )
         stats["contacts"] += c_count
         stats["locations"] += l_count
 
@@ -462,6 +499,9 @@ def crawl_single_municipality(
         print(f"Fallback triggered for {municipality_id}")
         fallback_logged = True
 
+    second_hop_seen_urls: set[str] = set()
+    second_hop_fetches = 0
+
     for candidate in high_value_links:
         target_url = str(candidate["url"])
         target_norm = normalize_url(target_url) or target_url
@@ -471,12 +511,13 @@ def crawl_single_municipality(
         source_url = str(candidate.get("source_url") or primary_seed_url or website_url)
         label = str(candidate.get("label") or "")
         link_score = float(candidate.get("score") or 0.0)
+        candidate_page_type = str(candidate.get("page_type") or classify_page_type(target_url, label))
 
         category, class_conf = classify_service_link(target_url, label)
         referer = str(primary_seed_url or source_url) if is_internal_link(target_url, municipality_domain) else None
         ok, final_target_url, page_text, _, _ = fetch_and_record(
             target_url,
-            "candidate",
+            candidate_page_type,
             source_url,
             referer=referer,
         )
@@ -509,9 +550,86 @@ def crawl_single_municipality(
             register_vendor_signal(vendor, vendor_conf, active_url)
 
         if ok and page_text:
-            c_count, l_count = process_text_extractions(conn, municipality_id, active_url, page_text)
+            c_count, l_count = process_text_extractions(
+                conn,
+                municipality_id,
+                active_url,
+                page_text,
+                page_type=candidate_page_type,
+            )
             stats["contacts"] += c_count
             stats["locations"] += l_count
+
+            if is_contact_oriented_page_type(candidate_page_type) and second_hop_fetches < MAX_CONTACT_SECOND_HOP_PAGES:
+                child_links = extract_links_from_html(page_text, active_url)
+                child_candidates = select_contact_child_links(
+                    child_links,
+                    municipality_domain=municipality_domain,
+                    max_links=CONTACT_SECOND_HOP_LINKS_PER_PAGE,
+                )
+                for child in child_candidates:
+                    if second_hop_fetches >= MAX_CONTACT_SECOND_HOP_PAGES:
+                        break
+                    child_url = str(child.get("url") or "")
+                    if not child_url:
+                        continue
+                    child_norm = normalize_url(child_url) or child_url
+                    if child_norm in second_hop_seen_urls:
+                        continue
+                    if child_norm in processed_seed_urls or child_norm in external_seed_urls:
+                        continue
+                    second_hop_seen_urls.add(child_norm)
+
+                    child_label = str(child.get("label") or "")
+                    child_page_type = str(child.get("page_type") or classify_page_type(child_url, child_label))
+                    child_score = float(child.get("score") or 0.0)
+                    child_source_url = active_url
+                    second_hop_fetches += 1
+                    child_ok, child_final_url, child_text, _, _ = fetch_and_record(
+                        child_url,
+                        child_page_type,
+                        child_source_url,
+                        referer=active_url,
+                    )
+                    child_active_url = normalize_url(child_final_url or child_url) or (child_final_url or child_url)
+
+                    child_category, child_class_conf = classify_service_link(child_active_url, child_label)
+                    child_vendor, child_vendor_conf = detect_vendor(child_active_url, child_text if child_ok else None)
+                    if child_category:
+                        child_service_conf = min(0.99, 0.35 + (child_score / 10.0) + (child_class_conf * 0.4))
+                        child_service_id = make_id("svc", municipality_id, child_category.strip().lower(), child_active_url)
+                        if child_service_id not in seen_service_ids:
+                            seen_service_ids.add(child_service_id)
+                            db.upsert_service_link(
+                                conn,
+                                {
+                                    "service_id": child_service_id,
+                                    "municipality_id": municipality_id,
+                                    "category": child_category,
+                                    "label": child_label or child_active_url,
+                                    "url": child_active_url,
+                                    "domain": get_domain(child_active_url),
+                                    "vendor": child_vendor,
+                                    "service_page_type": classify_service_page_type(child_active_url, municipality_domain),
+                                    "confidence": round(child_service_conf, 3),
+                                    "source_url": child_source_url,
+                                },
+                            )
+                            stats["service_links"] += 1
+
+                    if child_vendor:
+                        register_vendor_signal(child_vendor, child_vendor_conf, child_active_url)
+
+                    if child_ok and child_text:
+                        c2, l2 = process_text_extractions(
+                            conn,
+                            municipality_id,
+                            child_active_url,
+                            child_text,
+                            page_type=child_page_type,
+                        )
+                        stats["contacts"] += c2
+                        stats["locations"] += l2
 
     for vendor, (confidence, signal_url) in sorted(vendor_best.items()):
         upsert_signal(conn, municipality_id, "vendor_detected", vendor, confidence, signal_url)

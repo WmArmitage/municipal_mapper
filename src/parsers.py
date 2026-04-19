@@ -197,6 +197,7 @@ NAME_STOPWORDS = {
     "return",
     "calls",
 }
+STAFF_FRIENDLY_PAGE_TYPES = {"official_page", "department_page", "directory_page", "contact_page"}
 
 SERVICE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
     "gis": {
@@ -359,16 +360,21 @@ def guess_department_with_score(text: str) -> tuple[str | None, float]:
     return normalize_whitespace(normalized), score
 
 
-def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float | None]]:
+def extract_contacts(
+    text: str,
+    source_url: str,
+    page_type: str | None = None,
+) -> list[dict[str, str | float | None]]:
     cleaned_text = _prepare_text_for_extraction(text or "")
     lines = [normalize_whitespace(line) or "" for line in cleaned_text.splitlines()]
     lines = [line for line in lines if len(line) >= 3]
     contacts: list[dict[str, str | float | None]] = []
     seen_keys: set[tuple[str, str, str]] = set()
     all_phone_candidates = extract_phone_candidates(cleaned_text)
+    staff_mode = is_staff_friendly_page_type(page_type)
 
     for idx, line in enumerate(lines):
-        nearby_lines = _neighboring_lines(lines, idx, radius=1)
+        nearby_lines = _neighboring_lines(lines, idx, radius=2 if staff_mode else 1)
         nearby_blob = normalize_whitespace(" ".join(nearby_lines)) or line
 
         line_emails = extract_emails(line)
@@ -386,7 +392,8 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
             department_score = max(department_score, 1.0)
 
         emit_department_phone_row = bool((not line_emails) and line_department and line_phones)
-        if not line_emails and not emit_department_phone_row:
+        emit_staff_phone_row = bool(staff_mode and line_phones)
+        if not line_emails and not emit_department_phone_row and not emit_staff_phone_row:
             continue
 
         emails_to_emit = line_emails if line_emails else [None]
@@ -411,10 +418,18 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
             if not email and not phone:
                 continue
 
-            prefer_department = bool(department and department_score >= 1.6)
+            prefer_department = bool(department and department_score >= (2.0 if staff_mode else 1.6))
             name = guess_name(nearby_blob, email=email, prefer_department=prefer_department)
-            if not email and department:
+            if not email and department and not staff_mode:
                 name = None
+            if not name and staff_mode:
+                name = _guess_name_from_lines(nearby_lines)
+            if not name and staff_mode:
+                leading_name = re.match(r"^\s*([A-Z][a-zA-Z'`-]+\s+[A-Z][a-zA-Z'`-]+)\b", nearby_blob or "")
+                if leading_name:
+                    candidate = normalize_whitespace(leading_name.group(1))
+                    if candidate and _is_name_candidate(candidate):
+                        name = candidate
 
             email_type = infer_email_type(email)
             confidence = 0.28
@@ -432,6 +447,8 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
                 confidence += 0.08 * max(title_score, 0.5)
             if name:
                 confidence += 0.07
+            if staff_mode and (name or department):
+                confidence += 0.05
             confidence = round(min(max(confidence, 0.2), 0.99), 3)
 
             dedupe_key = ((email or "").lower(), source_url, phone or "")
@@ -453,6 +470,18 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
                     "confidence": confidence,
                 }
             )
+
+    if staff_mode:
+        for structured in extract_structured_contact_blocks(text, source_url):
+            email = str(structured.get("email") or "").strip().lower() or None
+            phone = str(structured.get("phone") or "").strip() or None
+            if not email and not phone:
+                continue
+            dedupe_key = ((email or ""), source_url, phone or "")
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            contacts.append(structured)
 
     return contacts
 
@@ -604,6 +633,105 @@ def _candidate_aligns_with_email(candidate: str, email: str) -> bool:
     if len(name_parts) < 2:
         return False
     return name_parts[0].startswith(parts[0]) and name_parts[-1].startswith(parts[-1])
+
+
+def is_staff_friendly_page_type(page_type: str | None) -> bool:
+    return str(page_type or "").strip().lower() in STAFF_FRIENDLY_PAGE_TYPES
+
+
+def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[str, str | float | None]]:
+    raw = text or ""
+    if "<" not in raw or ">" not in raw or BeautifulSoup is None:
+        return []
+
+    soup = BeautifulSoup(raw, "html.parser")
+    blocks = soup.find_all(["tr", "li", "article", "section", "div"])
+    out: list[dict[str, str | float | None]] = []
+    seen_block_keys: set[tuple[str, str]] = set()
+
+    for block in blocks:
+        snippet = normalize_whitespace(block.get_text("\n", strip=True))
+        if not snippet or len(snippet) < 12:
+            continue
+        emails = extract_emails(snippet)
+        phones = extract_phone_candidates(snippet)
+        if not emails and not phones:
+            continue
+
+        lines = [normalize_whitespace(line) or "" for line in snippet.splitlines()]
+        lines = [line for line in lines if line and line.lower() not in GENERIC_NAV_TEXT]
+        if not lines:
+            continue
+
+        name = _guess_name_from_lines(lines)
+        title, _ = guess_title(lines[:4])
+        department, dep_score = guess_department_with_score(" ".join(lines[:5]))
+        if not title and department and dep_score >= 1.0:
+            title = department
+
+        phone = str(phones[0].get("phone")) if phones and phones[0].get("phone") else None
+        phone_ext = str(phones[0].get("phone_ext")) if phones and phones[0].get("phone_ext") else None
+        source_context = str(phones[0].get("source_context")) if phones and phones[0].get("source_context") else snippet[:180]
+        email = emails[0].lower() if emails else None
+        email_type = infer_email_type(email)
+
+        block_key = (email or "", phone or "")
+        if block_key in seen_block_keys:
+            continue
+        seen_block_keys.add(block_key)
+
+        confidence = 0.52
+        if email:
+            confidence += 0.14
+        if phone:
+            confidence += 0.12
+        if name:
+            confidence += 0.08
+        if title:
+            confidence += 0.06
+        if department:
+            confidence += 0.06
+        confidence = round(min(confidence, 0.95), 3)
+
+        out.append(
+            {
+                "name": name,
+                "title": title,
+                "department": department,
+                "email": email,
+                "email_type": email_type,
+                "phone": phone,
+                "phone_ext": phone_ext,
+                "source_context": source_context,
+                "source_url": source_url,
+                "confidence": confidence,
+            }
+        )
+
+    return out
+
+
+def _guess_name_from_lines(lines: list[str]) -> str | None:
+    for line in lines[:3]:
+        candidate = normalize_whitespace(line)
+        if not candidate:
+            continue
+        if len(candidate) > 60 or re.search(r"\d", candidate):
+            continue
+        if candidate.lower() in GENERIC_NAV_TEXT:
+            continue
+        if _looks_like_person_name(candidate):
+            return candidate
+    return None
+
+
+def _looks_like_person_name(value: str) -> bool:
+    candidate = normalize_whitespace(value)
+    if not candidate:
+        return False
+    if not re.fullmatch(r"[A-Z][a-zA-Z'`-]+(?:\s+[A-Z][a-zA-Z'`-]+){1,2}", candidate):
+        return False
+    return _is_name_candidate(candidate)
 
 
 def _prepare_text_for_extraction(text: str) -> str:
