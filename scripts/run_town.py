@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-import requests
 from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from src import db
 from src.discover import extract_links_from_html, extract_links_from_sitemap_xml, select_high_value_links
-from src.http_client import candidate_sitemap_urls, fetch_url
+from src.http_client import candidate_sitemap_urls, create_session, fetch_url
 from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace
 from src.parsers import (
     classify_service_link,
@@ -160,15 +159,20 @@ def crawl_single_municipality(
     discovered_links: list[dict[str, str]] = []
     seen_fetched_urls: set[str] = set()
     seen_service_ids: set[str] = set()
-    session = requests.Session()
+    session = create_session()
 
     def register_vendor_signal(vendor: str, confidence: float, url: str) -> None:
         prior = vendor_best.get(vendor)
         if prior is None or confidence > prior[0]:
             vendor_best[vendor] = (confidence, url)
 
-    def fetch_and_record(url: str, page_type: str, discovered_from: str) -> tuple[bool, str | None, str | None, str | None]:
-        result = fetch_url(url, session=session, timeout=timeout)
+    def fetch_and_record(
+        url: str,
+        page_type: str,
+        discovered_from: str,
+        referer: str | None = None,
+    ) -> tuple[bool, str | None, str | None, str | None]:
+        result = fetch_url(url, session=session, timeout=timeout, referer=referer)
         final_url = result.final_url or url
 
         if not result.ok:
@@ -176,7 +180,14 @@ def crawl_single_municipality(
                 conn,
                 municipality_id,
                 "crawl_error",
-                json.dumps({"url": final_url, "error": result.error, "status": result.status_code}),
+                json.dumps(
+                    {
+                        "url": final_url,
+                        "error": result.error,
+                        "status": result.status_code,
+                        "response_headers": result.response_headers or {},
+                    }
+                ),
                 0.7,
                 final_url,
             )
@@ -216,7 +227,7 @@ def crawl_single_municipality(
 
         return True, final_url, result.text, result.content_type
 
-    home_ok, home_url, home_text, _ = fetch_and_record(website_url, "homepage", "seed")
+    home_ok, home_url, home_text, _ = fetch_and_record(website_url, "homepage", "seed", referer=None)
     if not home_ok or not home_url:
         print(f"Fallback triggered for {municipality_id}")
         upsert_signal(conn, municipality_id, "crawl_status", "homepage_fetch_failed", 1.0, website_url)
@@ -231,7 +242,12 @@ def crawl_single_municipality(
         stats["locations"] += l_count
 
     for sitemap_url in candidate_sitemap_urls(home_url):
-        ok, final_sitemap_url, sitemap_text, _ = fetch_and_record(sitemap_url, "sitemap", home_url)
+        ok, final_sitemap_url, sitemap_text, _ = fetch_and_record(
+            sitemap_url,
+            "sitemap",
+            home_url,
+            referer=home_url,
+        )
         if ok and final_sitemap_url and sitemap_text:
             (raw_dir / f"{municipality_id}_{make_id('raw', final_sitemap_url, length=10)}.txt").write_text(
                 sitemap_text, encoding="utf-8", errors="ignore"
@@ -293,7 +309,13 @@ def crawl_single_municipality(
         link_score = float(candidate.get("score") or 0.0)
 
         category, class_conf = classify_service_link(target_url, label)
-        ok, final_target_url, page_text, _ = fetch_and_record(target_url, "candidate", source_url)
+        referer = home_url if is_internal_link(target_url, municipality_domain) else None
+        ok, final_target_url, page_text, _ = fetch_and_record(
+            target_url,
+            "candidate",
+            source_url,
+            referer=referer,
+        )
         active_url = normalize_url(final_target_url or target_url) or (final_target_url or target_url)
 
         vendor, vendor_conf = detect_vendor(active_url, page_text if ok else None)
