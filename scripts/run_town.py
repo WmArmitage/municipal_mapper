@@ -25,10 +25,23 @@ from src.parsers import (
 from src.vendors import detect_vendor
 
 ALTERNATE_SEED_COLUMNS = ("jobs_url", "directory_url", "assessor_url", "tax_url")
-SEED_CATEGORY_HINTS = {
-    "jobs_url": "jobs",
-    "assessor_url": "property_cards",
-    "tax_url": "tax_payment",
+SEED_TYPE_CONFIG: dict[str, dict[str, str]] = {
+    "jobs_url": {
+        "category": "jobs",
+        "label": "Jobs",
+    },
+    "directory_url": {
+        "category": "directory_contact",
+        "label": "Directory/Contact",
+    },
+    "assessor_url": {
+        "category": "property_cards",
+        "label": "Assessor/Property",
+    },
+    "tax_url": {
+        "category": "tax_payment",
+        "label": "Tax Payment",
+    },
 }
 
 
@@ -166,6 +179,8 @@ def crawl_single_municipality(
     discovered_links: list[dict[str, str]] = []
     seen_fetched_urls: set[str] = set()
     seen_service_ids: set[str] = set()
+    processed_seed_urls: set[str] = set()
+    external_seed_urls: set[str] = set()
     session = create_session()
 
     def register_vendor_signal(vendor: str, confidence: float, url: str) -> None:
@@ -239,6 +254,8 @@ def crawl_single_municipality(
     home_ok, home_url, home_text, _, home_result = fetch_and_record(website_url, "homepage", "seed", referer=None)
     entry_url = normalize_url(home_url or website_url) or (home_url or website_url)
     primary_seed_url = home_url
+    if entry_url:
+        processed_seed_urls.add(entry_url)
 
     if not home_ok or not home_url:
         homepage_failed = True
@@ -259,12 +276,22 @@ def crawl_single_municipality(
                 seed_url = str(seed["url"])
                 seed_key = str(seed["seed_key"])
                 seed_kind = str(seed["seed_kind"])
+                seed_category = str(seed.get("seed_category") or "")
+                seed_label = str(seed.get("seed_label") or seed_key)
+                normalized_seed = normalize_url(seed_url) or seed_url
+                if normalized_seed in processed_seed_urls:
+                    continue
+
+                processed_seed_urls.add(normalized_seed)
+                if seed_kind == "external":
+                    external_seed_urls.add(normalized_seed)
                 upsert_signal(conn, municipality_id, "seed_url_used", seed_key, 1.0, seed_url)
+                upsert_signal(conn, municipality_id, "seed_url_mode", seed_kind, 0.95, seed_url)
 
                 if seed_kind == "external":
-                    category, class_conf = classify_service_link(seed_url, seed_key.replace("_", " "))
+                    category, class_conf = classify_service_link(seed_url, f"{seed_label} {seed_key.replace('_', ' ')}")
                     if not category:
-                        category = SEED_CATEGORY_HINTS.get(seed_key)
+                        category = seed_category or None
                         class_conf = 0.7 if category else 0.0
 
                     vendor, vendor_conf = detect_vendor(seed_url, None)
@@ -278,7 +305,7 @@ def crawl_single_municipality(
                                     "service_id": service_id,
                                     "municipality_id": municipality_id,
                                     "category": category,
-                                    "label": seed_key,
+                                    "label": seed_label,
                                     "url": seed_url,
                                     "domain": get_domain(seed_url),
                                     "vendor": vendor,
@@ -312,6 +339,7 @@ def crawl_single_municipality(
                 if not ok or not final_seed_url:
                     continue
                 alternate_successes.append(final_seed_url)
+                processed_seed_urls.add(normalize_url(final_seed_url) or final_seed_url)
                 if seed_text:
                     (raw_dir / f"{municipality_id}_{make_id('raw', final_seed_url, length=10)}.txt").write_text(
                         seed_text,
@@ -405,6 +433,10 @@ def crawl_single_municipality(
 
     for candidate in high_value_links:
         target_url = str(candidate["url"])
+        target_norm = normalize_url(target_url) or target_url
+        if target_norm in processed_seed_urls or target_norm in external_seed_urls:
+            continue
+
         source_url = str(candidate.get("source_url") or primary_seed_url or website_url)
         label = str(candidate.get("label") or "")
         link_score = float(candidate.get("score") or 0.0)
@@ -525,7 +557,16 @@ def get_alternate_seed_entries(
             continue
         seen.add(normalized)
         seed_kind = "internal" if is_internal_link(normalized, municipality_domain) else "external"
-        entries.append({"seed_key": column, "url": normalized, "seed_kind": seed_kind})
+        cfg = SEED_TYPE_CONFIG.get(column, {})
+        entries.append(
+            {
+                "seed_key": column,
+                "url": normalized,
+                "seed_kind": seed_kind,
+                "seed_category": str(cfg.get("category") or ""),
+                "seed_label": str(cfg.get("label") or column),
+            }
+        )
     return entries
 
 
