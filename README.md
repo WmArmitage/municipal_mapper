@@ -31,6 +31,7 @@ scripts/
   export_csvs.py
   qa_counts.py
   inspect_town.py
+  qa_sample.py
 
 src/
   http_client.py
@@ -62,6 +63,12 @@ python scripts/run_town.py ct_chester
 3. Export CSVs
 ```powershell
 python scripts/export_csvs.py
+```
+
+Sample 5-town QA summary before batch crawl:
+
+```powershell
+python scripts/qa_sample.py ct_chester ct_essex ct_haddam ct_deep_river ct_old_saybrook --export-csv
 ```
 
 ## QA / Review
