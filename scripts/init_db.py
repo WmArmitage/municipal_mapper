@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -15,24 +16,36 @@ def ensure_directories() -> None:
         (ROOT / rel_path).mkdir(parents=True, exist_ok=True)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Initialize or refresh SQLite schema and municipalities seed data.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete and recreate database/master.sqlite before loading seed data.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     ensure_directories()
     db_path = ROOT / "database" / "master.sqlite"
     schema_path = ROOT / "database" / "schema.sql"
     seed_path = ROOT / "config" / "municipalities_seed.csv"
 
-    if db_path.exists():
+    if args.reset and db_path.exists():
         db_path.unlink()
 
     conn = get_connection(db_path)
     try:
         apply_schema(conn, schema_path)
-        inserted = load_municipalities_from_csv(conn, seed_path)
+        refreshed = load_municipalities_from_csv(conn, seed_path)
     finally:
         conn.close()
 
-    print(f"Initialized SQLite DB at: {db_path}")
-    print(f"Loaded municipalities: {inserted}")
+    action = "Reset and initialized" if args.reset else "Initialized/refreshed"
+    print(f"{action} SQLite DB at: {db_path}")
+    print(f"Municipality rows loaded/upserted from seed: {refreshed}")
 
 
 if __name__ == "__main__":

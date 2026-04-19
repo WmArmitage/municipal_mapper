@@ -82,6 +82,45 @@ def upsert_signal(
     )
 
 
+def upsert_crawl_error_signal(
+    conn,
+    municipality_id: str,
+    source_url: str,
+    result: FetchResult,
+    confidence: float = 0.7,
+) -> None:
+    normalized_source = normalize_url(source_url) or source_url
+    error_class = normalize_error_class(result.error)
+    status_code = str(result.status_code) if result.status_code is not None else "none"
+    signal_id = make_id(
+        "sig",
+        municipality_id,
+        "crawl_error",
+        normalized_source,
+        error_class,
+        status_code,
+    )
+    db.upsert_signal(
+        conn,
+        {
+            "signal_id": signal_id,
+            "municipality_id": municipality_id,
+            "signal_type": "crawl_error",
+            "value": json.dumps(
+                {
+                    "url": normalized_source,
+                    "error": result.error,
+                    "error_class": error_class,
+                    "status": result.status_code,
+                    "response_headers": result.response_headers or {},
+                }
+            ),
+            "confidence": round(confidence, 3),
+            "source_url": normalized_source,
+        },
+    )
+
+
 def process_text_extractions(conn, municipality_id: str, source_url: str, text: str) -> tuple[int, int]:
     contact_count = 0
     location_count = 0
@@ -198,20 +237,12 @@ def crawl_single_municipality(
         final_url = result.final_url or url
 
         if not result.ok:
-            upsert_signal(
+            upsert_crawl_error_signal(
                 conn,
                 municipality_id,
-                "crawl_error",
-                json.dumps(
-                    {
-                        "url": final_url,
-                        "error": result.error,
-                        "status": result.status_code,
-                        "response_headers": result.response_headers or {},
-                    }
-                ),
-                0.7,
                 final_url,
+                result,
+                confidence=0.7,
             )
             return False, final_url, None, result.content_type, result
 
@@ -589,6 +620,13 @@ def classify_blocked_homepage(result: FetchResult | None) -> str | None:
 def normalize_signal_value(value: str) -> str:
     cleaned = normalize_whitespace(value) or value
     return cleaned.strip().lower()
+
+
+def normalize_error_class(error: str | None) -> str:
+    raw = (error or "unknown_error").strip().lower()
+    if not raw:
+        return "unknown_error"
+    return raw.split(":", 1)[0]
 
 
 def infer_department_from_url(source_url: str) -> str | None:

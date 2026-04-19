@@ -55,6 +55,13 @@ python -m pip install requests beautifulsoup4
 python scripts/init_db.py
 ```
 
+`init_db.py` is idempotent: rerunning it refreshes municipality seed columns (including `jobs_url`, `directory_url`, `assessor_url`, `tax_url`) without deleting crawl output tables.
+Use `--reset` only when you explicitly want a full database rebuild:
+
+```powershell
+python scripts/init_db.py --reset
+```
+
 2. Crawl one municipality
 ```powershell
 python scripts/run_town.py ct_chester
