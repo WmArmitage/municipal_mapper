@@ -29,6 +29,8 @@ scripts/
   run_town.py
   run_batch.py
   export_csvs.py
+  qa_counts.py
+  inspect_town.py
 
 src/
   http_client.py
@@ -61,6 +63,26 @@ python scripts/run_town.py ct_chester
 ```powershell
 python scripts/export_csvs.py
 ```
+
+## QA / Review
+
+Run one town and review quality before batch crawling:
+
+```powershell
+python scripts/init_db.py
+python scripts/run_town.py ct_chester --qa
+python scripts/qa_counts.py ct_chester
+python scripts/inspect_town.py ct_chester --limit 20
+python scripts/export_csvs.py
+```
+
+Quick checks:
+- confirm contacts have email and/or phone
+- inspect permit links for false positives
+- verify locations are not duplicated by repeated footers
+- verify vendor signals are not repeated with the same value
+
+`run_town.py` also supports `--qa` to print post-run table counts for that municipality.
 
 ## Batch Crawl
 

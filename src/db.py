@@ -116,6 +116,7 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
                 THEN COALESCE(excluded.source_context, contacts.source_context)
                 ELSE contacts.source_context
             END,
+            source_url = COALESCE(excluded.source_url, contacts.source_url),
             confidence = MAX(contacts.confidence, excluded.confidence)
         """,
         row,
@@ -161,6 +162,11 @@ def upsert_signal(conn: sqlite3.Connection, row: dict) -> None:
         VALUES (:signal_id, :municipality_id, :signal_type, :value, :confidence, :source_url)
         ON CONFLICT(signal_id) DO UPDATE SET
             value = excluded.value,
+            source_url = CASE
+                WHEN excluded.confidence >= signals.confidence AND excluded.source_url IS NOT NULL
+                THEN excluded.source_url
+                ELSE signals.source_url
+            END,
             confidence = MAX(signals.confidence, excluded.confidence)
         """,
         row,
@@ -169,6 +175,33 @@ def upsert_signal(conn: sqlite3.Connection, row: dict) -> None:
 
 def commit(conn: sqlite3.Connection) -> None:
     conn.commit()
+
+
+def get_municipality_table_counts(conn: sqlite3.Connection, municipality_id: str) -> dict[str, int]:
+    tables = ("pages", "contacts", "service_links", "locations", "signals")
+    counts: dict[str, int] = {}
+    for table in tables:
+        count = conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE municipality_id = ?",
+            (municipality_id,),
+        ).fetchone()[0]
+        counts[table] = int(count)
+    return counts
+
+
+def fetch_municipality_rows(
+    conn: sqlite3.Connection,
+    municipality_id: str,
+    table_name: str,
+    limit: int | None = None,
+) -> list[dict]:
+    query = f"SELECT * FROM {table_name} WHERE municipality_id = ?"
+    params: list[object] = [municipality_id]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    rows = conn.execute(query, tuple(params)).fetchall()
+    return [dict(row) for row in rows]
 
 
 def _run_lightweight_migrations(conn: sqlite3.Connection) -> None:

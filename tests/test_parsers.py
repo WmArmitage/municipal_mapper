@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.parsers import extract_contacts, guess_department
+from src.parsers import classify_service_link, extract_contacts, guess_department
 
 
 class ParserDepartmentTests(unittest.TestCase):
@@ -51,6 +51,18 @@ class ParserDepartmentTests(unittest.TestCase):
         self.assertEqual(len(contacts), 1)
         self.assertIsNone(contacts[0]["name"])
         self.assertEqual(contacts[0]["department"], "Building Official")
+
+    def test_no_contact_row_without_email_or_phone(self) -> None:
+        text = "Public Works Department"
+        contacts = extract_contacts(text, "https://example.org/public-works")
+        self.assertEqual(contacts, [])
+
+    def test_permit_false_positive_reduced(self) -> None:
+        category, _ = classify_service_link(
+            "https://example.org/Calendar.aspx?EID=370",
+            "Zoning Board of Appeals Meeting CANCELLED",
+        )
+        self.assertNotEqual(category, "permits")
 
 
 if __name__ == "__main__":

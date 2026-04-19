@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,8 +16,13 @@ if str(ROOT) not in sys.path:
 from src import db
 from src.discover import extract_links_from_html, extract_links_from_sitemap_xml, select_high_value_links
 from src.http_client import candidate_sitemap_urls, fetch_url
-from src.normalize import get_domain, make_id, normalize_whitespace
-from src.parsers import classify_service_link, extract_contacts, extract_locations
+from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace
+from src.parsers import (
+    classify_service_link,
+    extract_contacts,
+    extract_locations,
+    location_dedupe_key,
+)
 from src.vendors import detect_vendor
 
 
@@ -42,14 +48,15 @@ def upsert_signal(
     confidence: float,
     source_url: str,
 ) -> None:
-    signal_id = make_id("sig", municipality_id, signal_type, source_url or "", value)
+    normalized_value = normalize_signal_value(value)
+    signal_id = make_id("sig", municipality_id, signal_type, normalized_value)
     db.upsert_signal(
         conn,
         {
             "signal_id": signal_id,
             "municipality_id": municipality_id,
             "signal_type": signal_type,
-            "value": value,
+            "value": normalize_whitespace(value) or value,
             "confidence": round(confidence, 3),
             "source_url": source_url,
         },
@@ -59,20 +66,30 @@ def upsert_signal(
 def process_text_extractions(conn, municipality_id: str, source_url: str, text: str) -> tuple[int, int]:
     contact_count = 0
     location_count = 0
+    seen_contacts: set[str] = set()
+    seen_locations: set[str] = set()
 
     for contact in extract_contacts(text, source_url):
-        email = str(contact.get("email") or "")
+        email = str(contact.get("email") or "").strip().lower()
+        phone = str(contact.get("phone") or "").strip()
+        if not email and not phone:
+            continue
+
         if email:
             contact_id = make_id("ctc", municipality_id, email, source_url)
         else:
             contact_id = make_id(
                 "ctc",
                 municipality_id,
-                contact.get("phone") or "",
-                contact.get("department") or "",
+                phone,
+                (contact.get("department") or "").strip().lower(),
                 contact.get("source_context") or "",
                 source_url,
             )
+        if contact_id in seen_contacts:
+            continue
+        seen_contacts.add(contact_id)
+
         db.upsert_contact(
             conn,
             {
@@ -80,10 +97,10 @@ def process_text_extractions(conn, municipality_id: str, source_url: str, text: 
                 "municipality_id": municipality_id,
                 "name": contact.get("name"),
                 "title": contact.get("title"),
-                "department": contact.get("department"),
-                "email": contact.get("email"),
+                "department": contact.get("department") or infer_department_from_url(source_url),
+                "email": email or None,
                 "email_type": contact.get("email_type") or "unknown",
-                "phone": contact.get("phone"),
+                "phone": phone or None,
                 "phone_ext": contact.get("phone_ext"),
                 "source_context": contact.get("source_context"),
                 "source_url": source_url,
@@ -93,13 +110,14 @@ def process_text_extractions(conn, municipality_id: str, source_url: str, text: 
         contact_count += 1
 
     for location in extract_locations(text, source_url):
-        location_id = make_id(
-            "loc",
-            municipality_id,
-            location.get("address") or "",
-            location.get("hours") or "",
-            source_url,
-        )
+        dedupe_address, dedupe_hours = location_dedupe_key(location.get("address"), location.get("hours"))
+        if dedupe_address:
+            location_id = make_id("loc", municipality_id, dedupe_address)
+        else:
+            location_id = make_id("loc", municipality_id, "", dedupe_hours)
+        if location_id in seen_locations:
+            continue
+        seen_locations.add(location_id)
         db.upsert_location(
             conn,
             {
@@ -136,9 +154,16 @@ def crawl_single_municipality(
         "contacts": 0,
         "locations": 0,
     }
+    vendor_best: dict[str, tuple[float, str]] = {}
     discovered_links: list[dict[str, str]] = []
     seen_fetched_urls: set[str] = set()
+    seen_service_ids: set[str] = set()
     session = requests.Session()
+
+    def register_vendor_signal(vendor: str, confidence: float, url: str) -> None:
+        prior = vendor_best.get(vendor)
+        if prior is None or confidence > prior[0]:
+            vendor_best[vendor] = (confidence, url)
 
     def fetch_and_record(url: str, page_type: str, discovered_from: str) -> tuple[bool, str | None, str | None, str | None]:
         result = fetch_url(url, session=session, timeout=timeout)
@@ -185,7 +210,7 @@ def crawl_single_municipality(
 
             vendor, vendor_conf = detect_vendor(final_url, result.text)
             if vendor:
-                upsert_signal(conn, municipality_id, "vendor_detected", vendor, vendor_conf, final_url)
+                register_vendor_signal(vendor, vendor_conf, final_url)
 
         return True, final_url, result.text, result.content_type
 
@@ -219,35 +244,40 @@ def crawl_single_municipality(
 
         category, class_conf = classify_service_link(target_url, label)
         ok, final_target_url, page_text, _ = fetch_and_record(target_url, "candidate", source_url)
-        active_url = final_target_url or target_url
+        active_url = normalize_url(final_target_url or target_url) or (final_target_url or target_url)
 
         vendor, vendor_conf = detect_vendor(active_url, page_text if ok else None)
         if category:
             service_conf = min(0.99, 0.35 + (link_score / 10.0) + (class_conf * 0.4))
-            service_id = make_id("svc", municipality_id, category, active_url)
-            db.upsert_service_link(
-                conn,
-                {
-                    "service_id": service_id,
-                    "municipality_id": municipality_id,
-                    "category": category,
-                    "label": label or active_url,
-                    "url": active_url,
-                    "domain": get_domain(active_url),
-                    "vendor": vendor,
-                    "confidence": round(service_conf, 3),
-                    "source_url": source_url,
-                },
-            )
-            stats["service_links"] += 1
+            service_id = make_id("svc", municipality_id, category.strip().lower(), active_url)
+            if service_id not in seen_service_ids:
+                seen_service_ids.add(service_id)
+                db.upsert_service_link(
+                    conn,
+                    {
+                        "service_id": service_id,
+                        "municipality_id": municipality_id,
+                        "category": category,
+                        "label": label or active_url,
+                        "url": active_url,
+                        "domain": get_domain(active_url),
+                        "vendor": vendor,
+                        "confidence": round(service_conf, 3),
+                        "source_url": source_url,
+                    },
+                )
+                stats["service_links"] += 1
 
         if vendor:
-            upsert_signal(conn, municipality_id, "vendor_detected", vendor, vendor_conf, active_url)
+            register_vendor_signal(vendor, vendor_conf, active_url)
 
         if ok and page_text:
             c_count, l_count = process_text_extractions(conn, municipality_id, active_url, page_text)
             stats["contacts"] += c_count
             stats["locations"] += l_count
+
+    for vendor, (confidence, signal_url) in sorted(vendor_best.items()):
+        upsert_signal(conn, municipality_id, "vendor_detected", vendor, confidence, signal_url)
 
     upsert_signal(conn, municipality_id, "crawl_status", "completed", 1.0, home_url)
     upsert_signal(conn, municipality_id, "fetched_pages_count", str(stats["fetched_pages"]), 1.0, home_url)
@@ -261,6 +291,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("municipality_id", help="e.g. ct_chester")
     parser.add_argument("--max-candidate-pages", type=int, default=25)
     parser.add_argument("--db", default=str(ROOT / "database" / "master.sqlite"))
+    parser.add_argument("--qa", action="store_true", help="Print municipality row counts by table after run.")
     return parser.parse_args()
 
 
@@ -283,6 +314,37 @@ def main() -> None:
 
     print(f"Crawl complete for {args.municipality_id}")
     print(json.dumps(stats, indent=2))
+    if args.qa:
+        conn = db.get_connection(args.db)
+        try:
+            counts = db.get_municipality_table_counts(conn, args.municipality_id)
+        finally:
+            conn.close()
+        print("QA row counts:")
+        print(json.dumps(counts, indent=2))
+
+
+def normalize_signal_value(value: str) -> str:
+    cleaned = normalize_whitespace(value) or value
+    return cleaned.strip().lower()
+
+
+def infer_department_from_url(source_url: str) -> str | None:
+    path = urlparse(source_url or "").path.lower()
+    hints = (
+        ("building-department", "Building Department"),
+        ("tax-collector", "Tax Collector"),
+        ("assessor", "Assessor"),
+        ("town-clerk", "Town Clerk"),
+        ("planning", "Planning"),
+        ("zoning", "Zoning"),
+        ("public-works", "Public Works Department"),
+        ("human-resources", "Human Resources"),
+    )
+    for token, label in hints:
+        if token in path:
+            return label
+    return None
 
 
 if __name__ == "__main__":
