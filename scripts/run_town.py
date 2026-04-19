@@ -73,6 +73,8 @@ def process_text_extractions(conn, municipality_id: str, source_url: str, text: 
                 "email": contact.get("email"),
                 "email_type": contact.get("email_type") or "unknown",
                 "phone": contact.get("phone"),
+                "phone_ext": contact.get("phone_ext"),
+                "source_context": contact.get("source_context"),
                 "source_url": source_url,
                 "confidence": contact.get("confidence") or 0.45,
             },
@@ -274,4 +276,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

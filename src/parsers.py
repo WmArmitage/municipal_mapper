@@ -7,7 +7,17 @@ from src.normalize import normalize_whitespace
 
 EMAIL_RE = re.compile(r"\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b", re.IGNORECASE)
 PHONE_RE = re.compile(
-    r"(?:(?:\+?1[\s.\-]?)?\(?\b([2-9][0-9]{2})\)?[\s.\-]?([0-9]{3})[\s.\-]?([0-9]{4})(?:\s*(?:x|ext\.?)\s*\d{1,6})?)"
+    r"""
+    (?P<full>
+        (?:(?:\+?1[\s.\-]?)?\(?(?P<area>[2-9][0-9]{2})\)?[\s.\-]?(?P<prefix>[0-9]{3})[\s.\-]?(?P<line>[0-9]{4}))
+        (?:
+            \s*(?:,|;)?\s*
+            (?:ext\.?|extension|x)
+            \s*(?P<ext>[0-9]{1,6})
+        )?
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 ADDRESS_RE = re.compile(
     r"\b\d{1,6}\s+[A-Z0-9][A-Z0-9\s.\-#]{2,}\b(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Court|Ct|Way)\b[^\n,]*(?:,\s*[A-Za-z.\s]+,\s*CT(?:\s+\d{5}(?:-\d{4})?)?)?",
@@ -79,10 +89,38 @@ def extract_emails(text: str) -> list[str]:
 
 
 def extract_phones(text: str) -> list[str]:
-    phones: set[str] = set()
+    phones: list[str] = []
+    seen: set[str] = set()
     for match in PHONE_RE.finditer(text or ""):
-        phones.add(f"({match.group(1)}) {match.group(2)}-{match.group(3)}")
-    return sorted(phones)
+        phone_data = _normalize_phone_match(match)
+        if not phone_data:
+            continue
+        phone = str(phone_data["phone"])
+        if phone in seen:
+            continue
+        seen.add(phone)
+        phones.append(phone)
+    return phones
+
+
+def extract_phone_candidates(text: str) -> list[dict[str, str | None]]:
+    """Return normalized phone/ext plus the original matched snippet."""
+    candidates: list[dict[str, str | None]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for match in PHONE_RE.finditer(text or ""):
+        normalized = _normalize_phone_match(match)
+        if not normalized:
+            continue
+        key = (
+            str(normalized["phone"] or ""),
+            str(normalized["phone_ext"] or ""),
+            str(normalized["source_context"] or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(normalized)
+    return candidates
 
 
 def infer_email_type(email: str) -> str:
@@ -138,7 +176,7 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
     cleaned_text = text or ""
     lines = [normalize_whitespace(line) or "" for line in cleaned_text.splitlines()]
     lines = [line for line in lines if line]
-    all_phones = extract_phones(cleaned_text)
+    all_phone_candidates = extract_phone_candidates(cleaned_text)
     contacts: list[dict[str, str | float | None]] = []
     seen_emails: set[str] = set()
 
@@ -152,12 +190,18 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
             neighbors = _neighboring_lines(lines, idx)
             title, title_conf = guess_title(neighbors)
             phone = None
+            phone_ext = None
+            source_context = None
             nearby_blob = " ".join(neighbors)
-            nearby_phones = extract_phones(nearby_blob)
-            if nearby_phones:
-                phone = nearby_phones[0]
-            elif all_phones:
-                phone = all_phones[0]
+            nearby_phone_candidates = extract_phone_candidates(nearby_blob)
+            if nearby_phone_candidates:
+                phone = nearby_phone_candidates[0].get("phone")
+                phone_ext = nearby_phone_candidates[0].get("phone_ext")
+                source_context = nearby_phone_candidates[0].get("source_context")
+            elif all_phone_candidates:
+                phone = all_phone_candidates[0].get("phone")
+                phone_ext = all_phone_candidates[0].get("phone_ext")
+                source_context = all_phone_candidates[0].get("source_context")
 
             department = None
             lower_blob = nearby_blob.lower()
@@ -189,6 +233,8 @@ def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float |
                     "email": email,
                     "email_type": email_type,
                     "phone": phone,
+                    "phone_ext": phone_ext,
+                    "source_context": source_context,
                     "source_url": source_url,
                     "confidence": confidence,
                 }
@@ -241,3 +287,22 @@ def _keyword_in_text(blob: str, keyword: str) -> bool:
     if " " in keyword:
         return keyword in blob
     return re.search(rf"\b{re.escape(keyword)}\b", blob) is not None
+
+
+def _normalize_phone_match(match: re.Match[str]) -> dict[str, str | None] | None:
+    area = match.group("area")
+    prefix = match.group("prefix")
+    line = match.group("line")
+    if not area or not prefix or not line:
+        return None
+
+    phone = f"{area}{prefix}{line}"
+    ext = match.group("ext")
+    normalized_ext = ext.strip() if ext else None
+    source_context = normalize_whitespace(match.group("full"))
+
+    return {
+        "phone": phone,
+        "phone_ext": normalized_ext,
+        "source_context": source_context,
+    }

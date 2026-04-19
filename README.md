@@ -84,5 +84,6 @@ Optional flags:
 
 ## MVP Notes
 - Source URLs are preserved on extracted records.
+- Contact phones are normalized to digits in `phone`; detected extensions are stored in `phone_ext`, and original matched text is stored in `source_context`.
 - Uncertain location/title fields are stored as raw text.
 - Contact extraction intentionally uses simple heuristics in v1 (no advanced person-name resolution).

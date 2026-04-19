@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS contacts (
     email TEXT,
     email_type TEXT,
     phone TEXT,
+    phone_ext TEXT,
+    source_context TEXT,
     source_url TEXT,
     confidence REAL,
     FOREIGN KEY (municipality_id) REFERENCES municipalities(municipality_id)

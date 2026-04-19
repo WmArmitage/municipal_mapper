@@ -11,12 +11,14 @@ def get_connection(db_path: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    _run_lightweight_migrations(conn)
     return conn
 
 
 def apply_schema(conn: sqlite3.Connection, schema_path: str | Path) -> None:
     sql = Path(schema_path).read_text(encoding="utf-8")
     conn.executescript(sql)
+    _run_lightweight_migrations(conn)
     conn.commit()
 
 
@@ -96,10 +98,10 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
     conn.execute(
         """
         INSERT INTO contacts (
-            contact_id, municipality_id, name, title, department, email, email_type, phone, source_url, confidence
+            contact_id, municipality_id, name, title, department, email, email_type, phone, phone_ext, source_context, source_url, confidence
         )
         VALUES (
-            :contact_id, :municipality_id, :name, :title, :department, :email, :email_type, :phone, :source_url, :confidence
+            :contact_id, :municipality_id, :name, :title, :department, :email, :email_type, :phone, :phone_ext, :source_context, :source_url, :confidence
         )
         ON CONFLICT(contact_id) DO UPDATE SET
             name = COALESCE(excluded.name, contacts.name),
@@ -107,6 +109,8 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
             department = COALESCE(excluded.department, contacts.department),
             email_type = COALESCE(excluded.email_type, contacts.email_type),
             phone = COALESCE(excluded.phone, contacts.phone),
+            phone_ext = COALESCE(excluded.phone_ext, contacts.phone_ext),
+            source_context = COALESCE(excluded.source_context, contacts.source_context),
             confidence = MAX(contacts.confidence, excluded.confidence)
         """,
         row,
@@ -161,3 +165,28 @@ def upsert_signal(conn: sqlite3.Connection, row: dict) -> None:
 def commit(conn: sqlite3.Connection) -> None:
     conn.commit()
 
+
+def _run_lightweight_migrations(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, "contacts"):
+        return
+    _ensure_column(conn, "contacts", "phone_ext", "TEXT")
+    _ensure_column(conn, "contacts", "source_context", "TEXT")
+    conn.commit()
+
+
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
+    existing = {
+        str(row["name"]).lower()
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name.lower() in existing:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
