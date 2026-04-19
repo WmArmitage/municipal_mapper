@@ -65,11 +65,19 @@ python scripts/run_town.py ct_chester
 python scripts/export_csvs.py
 ```
 
+Optional signal export mode:
+
+```powershell
+python scripts/export_csvs.py --signals-view both
+```
+
 Sample 5-town QA summary before batch crawl:
 
 ```powershell
 python scripts/qa_sample.py ct_chester ct_essex ct_haddam ct_deep_river ct_old_saybrook --export-csv
 ```
+
+`qa_summary.csv` only reflects towns that have already been crawled into `master.sqlite`.
 
 ## QA / Review
 
@@ -109,7 +117,8 @@ Optional flags:
   - `data/exports/contacts.csv`
   - `data/exports/service_links.csv`
   - `data/exports/locations.csv`
-  - `data/exports/signals.csv`
+  - `data/exports/signals.csv` (full/internal QA view)
+  - `data/exports/signals_public.csv` (public-facing filtered view)
 
 ## MVP Notes
 - Source URLs are preserved on extracted records.

@@ -132,17 +132,24 @@ ROLE_ONLY_DEPARTMENT_LABELS = (
     "planning and zoning commission",
 )
 ROLE_EMAIL_HINTS = {
+    "bldg",
+    "bldgofficial",
+    "building",
     "assessor",
     "clerk",
     "tax",
     "taxcollector",
+    "collector",
     "zoning",
     "planning",
-    "building",
+    "wetlands",
     "permit",
+    "office",
+    "finance",
     "admin",
     "info",
     "hr",
+    "humanresources",
     "police",
     "fire",
     "recreation",
@@ -253,10 +260,13 @@ def infer_email_type(email: str | None) -> str:
         return "unknown"
     if local in {"info", "admin", "contact", "office"}:
         return "role_based"
-    if any(token in local for token in ROLE_EMAIL_HINTS):
-        return "department"
-    if "." in local and not local.startswith(("info.", "admin.")):
+    normalized_local = re.sub(r"[^a-z0-9]+", "", local)
+    if any(token in normalized_local for token in ROLE_EMAIL_HINTS):
+        return "role_based"
+    if re.fullmatch(r"[a-z]{2,}\.[a-z]{2,}", local):
         return "direct"
+    if "." in local and not local.startswith(("info.", "admin.")):
+        return "unknown"
     if re.fullmatch(r"[a-z]{2,}\d*", local):
         return "direct"
     return "unknown"
@@ -463,11 +473,7 @@ def extract_locations(text: str, source_url: str) -> list[dict[str, str | None]]
         if address:
             break
 
-    hours_line = None
-    for line in lines:
-        if _is_likely_hours_line(line):
-            hours_line = normalize_hours_text(line)
-            break
+    hours_line = _extract_best_hours(lines)
 
     if not address and not hours_line:
         return []
@@ -522,7 +528,10 @@ def normalize_address_text(value: str | None) -> str | None:
         return None
     text = text.replace("–", "-")
     text = re.sub(r"\s*,\s*", ", ", text)
+    text = _normalize_street_suffixes(text)
+    text = re.sub(r"\.(?=\s|,|$)", "", text)
     text = re.sub(r"\bconnecticut\b", "CT", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text)
     return text.strip(" ,;")
 
 
@@ -534,6 +543,7 @@ def normalize_hours_text(value: str | None) -> str | None:
     text = re.sub(r"(?i)^and\s+", "", text)
     text = re.sub(r"\s*-\s*", " - ", text)
     text = re.sub(r"\s*,\s*", ", ", text)
+    text = re.sub(r"\s*;\s*", "; ", text)
     text = re.sub(r"[&]+$", "", text)
     return text.strip(" ,;")
 
@@ -663,3 +673,70 @@ def _is_likely_hours_line(line: str) -> bool:
     if any(token in lowered for token in DAY_TOKENS) and len(TIME_RE.findall(line)) >= 2:
         return True
     return False
+
+
+def _extract_best_hours(lines: list[str]) -> str | None:
+    candidates: list[str] = []
+    for idx, line in enumerate(lines):
+        lowered = line.lower()
+        if "hours" in lowered:
+            chunk = [line]
+            for offset in range(1, 4):
+                next_idx = idx + offset
+                if next_idx >= len(lines):
+                    break
+                nxt = lines[next_idx]
+                nxt_lower = nxt.lower()
+                if len(nxt) > 160:
+                    break
+                if TIME_RE.search(nxt) or any(token in nxt_lower for token in DAY_TOKENS):
+                    chunk.append(nxt)
+                    continue
+                break
+            candidates.append(" ".join(chunk))
+        if any(token in lowered for token in DAY_TOKENS) and TIME_RE.search(line):
+            if lowered.startswith("and ") and idx > 0:
+                prev = lines[idx - 1]
+                prev_lower = prev.lower()
+                if TIME_RE.search(prev) or any(token in prev_lower for token in DAY_TOKENS):
+                    candidates.append(f"{prev} {line}")
+            candidates.append(line)
+
+    ranked: list[tuple[int, str]] = []
+    for candidate in candidates:
+        normalized = normalize_hours_text(candidate)
+        if not normalized:
+            continue
+        score = 0
+        score += len(TIME_RE.findall(normalized)) * 2
+        score += sum(1 for token in DAY_TOKENS if token in normalized.lower())
+        if "hours" in normalized.lower():
+            score += 2
+        if normalized.lower().startswith("and "):
+            score -= 2
+        if len(normalized) < 14:
+            score -= 1
+        ranked.append((score, normalized))
+
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
+    best_score, best_candidate = ranked[0]
+    if best_score <= 0:
+        return None
+    return best_candidate
+
+
+def _normalize_street_suffixes(text: str) -> str:
+    suffix_rules = (
+        (r"\bave\.?\b", "Avenue"),
+        (r"\bst\.?\b", "Street"),
+        (r"\brd\.?\b", "Road"),
+        (r"\bdr\.?\b", "Drive"),
+        (r"\bln\.?\b", "Lane"),
+        (r"\bblvd\.?\b", "Boulevard"),
+    )
+    out = text
+    for pattern, replacement in suffix_rules:
+        out = re.sub(pattern, replacement, out, flags=re.IGNORECASE)
+    return out

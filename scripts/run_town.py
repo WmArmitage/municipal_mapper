@@ -142,6 +142,7 @@ def crawl_single_municipality(
 ) -> dict[str, int | str]:
     municipality_id = municipality["municipality_id"]
     website_url = municipality.get("website_url")
+    municipality_domain = (municipality.get("domain") or get_domain(website_url) or "").lower()
     if not website_url:
         upsert_signal(conn, municipality_id, "crawl_status", "missing_website_url", 1.0, "")
         db.commit(conn)
@@ -262,6 +263,7 @@ def crawl_single_municipality(
                         "url": active_url,
                         "domain": get_domain(active_url),
                         "vendor": vendor,
+                        "service_page_type": classify_service_page_type(active_url, municipality_domain),
                         "confidence": round(service_conf, 3),
                         "source_url": source_url,
                     },
@@ -345,6 +347,14 @@ def infer_department_from_url(source_url: str) -> str | None:
         if token in path:
             return label
     return None
+
+
+def classify_service_page_type(url: str, municipality_domain: str) -> str:
+    domain = (get_domain(url) or "").lower()
+    muni = (municipality_domain or "").lower()
+    if domain and muni and (domain == muni or domain.endswith(f".{muni}")):
+        return "internal_page"
+    return "external_portal"
 
 
 if __name__ == "__main__":

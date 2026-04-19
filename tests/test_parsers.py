@@ -8,7 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.parsers import classify_service_link, extract_contacts, guess_department
+from src.parsers import (
+    classify_service_link,
+    extract_contacts,
+    extract_locations,
+    guess_department,
+    infer_email_type,
+    normalize_address_text,
+)
 
 
 class ParserDepartmentTests(unittest.TestCase):
@@ -63,6 +70,28 @@ class ParserDepartmentTests(unittest.TestCase):
             "Zoning Board of Appeals Meeting CANCELLED",
         )
         self.assertNotEqual(category, "permits")
+
+    def test_role_email_classified_as_role_based(self) -> None:
+        self.assertEqual(infer_email_type("bldgofficial@chesterct.org"), "role_based")
+        self.assertEqual(infer_email_type("taxcollector@chesterct.org"), "role_based")
+        self.assertEqual(infer_email_type("john.smith@chesterct.org"), "direct")
+
+    def test_address_suffix_normalization(self) -> None:
+        self.assertEqual(
+            normalize_address_text("203 Middlesex Ave."),
+            normalize_address_text("203 Middlesex Avenue"),
+        )
+
+    def test_hours_extraction_prefers_complete_string(self) -> None:
+        text = """
+        Office Hours:
+        Monday: 9am - 12pm
+        and Thursday: 9am - 12pm
+        """
+        rows = extract_locations(text, "https://example.org/town")
+        self.assertEqual(len(rows), 1)
+        self.assertIn("Monday", rows[0]["hours"] or "")
+        self.assertIn("Thursday", rows[0]["hours"] or "")
 
 
 if __name__ == "__main__":

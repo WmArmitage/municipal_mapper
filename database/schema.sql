@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS service_links (
     url TEXT,
     domain TEXT,
     vendor TEXT,
+    service_page_type TEXT,
     confidence REAL,
     source_url TEXT,
     FOREIGN KEY (municipality_id) REFERENCES municipalities(municipality_id)

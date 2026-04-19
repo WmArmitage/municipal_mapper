@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import sys
 from pathlib import Path
@@ -10,9 +11,28 @@ if str(ROOT) not in sys.path:
 
 from src.db import get_connection
 
+PUBLIC_SIGNAL_EXCLUDE_TYPES = {
+    "crawl_error",
+    "crawl_status",
+    "fetched_pages_count",
+    "high_value_links_count",
+}
 
-def export_table(conn, table_name: str, out_path: Path) -> int:
-    rows = conn.execute(f"SELECT * FROM {table_name}").fetchall()
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Export SQLite tables to CSVs.")
+    parser.add_argument("--db", default=str(ROOT / "database" / "master.sqlite"))
+    parser.add_argument(
+        "--signals-view",
+        choices=("full", "public", "both"),
+        default="both",
+        help="Export full debug signals, public-facing filtered signals, or both.",
+    )
+    return parser.parse_args()
+
+
+def export_query(conn, query: str, params: tuple, out_path: Path) -> int:
+    rows = conn.execute(query, params).fetchall()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8", newline="") as handle:
         if not rows:
@@ -26,8 +46,28 @@ def export_table(conn, table_name: str, out_path: Path) -> int:
     return len(rows)
 
 
+def export_table(conn, table_name: str, out_path: Path) -> int:
+    return export_query(conn, f"SELECT * FROM {table_name}", tuple(), out_path)
+
+
+def export_signals_full(conn, out_path: Path) -> int:
+    return export_table(conn, "signals", out_path)
+
+
+def export_signals_public(conn, out_path: Path) -> int:
+    placeholders = ",".join("?" for _ in PUBLIC_SIGNAL_EXCLUDE_TYPES)
+    query = f"""
+        SELECT *
+        FROM signals
+        WHERE signal_type NOT IN ({placeholders})
+    """
+    params = tuple(sorted(PUBLIC_SIGNAL_EXCLUDE_TYPES))
+    return export_query(conn, query, params, out_path)
+
+
 def main() -> None:
-    db_path = ROOT / "database" / "master.sqlite"
+    args = parse_args()
+    db_path = Path(args.db)
     exports = ROOT / "data" / "exports"
     conn = get_connection(db_path)
     try:
@@ -35,8 +75,11 @@ def main() -> None:
             "contacts": export_table(conn, "contacts", exports / "contacts.csv"),
             "service_links": export_table(conn, "service_links", exports / "service_links.csv"),
             "locations": export_table(conn, "locations", exports / "locations.csv"),
-            "signals": export_table(conn, "signals", exports / "signals.csv"),
         }
+        if args.signals_view in {"full", "both"}:
+            counts["signals_full"] = export_signals_full(conn, exports / "signals.csv")
+        if args.signals_view in {"public", "both"}:
+            counts["signals_public"] = export_signals_public(conn, exports / "signals_public.csv")
     finally:
         conn.close()
 

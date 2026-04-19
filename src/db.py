@@ -127,14 +127,15 @@ def upsert_service_link(conn: sqlite3.Connection, row: dict) -> None:
     conn.execute(
         """
         INSERT INTO service_links (
-            service_id, municipality_id, category, label, url, domain, vendor, confidence, source_url
+            service_id, municipality_id, category, label, url, domain, vendor, service_page_type, confidence, source_url
         )
         VALUES (
-            :service_id, :municipality_id, :category, :label, :url, :domain, :vendor, :confidence, :source_url
+            :service_id, :municipality_id, :category, :label, :url, :domain, :vendor, :service_page_type, :confidence, :source_url
         )
         ON CONFLICT(service_id) DO UPDATE SET
             label = COALESCE(excluded.label, service_links.label),
             vendor = COALESCE(excluded.vendor, service_links.vendor),
+            service_page_type = COALESCE(excluded.service_page_type, service_links.service_page_type),
             confidence = MAX(service_links.confidence, excluded.confidence),
             source_url = COALESCE(excluded.source_url, service_links.source_url)
         """,
@@ -209,6 +210,8 @@ def _run_lightweight_migrations(conn: sqlite3.Connection) -> None:
         return
     _ensure_column(conn, "contacts", "phone_ext", "TEXT")
     _ensure_column(conn, "contacts", "source_context", "TEXT")
+    if _table_exists(conn, "service_links"):
+        _ensure_column(conn, "service_links", "service_page_type", "TEXT")
     conn.commit()
 
 
