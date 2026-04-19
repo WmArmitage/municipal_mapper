@@ -110,7 +110,12 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
             email_type = COALESCE(excluded.email_type, contacts.email_type),
             phone = COALESCE(excluded.phone, contacts.phone),
             phone_ext = COALESCE(excluded.phone_ext, contacts.phone_ext),
-            source_context = COALESCE(excluded.source_context, contacts.source_context),
+            source_context = CASE
+                WHEN excluded.phone IS NOT NULL
+                    AND (contacts.phone IS NULL OR excluded.confidence >= contacts.confidence)
+                THEN COALESCE(excluded.source_context, contacts.source_context)
+                ELSE contacts.source_context
+            END,
             confidence = MAX(contacts.confidence, excluded.confidence)
         """,
         row,

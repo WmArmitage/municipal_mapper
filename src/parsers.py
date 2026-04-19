@@ -3,6 +3,11 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
+try:
+    from bs4 import BeautifulSoup
+except ImportError:  # pragma: no cover - exercised only in minimal environments
+    BeautifulSoup = None
+
 from src.normalize import normalize_whitespace
 
 EMAIL_RE = re.compile(r"\b([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})\b", re.IGNORECASE)
@@ -25,6 +30,67 @@ ADDRESS_RE = re.compile(
 )
 
 DAY_TOKENS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon-fri")
+DEPARTMENT_ENTITY_KEYWORDS = (
+    "department",
+    "office",
+    "agency",
+    "board",
+    "commission",
+    "committee",
+    "authority",
+    "division",
+    "bureau",
+)
+DEPARTMENT_FUNCTION_KEYWORDS = (
+    "clerk",
+    "assessor",
+    "collector",
+    "treasurer",
+    "finance",
+    "hr",
+    "human resources",
+    "public works",
+    "planning",
+    "zoning",
+    "land use",
+    "wetlands",
+    "building",
+    "permitting",
+    "recreation",
+    "library",
+    "police",
+    "fire",
+    "emergency management",
+    "registrar",
+    "health",
+)
+DEPARTMENT_STRONG_PHRASES = (
+    "inland wetlands and watercourses agency",
+    "planning and zoning commission",
+    "public works department",
+    "human resources",
+    "tax collector",
+    "town clerk",
+    "board of selectmen",
+    "building department",
+)
+DEPARTMENT_REJECT_EXACT = {
+    "contact us",
+    "phone numbers",
+    "staff directory",
+    "home",
+    "government",
+    "departments",
+    "services",
+    "view map",
+    "click here",
+    "email us",
+    "hours",
+    "physical address",
+    "mailing address",
+    "quick links",
+    "popular links",
+}
 TITLE_HINTS = [
     "first selectman",
     "town manager",
@@ -72,6 +138,64 @@ ROLE_EMAIL_HINTS = {
     "police",
     "fire",
     "recreation",
+}
+NAME_STOPWORDS = {
+    "town",
+    "department",
+    "office",
+    "hall",
+    "street",
+    "avenue",
+    "usage",
+    "fees",
+    "information",
+    "services",
+    "contact",
+    "board",
+    "commission",
+    "agency",
+    "committee",
+    "public",
+    "works",
+    "planning",
+    "zoning",
+    "will",
+    "try",
+    "email",
+    "phone",
+    "call",
+    "here",
+}
+PERSON_NAME_LEADIN_WORDS = [
+    "assessor",
+    "tax collector",
+    "town clerk",
+    "building official",
+    "planner",
+    "registrar",
+    "treasurer",
+    "director",
+    "chief",
+]
+ROLE_ONLY_DEPARTMENT_LABELS = (
+    "assessor",
+    "tax collector",
+    "town clerk",
+    "treasurer",
+    "registrar",
+    "registrar of voters",
+    "human resources",
+    "public works department",
+    "building department",
+)
+TITLE_AS_DEPARTMENT_HINTS = {
+    "assessor",
+    "tax collector",
+    "town clerk",
+    "building official",
+    "human resources",
+    "treasurer",
+    "registrar",
 }
 
 SERVICE_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -147,83 +271,136 @@ def guess_title(snippets: Iterable[str]) -> tuple[str | None, float]:
     return None, 0.0
 
 
-def guess_name(context: str) -> str | None:
+def guess_name(context: str, email: str | None = None, prefer_department: bool = False) -> str | None:
     if not context:
         return None
-    # Conservative heuristic: title-case two-token names on same line as email.
+
+    # Highest-confidence path for department-heavy lines: role + person pattern.
+    role_pattern = "|".join(re.escape(word) for word in PERSON_NAME_LEADIN_WORDS)
+    explicit = re.search(rf"(?:{role_pattern})\s+([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", context, re.IGNORECASE)
+    if explicit:
+        candidate = normalize_whitespace(explicit.group(1))
+        if candidate and _is_name_candidate(candidate):
+            return candidate
+
+    if prefer_department:
+        return None
+
     for match in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b", context):
         candidate = normalize_whitespace(match.group(1))
-        if not candidate:
+        if not candidate or not _is_name_candidate(candidate):
             continue
-        lower = candidate.lower()
-        if any(token in lower for token in ("town", "department", "office", "hall", "street", "avenue")):
+        if email and not _candidate_aligns_with_email(candidate, email):
+            # In email-driven parsing, names that do not align with email local part
+            # are often section labels; skip them to reduce noise.
             continue
         return candidate
     return None
 
 
-def _neighboring_lines(lines: list[str], idx: int) -> list[str]:
-    out = []
-    if idx > 0:
-        out.append(lines[idx - 1])
-    out.append(lines[idx])
-    if idx + 1 < len(lines):
-        out.append(lines[idx + 1])
-    return out
+def _neighboring_lines(lines: list[str], idx: int, radius: int = 2) -> list[str]:
+    start = max(0, idx - radius)
+    end = min(len(lines), idx + radius + 1)
+    return lines[start:end]
 
 
 def extract_contacts(text: str, source_url: str) -> list[dict[str, str | float | None]]:
-    cleaned_text = text or ""
+    cleaned_text = _prepare_contact_text(text or "")
     lines = [normalize_whitespace(line) or "" for line in cleaned_text.splitlines()]
     lines = [line for line in lines if line]
     all_phone_candidates = extract_phone_candidates(cleaned_text)
     contacts: list[dict[str, str | float | None]] = []
-    seen_emails: set[str] = set()
+    seen_rows: set[tuple[str, str, str, str]] = set()
 
     for idx, line in enumerate(lines):
-        for match in EMAIL_RE.finditer(line):
-            email = match.group(1).strip().lower()
-            if email in seen_emails:
-                continue
-            seen_emails.add(email)
+        neighbors = _neighboring_lines(lines, idx)
+        nearby_blob = normalize_whitespace(" ".join(neighbors)) or line
 
-            neighbors = _neighboring_lines(lines, idx)
-            title, title_conf = guess_title(neighbors)
+        line_emails = extract_emails(line)
+        block_emails = extract_emails(nearby_blob)
+        line_phone_candidates = extract_phone_candidates(line)
+        nearby_phone_candidates = extract_phone_candidates(nearby_blob)
+
+        line_department, line_department_score = guess_department_with_score(line)
+        block_department, block_department_score = guess_department_with_score(nearby_blob)
+        department = line_department or block_department
+        department_score = line_department_score if line_department else block_department_score
+        title, title_conf = guess_title(neighbors)
+        if not department and title and title.lower() in TITLE_AS_DEPARTMENT_HINTS:
+            department = title
+            department_score = max(department_score, 1.0)
+
+        should_process = bool(line_emails)
+        if not should_process and line_phone_candidates and line_department:
+            should_process = True
+        if not should_process and line_department and block_emails:
+            should_process = True
+        if not should_process:
+            continue
+
+        emails_to_emit = line_emails if line_emails else [None]
+        if not line_emails and line_department and block_emails:
+            emails_to_emit = [block_emails[0]]
+
+        for email in emails_to_emit:
             phone = None
             phone_ext = None
-            source_context = None
-            nearby_blob = " ".join(neighbors)
-            nearby_phone_candidates = extract_phone_candidates(nearby_blob)
-            if nearby_phone_candidates:
+            source_context = normalize_whitespace(line)
+
+            if line_phone_candidates:
+                phone = line_phone_candidates[0].get("phone")
+                phone_ext = line_phone_candidates[0].get("phone_ext")
+                source_context = line_phone_candidates[0].get("source_context") or source_context
+            elif nearby_phone_candidates:
                 phone = nearby_phone_candidates[0].get("phone")
                 phone_ext = nearby_phone_candidates[0].get("phone_ext")
-                source_context = nearby_phone_candidates[0].get("source_context")
-            elif all_phone_candidates:
+                source_context = nearby_phone_candidates[0].get("source_context") or source_context
+            elif len(all_phone_candidates) == 1:
                 phone = all_phone_candidates[0].get("phone")
                 phone_ext = all_phone_candidates[0].get("phone_ext")
-                source_context = all_phone_candidates[0].get("source_context")
+                source_context = all_phone_candidates[0].get("source_context") or source_context
 
-            department = None
-            lower_blob = nearby_blob.lower()
-            for hint in DEPARTMENT_HINTS:
-                if hint in lower_blob:
-                    department = hint.title()
-                    break
+            # Conservative emission:
+            # - email-only rows are allowed
+            # - department + phone rows are allowed
+            # - noisy phone-only rows are rejected
+            if not email and not department:
+                continue
+            if not email and not phone:
+                continue
 
-            name = guess_name(line)
-            email_type = infer_email_type(email)
-            confidence = 0.45
-            if email_type != "unknown":
-                confidence += 0.15
+            prefer_department = bool(department and department_score >= 2.5)
+            name = guess_name(nearby_blob, email=email, prefer_department=prefer_department)
+            email_type = infer_email_type(email) if email else "unknown"
+
+            confidence = 0.3
+            if email:
+                confidence += 0.22
+            if email and email_type != "unknown":
+                confidence += 0.08
             if phone:
-                confidence += 0.1
+                confidence += 0.15
             if title:
-                confidence += 0.15 * max(title_conf, 0.5)
+                confidence += 0.12 * max(title_conf, 0.5)
             if name:
                 confidence += 0.1
             if department:
-                confidence += 0.05
-            confidence = round(min(confidence, 0.99), 3)
+                confidence += 0.12
+                if email or phone:
+                    confidence += 0.08
+            elif department_score > 0:
+                confidence -= 0.05
+
+            confidence = round(min(max(confidence, 0.2), 0.99), 3)
+            dedupe_key = (
+                (email or "").lower(),
+                phone or "",
+                (department or "").lower(),
+                source_url,
+            )
+            if dedupe_key in seen_rows:
+                continue
+            seen_rows.add(dedupe_key)
 
             contacts.append(
                 {
@@ -306,3 +483,115 @@ def _normalize_phone_match(match: re.Match[str]) -> dict[str, str | None] | None
         "phone_ext": normalized_ext,
         "source_context": source_context,
     }
+
+
+def guess_department(text: str) -> str | None:
+    department, _ = guess_department_with_score(text)
+    return department
+
+
+def guess_department_with_score(text: str) -> tuple[str | None, float]:
+    raw = normalize_whitespace(text)
+    if not raw:
+        return None, 0.0
+
+    candidate = _clean_department_candidate(raw)
+    if not candidate:
+        return None, 0.0
+    lower = candidate.lower()
+    if lower in DEPARTMENT_REJECT_EXACT:
+        return None, 0.0
+    if any(token in lower for token in ("http://", "https://", "www.", ".gov/", "click here")):
+        return None, 0.0
+
+    score = 0.0
+    for phrase in DEPARTMENT_STRONG_PHRASES:
+        if phrase in lower:
+            score += 3.0
+    for keyword in DEPARTMENT_ENTITY_KEYWORDS:
+        if _keyword_in_text(lower, keyword):
+            score += 1.8
+    for keyword in DEPARTMENT_FUNCTION_KEYWORDS:
+        if _keyword_in_text(lower, keyword):
+            score += 1.2
+    if lower.startswith("board of "):
+        score += 1.5
+    if " and " in lower and score > 0:
+        score += 0.25
+
+    # Allow compact department labels like "Assessor" or "Town Clerk".
+    compact_allowed = any(
+        _keyword_in_text(lower, token) for token in ("assessor", "clerk", "collector", "treasurer", "registrar")
+    ) and len(lower.split()) <= 6
+    threshold = 1.0 if compact_allowed else 2.8
+    if score < threshold:
+        return None, score
+
+    normalized = candidate.strip(" -:;,.")
+    if not normalized:
+        return None, score
+    lowered_normalized = normalized.lower()
+    for role_label in ROLE_ONLY_DEPARTMENT_LABELS:
+        if lowered_normalized.startswith(f"{role_label} "):
+            normalized = " ".join(part.capitalize() for part in role_label.split())
+            break
+    if normalized.isupper():
+        normalized = normalized.title()
+    return normalized, score
+
+
+def _clean_department_candidate(text: str) -> str | None:
+    candidate = EMAIL_RE.sub(" ", text)
+    candidate = PHONE_RE.sub(" ", candidate)
+    candidate = re.sub(r"[|•]+", " ", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip(" -:;,.")
+    if not candidate:
+        return None
+    if len(candidate) < 3 or len(candidate) > 120:
+        return None
+    return candidate
+
+
+def _is_name_candidate(candidate: str) -> bool:
+    lower = candidate.lower()
+    if any(token in lower for token in NAME_STOPWORDS):
+        return False
+    # Reject all-uppercase abbreviations and mixed non-name tokens.
+    if re.search(r"\d", candidate):
+        return False
+    return True
+
+
+def _candidate_aligns_with_email(candidate: str, email: str) -> bool:
+    local = (email.split("@", 1)[0] if email else "").lower().replace("_", ".")
+    if not local or "." not in local:
+        return False
+    name_tokens = [part.lower() for part in candidate.split() if part]
+    if len(name_tokens) < 2:
+        return False
+    return all(token in local for token in name_tokens[:2])
+
+
+def _prepare_contact_text(text: str) -> str:
+    """Convert HTML-heavy content into cleaner visible text for contact parsing."""
+    raw = text or ""
+    if "<" not in raw or ">" not in raw:
+        return raw
+
+    if BeautifulSoup is None:
+        raw_with_mailto = re.sub(r"(?i)mailto:([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})", r" \1 ", raw)
+        without_assets = re.sub(r"(?is)<(script|style|noscript)\b[^>]*>.*?</\1>", " ", raw_with_mailto)
+        return re.sub(r"(?s)<[^>]+>", "\n", without_assets)
+
+    soup = BeautifulSoup(raw, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        if not href.lower().startswith("mailto:"):
+            continue
+        email = href.split(":", 1)[1].split("?", 1)[0].strip()
+        if not EMAIL_RE.fullmatch(email):
+            continue
+        anchor.append(f" {email}")
+    return soup.get_text("\n")

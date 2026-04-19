@@ -61,7 +61,18 @@ def process_text_extractions(conn, municipality_id: str, source_url: str, text: 
     location_count = 0
 
     for contact in extract_contacts(text, source_url):
-        contact_id = make_id("ctc", municipality_id, contact.get("email") or "", source_url)
+        email = str(contact.get("email") or "")
+        if email:
+            contact_id = make_id("ctc", municipality_id, email, source_url)
+        else:
+            contact_id = make_id(
+                "ctc",
+                municipality_id,
+                contact.get("phone") or "",
+                contact.get("department") or "",
+                contact.get("source_context") or "",
+                source_url,
+            )
         db.upsert_contact(
             conn,
             {
