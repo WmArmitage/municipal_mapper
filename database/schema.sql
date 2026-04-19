@@ -3,7 +3,11 @@ CREATE TABLE IF NOT EXISTS municipalities (
     name TEXT NOT NULL,
     county TEXT,
     website_url TEXT,
-    domain TEXT
+    domain TEXT,
+    jobs_url TEXT,
+    directory_url TEXT,
+    assessor_url TEXT,
+    tax_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pages (

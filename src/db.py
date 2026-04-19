@@ -23,17 +23,36 @@ def apply_schema(conn: sqlite3.Connection, schema_path: str | Path) -> None:
 
 
 def upsert_municipality(conn: sqlite3.Connection, row: dict[str, str | None]) -> None:
+    payload = {
+        "municipality_id": (row.get("municipality_id") or "").strip(),
+        "name": (row.get("name") or "").strip(),
+        "county": _clean_optional(row.get("county")),
+        "website_url": _clean_optional(row.get("website_url")),
+        "domain": _clean_optional(row.get("domain"), to_lower=True),
+        "jobs_url": _clean_optional(row.get("jobs_url")),
+        "directory_url": _clean_optional(row.get("directory_url")),
+        "assessor_url": _clean_optional(row.get("assessor_url")),
+        "tax_url": _clean_optional(row.get("tax_url")),
+    }
     conn.execute(
         """
-        INSERT INTO municipalities (municipality_id, name, county, website_url, domain)
-        VALUES (:municipality_id, :name, :county, :website_url, :domain)
+        INSERT INTO municipalities (
+            municipality_id, name, county, website_url, domain, jobs_url, directory_url, assessor_url, tax_url
+        )
+        VALUES (
+            :municipality_id, :name, :county, :website_url, :domain, :jobs_url, :directory_url, :assessor_url, :tax_url
+        )
         ON CONFLICT(municipality_id) DO UPDATE SET
             name = excluded.name,
             county = excluded.county,
             website_url = excluded.website_url,
-            domain = excluded.domain
+            domain = excluded.domain,
+            jobs_url = excluded.jobs_url,
+            directory_url = excluded.directory_url,
+            assessor_url = excluded.assessor_url,
+            tax_url = excluded.tax_url
         """,
-        row,
+        payload,
     )
 
 
@@ -48,6 +67,10 @@ def load_municipalities_from_csv(conn: sqlite3.Connection, csv_path: str | Path)
                 "county": (row.get("county") or "").strip() or None,
                 "website_url": (row.get("website_url") or "").strip() or None,
                 "domain": (row.get("domain") or "").strip().lower() or None,
+                "jobs_url": (row.get("jobs_url") or "").strip() or None,
+                "directory_url": (row.get("directory_url") or "").strip() or None,
+                "assessor_url": (row.get("assessor_url") or "").strip() or None,
+                "tax_url": (row.get("tax_url") or "").strip() or None,
             }
             if not payload["municipality_id"] or not payload["name"]:
                 continue
@@ -59,7 +82,11 @@ def load_municipalities_from_csv(conn: sqlite3.Connection, csv_path: str | Path)
 
 def get_municipality(conn: sqlite3.Connection, municipality_id: str) -> dict | None:
     row = conn.execute(
-        "SELECT municipality_id, name, county, website_url, domain FROM municipalities WHERE municipality_id = ?",
+        """
+        SELECT municipality_id, name, county, website_url, domain, jobs_url, directory_url, assessor_url, tax_url
+        FROM municipalities
+        WHERE municipality_id = ?
+        """,
         (municipality_id,),
     ).fetchone()
     return dict(row) if row else None
@@ -67,7 +94,11 @@ def get_municipality(conn: sqlite3.Connection, municipality_id: str) -> dict | N
 
 def list_municipalities(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT municipality_id, name, county, website_url, domain FROM municipalities ORDER BY municipality_id"
+        """
+        SELECT municipality_id, name, county, website_url, domain, jobs_url, directory_url, assessor_url, tax_url
+        FROM municipalities
+        ORDER BY municipality_id
+        """
     ).fetchall()
     return [dict(row) for row in rows]
 
@@ -206,10 +237,14 @@ def fetch_municipality_rows(
 
 
 def _run_lightweight_migrations(conn: sqlite3.Connection) -> None:
-    if not _table_exists(conn, "contacts"):
-        return
-    _ensure_column(conn, "contacts", "phone_ext", "TEXT")
-    _ensure_column(conn, "contacts", "source_context", "TEXT")
+    if _table_exists(conn, "contacts"):
+        _ensure_column(conn, "contacts", "phone_ext", "TEXT")
+        _ensure_column(conn, "contacts", "source_context", "TEXT")
+    if _table_exists(conn, "municipalities"):
+        _ensure_column(conn, "municipalities", "jobs_url", "TEXT")
+        _ensure_column(conn, "municipalities", "directory_url", "TEXT")
+        _ensure_column(conn, "municipalities", "assessor_url", "TEXT")
+        _ensure_column(conn, "municipalities", "tax_url", "TEXT")
     if _table_exists(conn, "service_links"):
         _ensure_column(conn, "service_links", "service_page_type", "TEXT")
     conn.commit()
@@ -231,3 +266,12 @@ def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, 
     if column_name.lower() in existing:
         return
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+
+
+def _clean_optional(value: str | None, to_lower: bool = False) -> str | None:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return None
+    if to_lower:
+        return cleaned.lower()
+    return cleaned

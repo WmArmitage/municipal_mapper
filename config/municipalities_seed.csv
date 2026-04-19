@@ -1,4 +1,4 @@
-﻿municipality_id,name,county,website_url,domain
+﻿municipality_id,name,county,website_url,domain,jobs_url,directory_url,assessor_url,tax_url
 ct_andover,Andover,Tolland County,https://www.andoverconnecticut.org/,andoverconnecticut.org
 ct_ansonia,Ansonia,New Haven County,https://www.cityofansonia.com/,cityofansonia.com
 ct_ashford,Ashford,Windham County,https://ashfordtownhall.org/,ashfordtownhall.org
@@ -168,3 +168,4 @@ ct_wolcott,Wolcott,New Haven County,https://wolcottct.org/,wolcottct.org
 ct_woodbridge,Woodbridge,New Haven County,https://www.woodbridgect.org/,woodbridgect.org
 ct_woodbury,Woodbury,Litchfield County,https://woodburyct.org/,woodburyct.org
 ct_woodstock,Woodstock,Windham County,https://www.woodstockct.gov/,woodstockct.gov
+

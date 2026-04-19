@@ -101,6 +101,7 @@ def build_summary_row(conn, municipality_id: str) -> tuple[dict[str, int | str],
     contact_presence = get_contact_presence_counts(conn, municipality_id)
     service_categories = get_service_category_counts(conn, municipality_id)
     signal_types = get_signal_type_counts(conn, municipality_id)
+    fallback = get_fallback_status(conn, municipality_id, base)
 
     row: dict[str, int | str] = {
         "municipality_id": municipality_id,
@@ -109,6 +110,11 @@ def build_summary_row(conn, municipality_id: str) -> tuple[dict[str, int | str],
         "service_links": base["service_links"],
         "locations": base["locations"],
         "signals": base["signals"],
+        "blocked_homepage": str(bool(fallback["blocked_homepage"])).lower(),
+        "blocked_homepage_value": str(fallback["blocked_homepage_value"] or ""),
+        "homepage_fetch_failed": str(bool(fallback["homepage_fetch_failed"])).lower(),
+        "alternate_seed_attempted": str(bool(fallback["alternate_seed_attempted"])).lower(),
+        "recovered_after_homepage_failure": str(bool(fallback["recovered_after_homepage_failure"])).lower(),
         **contact_presence,
     }
     return row, service_categories, signal_types
@@ -140,6 +146,13 @@ def print_summary(
                 },
                 "service_links_by_category": service_categories,
                 "signals_by_type": signal_types,
+                "fallback_status": {
+                    "blocked_homepage": row["blocked_homepage"],
+                    "blocked_homepage_value": row["blocked_homepage_value"],
+                    "homepage_fetch_failed": row["homepage_fetch_failed"],
+                    "alternate_seed_attempted": row["alternate_seed_attempted"],
+                    "recovered_after_homepage_failure": row["recovered_after_homepage_failure"],
+                },
             },
             indent=2,
         )
@@ -155,6 +168,11 @@ def write_csv(rows: list[dict[str, int | str]], csv_path: Path) -> None:
         "service_links",
         "locations",
         "signals",
+        "blocked_homepage",
+        "blocked_homepage_value",
+        "homepage_fetch_failed",
+        "alternate_seed_attempted",
+        "recovered_after_homepage_failure",
         "contact_with_email",
         "contact_with_phone",
         "contact_with_phone_ext",
@@ -166,7 +184,33 @@ def write_csv(rows: list[dict[str, int | str]], csv_path: Path) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
-    print(f"\nWrote QA CSV: {csv_path}")
+        print(f"\nWrote QA CSV: {csv_path}")
+
+
+def get_signal_values(conn, municipality_id: str, signal_type: str) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT value
+        FROM signals
+        WHERE municipality_id = ? AND signal_type = ?
+        """,
+        (municipality_id, signal_type),
+    ).fetchall()
+    return [str(row[0] or "").strip().lower() for row in rows if row and row[0] is not None]
+
+
+def get_fallback_status(conn, municipality_id: str, counts: dict[str, int]) -> dict[str, bool | str | None]:
+    blocked_values = get_signal_values(conn, municipality_id, "blocked_homepage")
+    homepage_statuses = get_signal_values(conn, municipality_id, "crawl_status")
+    alt_attempt_values = get_signal_values(conn, municipality_id, "alternate_seed_attempted")
+    has_data = any(counts.get(key, 0) > 0 for key in ("pages", "contacts", "service_links", "locations"))
+    return {
+        "blocked_homepage": bool(blocked_values),
+        "blocked_homepage_value": blocked_values[0] if blocked_values else None,
+        "homepage_fetch_failed": "homepage_fetch_failed" in homepage_statuses,
+        "alternate_seed_attempted": any(value in {"true", "1", "yes", "attempted"} for value in alt_attempt_values),
+        "recovered_after_homepage_failure": ("homepage_fetch_failed" in homepage_statuses) and has_data,
+    }
 
 
 def main() -> None:
@@ -187,4 +231,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

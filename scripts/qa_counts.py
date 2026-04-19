@@ -24,11 +24,46 @@ def main() -> None:
     conn = get_connection(args.db)
     try:
         counts = get_municipality_table_counts(conn, args.municipality_id)
+        qa_status = get_fallback_status(conn, args.municipality_id, counts)
     finally:
         conn.close()
-    print(json.dumps({"municipality_id": args.municipality_id, "counts": counts}, indent=2))
+    print(
+        json.dumps(
+            {
+                "municipality_id": args.municipality_id,
+                "counts": counts,
+                "fallback_status": qa_status,
+            },
+            indent=2,
+        )
+    )
+
+
+def get_signal_values(conn, municipality_id: str, signal_type: str) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT value
+        FROM signals
+        WHERE municipality_id = ? AND signal_type = ?
+        """,
+        (municipality_id, signal_type),
+    ).fetchall()
+    return [str(row[0] or "").strip().lower() for row in rows if row and row[0] is not None]
+
+
+def get_fallback_status(conn, municipality_id: str, counts: dict[str, int]) -> dict[str, bool | str | None]:
+    blocked_values = get_signal_values(conn, municipality_id, "blocked_homepage")
+    homepage_statuses = get_signal_values(conn, municipality_id, "crawl_status")
+    alt_attempt_values = get_signal_values(conn, municipality_id, "alternate_seed_attempted")
+    has_data = any(counts.get(key, 0) > 0 for key in ("pages", "contacts", "service_links", "locations"))
+    return {
+        "blocked_homepage": bool(blocked_values),
+        "blocked_homepage_value": blocked_values[0] if blocked_values else None,
+        "homepage_fetch_failed": "homepage_fetch_failed" in homepage_statuses,
+        "alternate_seed_attempted": any(value in {"true", "1", "yes", "attempted"} for value in alt_attempt_values),
+        "recovered_after_homepage_failure": ("homepage_fetch_failed" in homepage_statuses) and has_data,
+    }
 
 
 if __name__ == "__main__":
     main()
-

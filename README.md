@@ -65,6 +65,12 @@ python scripts/run_town.py ct_chester
 python scripts/export_csvs.py
 ```
 
+Optional alternate seed columns can be added to `config/municipalities_seed.csv` and will be used when homepages are blocked:
+- `jobs_url`
+- `directory_url`
+- `assessor_url`
+- `tax_url`
+
 Optional signal export mode:
 
 ```powershell
@@ -96,6 +102,7 @@ Quick checks:
 - inspect permit links for false positives
 - verify locations are not duplicated by repeated footers
 - verify vendor signals are not repeated with the same value
+- check `fallback_status` in `qa_counts` / `inspect_town` for `blocked_homepage`, `alternate_seed_attempted`, and recovery after homepage failure
 
 `run_town.py` also supports `--qa` to print post-run table counts for that municipality.
 
@@ -125,6 +132,7 @@ Optional flags:
 - Contact phones are normalized to digits in `phone`; detected extensions are stored in `phone_ext`, and original matched text is stored in `source_context`.
 - Uncertain location/title fields are stored as raw text.
 - Contact extraction intentionally uses simple heuristics in v1 (no advanced person-name resolution).
+- Some municipalities may block automated homepage requests (for example Cloudflare 403). Use optional alternate seed URLs in the seed CSV and/or flag for manual review.
 
 ## Parser Tests
 

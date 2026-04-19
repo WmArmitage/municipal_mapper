@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from src import db
 from src.discover import extract_links_from_html, extract_links_from_sitemap_xml, select_high_value_links
-from src.http_client import candidate_sitemap_urls, create_session, fetch_url
+from src.http_client import FetchResult, candidate_sitemap_urls, create_session, fetch_url
 from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace
 from src.parsers import (
     classify_service_link,
@@ -23,6 +23,8 @@ from src.parsers import (
     location_dedupe_key,
 )
 from src.vendors import detect_vendor
+
+ALTERNATE_SEED_COLUMNS = ("jobs_url", "directory_url", "assessor_url", "tax_url")
 
 
 def extract_title(html: str) -> str | None:
@@ -171,7 +173,7 @@ def crawl_single_municipality(
         page_type: str,
         discovered_from: str,
         referer: str | None = None,
-    ) -> tuple[bool, str | None, str | None, str | None]:
+    ) -> tuple[bool, str | None, str | None, str | None, FetchResult]:
         result = fetch_url(url, session=session, timeout=timeout, referer=referer)
         final_url = result.final_url or url
 
@@ -191,10 +193,10 @@ def crawl_single_municipality(
                 0.7,
                 final_url,
             )
-            return False, final_url, None, result.content_type
+            return False, final_url, None, result.content_type, result
 
         if final_url in seen_fetched_urls:
-            return True, final_url, result.text, result.content_type
+            return True, final_url, result.text, result.content_type, result
         seen_fetched_urls.add(final_url)
 
         title = extract_title(result.text or "") if not is_xml_content(result.content_type, final_url) else None
@@ -225,33 +227,77 @@ def crawl_single_municipality(
             if vendor:
                 register_vendor_signal(vendor, vendor_conf, final_url)
 
-        return True, final_url, result.text, result.content_type
+        return True, final_url, result.text, result.content_type, result
 
-    home_ok, home_url, home_text, _ = fetch_and_record(website_url, "homepage", "seed", referer=None)
+    homepage_failed = False
+    alternate_seed_attempted = False
+    home_ok, home_url, home_text, _, home_result = fetch_and_record(website_url, "homepage", "seed", referer=None)
+    entry_url = normalize_url(home_url or website_url) or (home_url or website_url)
+    primary_seed_url = home_url
+
     if not home_ok or not home_url:
-        print(f"Fallback triggered for {municipality_id}")
+        homepage_failed = True
         upsert_signal(conn, municipality_id, "crawl_status", "homepage_fetch_failed", 1.0, website_url)
-        db.commit(conn)
-        return stats
+        blocked_value = classify_blocked_homepage(home_result)
+        if blocked_value:
+            upsert_signal(conn, municipality_id, "blocked_homepage", blocked_value, 0.98, website_url)
 
-    if home_text:
+        alternate_urls = get_alternate_seed_urls(municipality, website_url)
+        alternate_successes: list[str] = []
+        if alternate_urls:
+            alternate_seed_attempted = True
+            upsert_signal(conn, municipality_id, "alternate_seed_attempted", "true", 1.0, website_url)
+            print(f"Alternate seed fallback triggered for {municipality_id}")
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            for seed_url in alternate_urls:
+                ok, final_seed_url, seed_text, _, _ = fetch_and_record(
+                    seed_url,
+                    "alternate_seed",
+                    "seed_fallback",
+                    referer=None,
+                )
+                if not ok or not final_seed_url:
+                    continue
+                alternate_successes.append(final_seed_url)
+                if seed_text:
+                    (raw_dir / f"{municipality_id}_{make_id('raw', final_seed_url, length=10)}.txt").write_text(
+                        seed_text,
+                        encoding="utf-8",
+                        errors="ignore",
+                    )
+                    c_count, l_count = process_text_extractions(conn, municipality_id, final_seed_url, seed_text)
+                    stats["contacts"] += c_count
+                    stats["locations"] += l_count
+
+        if alternate_successes:
+            primary_seed_url = alternate_successes[0]
+            entry_url = normalize_url(primary_seed_url) or primary_seed_url
+            upsert_signal(conn, municipality_id, "alternate_seed_recovered", "true", 0.95, primary_seed_url)
+        else:
+            if alternate_seed_attempted:
+                upsert_signal(conn, municipality_id, "alternate_seed_recovered", "false", 0.95, website_url)
+            print(f"Fallback triggered for {municipality_id}")
+            db.commit(conn)
+            return stats
+    elif home_text:
         raw_dir.mkdir(parents=True, exist_ok=True)
         (raw_dir / f"{municipality_id}_homepage.html").write_text(home_text, encoding="utf-8", errors="ignore")
         c_count, l_count = process_text_extractions(conn, municipality_id, home_url, home_text)
         stats["contacts"] += c_count
         stats["locations"] += l_count
 
-    for sitemap_url in candidate_sitemap_urls(home_url):
-        ok, final_sitemap_url, sitemap_text, _ = fetch_and_record(
-            sitemap_url,
-            "sitemap",
-            home_url,
-            referer=home_url,
-        )
-        if ok and final_sitemap_url and sitemap_text:
-            (raw_dir / f"{municipality_id}_{make_id('raw', final_sitemap_url, length=10)}.txt").write_text(
-                sitemap_text, encoding="utf-8", errors="ignore"
+    if home_ok and home_url:
+        for sitemap_url in candidate_sitemap_urls(home_url):
+            ok, final_sitemap_url, sitemap_text, _, _ = fetch_and_record(
+                sitemap_url,
+                "sitemap",
+                home_url,
+                referer=home_url,
             )
+            if ok and final_sitemap_url and sitemap_text:
+                (raw_dir / f"{municipality_id}_{make_id('raw', final_sitemap_url, length=10)}.txt").write_text(
+                    sitemap_text, encoding="utf-8", errors="ignore"
+                )
 
     high_value_links = select_high_value_links(discovered_links, min_score=2.5, max_links=max_candidate_pages)
     fallback_triggered = False
@@ -262,10 +308,10 @@ def crawl_single_municipality(
         for link in discovered_links
         if is_internal_link(str(link.get("url") or ""), municipality_domain)
     ]
-    homepage_internal_links = [
+    seed_internal_links = [
         link
         for link in internal_discovered_links
-        if str(link.get("source_url") or "") == home_url
+        if str(link.get("source_url") or "") == (primary_seed_url or "")
     ]
 
     target_min_candidates = min(max_candidate_pages, 10)
@@ -274,7 +320,7 @@ def crawl_single_municipality(
 
     if not high_value_links:
         fallback_triggered = True
-        seed_links = homepage_internal_links or internal_discovered_links
+        seed_links = seed_internal_links or internal_discovered_links
         high_value_links = select_high_value_links(
             seed_links,
             min_score=1.2,
@@ -294,7 +340,7 @@ def crawl_single_municipality(
 
     if len(high_value_links) < target_min_candidates:
         fallback_triggered = True
-        seed_links = homepage_internal_links or internal_discovered_links
+        seed_links = seed_internal_links or internal_discovered_links
         unscored_links = build_unscored_internal_candidates(seed_links, limit=max(max_candidate_pages, 30))
         high_value_links = merge_candidate_links(high_value_links, unscored_links, max_candidate_pages)
 
@@ -304,13 +350,13 @@ def crawl_single_municipality(
 
     for candidate in high_value_links:
         target_url = str(candidate["url"])
-        source_url = str(candidate.get("source_url") or home_url)
+        source_url = str(candidate.get("source_url") or primary_seed_url or website_url)
         label = str(candidate.get("label") or "")
         link_score = float(candidate.get("score") or 0.0)
 
         category, class_conf = classify_service_link(target_url, label)
-        referer = home_url if is_internal_link(target_url, municipality_domain) else None
-        ok, final_target_url, page_text, _ = fetch_and_record(
+        referer = str(primary_seed_url or source_url) if is_internal_link(target_url, municipality_domain) else None
+        ok, final_target_url, page_text, _, _ = fetch_and_record(
             target_url,
             "candidate",
             source_url,
@@ -352,9 +398,15 @@ def crawl_single_municipality(
     for vendor, (confidence, signal_url) in sorted(vendor_best.items()):
         upsert_signal(conn, municipality_id, "vendor_detected", vendor, confidence, signal_url)
 
-    upsert_signal(conn, municipality_id, "crawl_status", "completed", 1.0, home_url)
-    upsert_signal(conn, municipality_id, "fetched_pages_count", str(stats["fetched_pages"]), 1.0, home_url)
-    upsert_signal(conn, municipality_id, "high_value_links_count", str(len(high_value_links)), 0.95, home_url)
+    if homepage_failed and alternate_seed_attempted:
+        recovered = any(
+            stats[key] > 0 for key in ("fetched_pages", "contacts", "service_links", "locations")
+        )
+        upsert_signal(conn, municipality_id, "alternate_seed_recovered", str(recovered).lower(), 0.95, entry_url)
+
+    upsert_signal(conn, municipality_id, "crawl_status", "completed", 1.0, entry_url)
+    upsert_signal(conn, municipality_id, "fetched_pages_count", str(stats["fetched_pages"]), 1.0, entry_url)
+    upsert_signal(conn, municipality_id, "high_value_links_count", str(len(high_value_links)), 0.95, entry_url)
     if (stats["fetched_pages"] == 0 or stats["contacts"] == 0 or stats["service_links"] == 0) and not fallback_logged:
         print(f"Fallback triggered for {municipality_id}")
     db.commit(conn)
@@ -397,6 +449,40 @@ def main() -> None:
             conn.close()
         print("QA row counts:")
         print(json.dumps(counts, indent=2))
+
+
+def get_alternate_seed_urls(municipality: dict, homepage_url: str | None) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    home_norm = normalize_url(homepage_url or "") or (homepage_url or "")
+    for column in ALTERNATE_SEED_COLUMNS:
+        raw = str(municipality.get(column) or "").strip()
+        normalized = normalize_url(raw) or raw
+        if not normalized:
+            continue
+        if home_norm and normalized == home_norm:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        urls.append(normalized)
+    return urls
+
+
+def classify_blocked_homepage(result: FetchResult | None) -> str | None:
+    if result is None or result.status_code != 403:
+        return None
+    headers = {str(k).lower(): str(v).lower() for k, v in (result.response_headers or {}).items()}
+    server = headers.get("server", "")
+    has_cloudflare_header = "cf-ray" in headers or any("cloudflare" in value for value in headers.values())
+    if "cloudflare" in server or has_cloudflare_header:
+        return "cloudflare_403"
+
+    bot_markers = ("akamai", "incapsula", "imperva", "sucuri", "bot", "challenge")
+    combined = " ".join([server, *headers.values()])
+    if any(marker in combined for marker in bot_markers):
+        return "bot_protection_403"
+    return None
 
 
 def normalize_signal_value(value: str) -> str:
