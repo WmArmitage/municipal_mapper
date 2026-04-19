@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS contacts (
     email_type TEXT,
     phone TEXT,
     phone_ext TEXT,
+    address TEXT,
+    hours TEXT,
     source_context TEXT,
     source_url TEXT,
     confidence REAL,

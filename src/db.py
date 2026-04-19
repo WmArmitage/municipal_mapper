@@ -129,10 +129,10 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
     conn.execute(
         """
         INSERT INTO contacts (
-            contact_id, municipality_id, name, title, department, email, email_type, phone, phone_ext, source_context, source_url, confidence
+            contact_id, municipality_id, name, title, department, email, email_type, phone, phone_ext, address, hours, source_context, source_url, confidence
         )
         VALUES (
-            :contact_id, :municipality_id, :name, :title, :department, :email, :email_type, :phone, :phone_ext, :source_context, :source_url, :confidence
+            :contact_id, :municipality_id, :name, :title, :department, :email, :email_type, :phone, :phone_ext, :address, :hours, :source_context, :source_url, :confidence
         )
         ON CONFLICT(contact_id) DO UPDATE SET
             name = COALESCE(excluded.name, contacts.name),
@@ -141,6 +141,8 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
             email_type = COALESCE(excluded.email_type, contacts.email_type),
             phone = COALESCE(excluded.phone, contacts.phone),
             phone_ext = COALESCE(excluded.phone_ext, contacts.phone_ext),
+            address = COALESCE(excluded.address, contacts.address),
+            hours = COALESCE(excluded.hours, contacts.hours),
             source_context = CASE
                 WHEN excluded.phone IS NOT NULL
                     AND (contacts.phone IS NULL OR excluded.confidence >= contacts.confidence)
@@ -239,6 +241,8 @@ def fetch_municipality_rows(
 def _run_lightweight_migrations(conn: sqlite3.Connection) -> None:
     if _table_exists(conn, "contacts"):
         _ensure_column(conn, "contacts", "phone_ext", "TEXT")
+        _ensure_column(conn, "contacts", "address", "TEXT")
+        _ensure_column(conn, "contacts", "hours", "TEXT")
         _ensure_column(conn, "contacts", "source_context", "TEXT")
     if _table_exists(conn, "municipalities"):
         _ensure_column(conn, "municipalities", "jobs_url", "TEXT")

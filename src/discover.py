@@ -46,7 +46,12 @@ HIGH_VALUE_KEYWORDS: dict[str, float] = {
     "administration": 2.2,
     "contact us": 2.8,
     "departments": 2.4,
+    "department": 2.3,
     "staff directory": 3.0,
+    "staff": 2.2,
+    "official": 2.1,
+    "officials": 2.1,
+    "tax collector": 2.6,
     "animal control": 2.5,
     "public works": 2.5,
     "finance": 2.3,
@@ -82,6 +87,8 @@ OFFICIAL_PAGE_KEYWORDS = (
     "town manager",
     "town administrator",
     "administration",
+    "official",
+    "officials",
 )
 
 DIRECTORY_PAGE_KEYWORDS = (
@@ -89,6 +96,8 @@ DIRECTORY_PAGE_KEYWORDS = (
     "directory",
     "staff",
 )
+
+DIRECTORY_CATEGORY_PARENT_TYPES = {"directory_page", "directory_category_page"}
 
 CONTACT_PAGE_KEYWORDS = (
     "contact us",
@@ -116,7 +125,30 @@ DEPARTMENT_PAGE_KEYWORDS = (
     "human resources",
 )
 
-CONTACT_ORIENTED_PAGE_TYPES = {"official_page", "department_page", "directory_page", "contact_page"}
+SERVICE_PAGE_KEYWORDS = (
+    "gis",
+    "property card",
+    "property record",
+    "record card",
+    "tax payment",
+    "pay taxes",
+    "jobs",
+    "employment",
+    "careers",
+    "permit",
+    "permitting",
+)
+
+DIRECTORY_CATEGORY_HINT_KEYWORDS = tuple(sorted(set(DEPARTMENT_PAGE_KEYWORDS + OFFICIAL_PAGE_KEYWORDS)))
+
+CONTACT_ORIENTED_PAGE_TYPES = {
+    "official_page",
+    "department_page",
+    "directory_page",
+    "directory_category_page",
+    "contact_page",
+}
+DRILLABLE_PAGE_TYPES = CONTACT_ORIENTED_PAGE_TYPES
 NON_HTML_LINK_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".js", ".ico", ".zip", ".pdf", ".doc", ".docx")
 
 
@@ -170,13 +202,20 @@ def score_link(url: str, label: str, broad_mode: bool = False) -> tuple[float, l
     if page_type in CONTACT_ORIENTED_PAGE_TYPES:
         score += 1.2
         reasons.append(f"page_type:{page_type}")
+    if page_type == "service_page":
+        score += 0.8
+        reasons.append("page_type:service_page")
     return score, reasons
 
 
 def keyword_in_text(blob: str, keyword: str) -> bool:
-    if " " in keyword:
-        return keyword in blob
-    return re.search(rf"\b{re.escape(keyword)}\b", blob) is not None
+    normalized_blob = _normalize_keyword_blob(blob)
+    normalized_keyword = _normalize_keyword_blob(keyword)
+    if not normalized_blob or not normalized_keyword:
+        return False
+    if " " in normalized_keyword:
+        return normalized_keyword in normalized_blob
+    return re.search(rf"\b{re.escape(normalized_keyword)}\b", normalized_blob) is not None
 
 
 def select_high_value_links(
@@ -210,7 +249,10 @@ def select_high_value_links(
         if prior is None or float(payload["score"]) > float(prior["score"]):
             dedup[url] = payload
 
-    ranked = sorted(dedup.values(), key=lambda item: float(item["score"]), reverse=True)
+    ranked = sorted(
+        dedup.values(),
+        key=lambda item: (-float(item["score"]), str(item.get("url") or "")),
+    )
     return ranked[:max_links]
 
 
@@ -225,8 +267,18 @@ def summarize_link_categories(links: Iterable[dict[str, str | float]]) -> dict[s
     return dict(sorted(buckets.items(), key=lambda kv: kv[1], reverse=True))
 
 
-def classify_page_type(url: str, label: str | None = None) -> str:
+def classify_page_type(
+    url: str,
+    label: str | None = None,
+    parent_page_type: str | None = None,
+) -> str:
     blob = f"{label or ''} {url}".lower()
+    parent = str(parent_page_type or "").strip().lower()
+    if parent in DIRECTORY_CATEGORY_PARENT_TYPES:
+        if any(keyword_in_text(blob, token) for token in DIRECTORY_CATEGORY_HINT_KEYWORDS):
+            return "directory_category_page"
+        if _is_directory_category_path(url):
+            return "directory_category_page"
     if any(keyword_in_text(blob, token) for token in DIRECTORY_PAGE_KEYWORDS):
         return "directory_page"
     if any(keyword_in_text(blob, token) for token in CONTACT_PAGE_KEYWORDS):
@@ -235,6 +287,8 @@ def classify_page_type(url: str, label: str | None = None) -> str:
         return "official_page"
     if any(keyword_in_text(blob, token) for token in DEPARTMENT_PAGE_KEYWORDS):
         return "department_page"
+    if any(keyword_in_text(blob, token) for token in SERVICE_PAGE_KEYWORDS):
+        return "service_page"
     return "candidate"
 
 
@@ -242,14 +296,20 @@ def is_contact_oriented_page_type(page_type: str | None) -> bool:
     return str(page_type or "").strip().lower() in CONTACT_ORIENTED_PAGE_TYPES
 
 
+def is_drillable_page_type(page_type: str | None) -> bool:
+    return str(page_type or "").strip().lower() in DRILLABLE_PAGE_TYPES
+
+
 def select_contact_child_links(
     links: Iterable[dict[str, str]],
     municipality_domain: str,
+    parent_page_type: str | None = None,
     max_links: int = 8,
-    min_score: float = 1.6,
+    min_score: float = 1.2,
 ) -> list[dict[str, str | float]]:
     dedup: dict[str, dict[str, str | float]] = {}
     muni = (municipality_domain or "").strip().lower()
+    normalized_parent = str(parent_page_type or "").strip().lower()
     for link in links:
         url = str(link.get("url") or "")
         if not url:
@@ -260,8 +320,11 @@ def select_contact_child_links(
             continue
 
         label = str(link.get("label") or "")
-        page_type = classify_page_type(url, label)
+        page_type = classify_page_type(url, label, parent_page_type=normalized_parent)
         score, reasons = score_link(url, label, broad_mode=True)
+        if normalized_parent in DIRECTORY_CATEGORY_PARENT_TYPES and page_type == "directory_category_page":
+            score += 1.8
+            reasons.append("directory_category_child")
         if page_type in CONTACT_ORIENTED_PAGE_TYPES:
             score += 1.6
             reasons.append(f"contact_child:{page_type}")
@@ -280,7 +343,10 @@ def select_contact_child_links(
         if prior is None or float(payload["score"]) > float(prior["score"]):
             dedup[url] = payload
 
-    ranked = sorted(dedup.values(), key=lambda item: float(item["score"]), reverse=True)
+    ranked = sorted(
+        dedup.values(),
+        key=lambda item: (-float(item["score"]), str(item.get("url") or "")),
+    )
     return ranked[:max_links]
 
 
@@ -289,6 +355,37 @@ def _is_internal_url(url: str, municipality_domain: str) -> bool:
     if not domain or not municipality_domain:
         return False
     return domain == municipality_domain or domain.endswith(f".{municipality_domain}")
+
+
+def _is_directory_category_path(url: str) -> bool:
+    path = (urlparse(url).path or "").lower()
+    if not path:
+        return False
+    if any(token in path for token in ("/departments/", "/department/", "/directory/", "/government/")):
+        return True
+    return any(
+        token in path
+        for token in (
+            "town-clerk",
+            "animal-control",
+            "public-works",
+            "tax-collector",
+            "assessor",
+            "planning",
+            "zoning",
+            "wetlands",
+            "building",
+            "police",
+            "fire",
+            "registrar",
+        )
+    )
+
+
+def _normalize_keyword_blob(value: str) -> str:
+    lowered = (value or "").lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", lowered).strip()
 
 
 def _extract_links_html_fallback(html: str, base_url: str) -> list[dict[str, str]]:

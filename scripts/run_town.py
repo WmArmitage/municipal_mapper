@@ -22,6 +22,7 @@ from src.discover import (
     extract_links_from_html,
     extract_links_from_sitemap_xml,
     is_contact_oriented_page_type,
+    is_drillable_page_type,
     select_contact_child_links,
     select_high_value_links,
 )
@@ -54,8 +55,9 @@ SEED_TYPE_CONFIG: dict[str, dict[str, str]] = {
         "label": "Tax Payment",
     },
 }
-CONTACT_SECOND_HOP_LINKS_PER_PAGE = 8
-MAX_CONTACT_SECOND_HOP_PAGES = 24
+CONTACT_SECOND_HOP_LINKS_PER_PAGE = 10
+MAX_CONTACT_SECOND_HOP_PAGES = 40
+MAX_CONTACT_DISCOVERY_DEPTH = 2
 
 
 def extract_title(html: str) -> str | None:
@@ -150,6 +152,12 @@ def process_text_extractions(
     location_count = 0
     seen_contacts: set[str] = set()
     seen_locations: set[str] = set()
+    extracted_locations = extract_locations(text, source_url)
+    fallback_address = None
+    fallback_hours = None
+    if extracted_locations:
+        fallback_address = extracted_locations[0].get("address")
+        fallback_hours = extracted_locations[0].get("hours")
 
     for contact in extract_contacts(text, source_url, page_type=page_type):
         email = str(contact.get("email") or "").strip().lower()
@@ -157,17 +165,23 @@ def process_text_extractions(
         if not email and not phone:
             continue
 
-        if email:
-            contact_id = make_id("ctc", municipality_id, email, source_url)
-        else:
-            contact_id = make_id(
-                "ctc",
-                municipality_id,
-                phone,
-                (contact.get("department") or "").strip().lower(),
-                contact.get("source_context") or "",
-                source_url,
-            )
+        name = str(contact.get("name") or "").strip()
+        title = str(contact.get("title") or "").strip()
+        department = str(contact.get("department") or "").strip() or (infer_department_from_url(source_url) or "")
+        source_context = str(contact.get("source_context") or "").strip()
+        address = contact.get("address") or fallback_address
+        hours = contact.get("hours") or fallback_hours
+
+        contact_id = make_id(
+            "ctc",
+            municipality_id,
+            email,
+            phone,
+            name.lower(),
+            title.lower(),
+            department.lower(),
+            source_url,
+        )
         if contact_id in seen_contacts:
             continue
         seen_contacts.add(contact_id)
@@ -177,21 +191,23 @@ def process_text_extractions(
             {
                 "contact_id": contact_id,
                 "municipality_id": municipality_id,
-                "name": contact.get("name"),
-                "title": contact.get("title"),
-                "department": contact.get("department") or infer_department_from_url(source_url),
+                "name": name or None,
+                "title": title or None,
+                "department": department or None,
                 "email": email or None,
                 "email_type": contact.get("email_type") or "unknown",
                 "phone": phone or None,
                 "phone_ext": contact.get("phone_ext"),
-                "source_context": contact.get("source_context"),
+                "address": address,
+                "hours": hours,
+                "source_context": source_context or None,
                 "source_url": source_url,
                 "confidence": contact.get("confidence") or 0.45,
             },
         )
         contact_count += 1
 
-    for location in extract_locations(text, source_url):
+    for location in extracted_locations:
         dedupe_address, dedupe_hours = location_dedupe_key(location.get("address"), location.get("hours"))
         if dedupe_address:
             location_id = make_id("loc", municipality_id, dedupe_address)
@@ -450,7 +466,7 @@ def crawl_single_municipality(
                     sitemap_text, encoding="utf-8", errors="ignore"
                 )
 
-    high_value_links = select_high_value_links(discovered_links, min_score=2.5, max_links=max_candidate_pages)
+    high_value_links: list[dict[str, str | float]] = []
     fallback_triggered = False
     fallback_logged = False
 
@@ -458,6 +474,11 @@ def crawl_single_municipality(
         link
         for link in discovered_links
         if is_internal_link(str(link.get("url") or ""), municipality_domain)
+    ]
+    external_discovered_links = [
+        link
+        for link in discovered_links
+        if not is_internal_link(str(link.get("url") or ""), municipality_domain)
     ]
     seed_internal_links = [
         link
@@ -469,15 +490,24 @@ def crawl_single_municipality(
     if max_candidate_pages >= 5:
         target_min_candidates = max(5, target_min_candidates)
 
-    if not high_value_links:
-        fallback_triggered = True
-        seed_links = seed_internal_links or internal_discovered_links
-        high_value_links = select_high_value_links(
-            seed_links,
-            min_score=1.2,
-            max_links=max(max_candidate_pages, 20),
-            broad_mode=True,
-        )
+    knowledge_source_links = seed_internal_links or internal_discovered_links
+    knowledge_links = select_high_value_links(
+        knowledge_source_links,
+        min_score=1.35,
+        max_links=max(max_candidate_pages * 3, 45),
+        broad_mode=True,
+    )
+    service_links = select_high_value_links(
+        [*internal_discovered_links, *external_discovered_links],
+        min_score=2.3,
+        max_links=max(max_candidate_pages * 2, 30),
+        broad_mode=False,
+    )
+    high_value_links = compose_candidate_links(
+        knowledge_links=knowledge_links,
+        service_links=service_links,
+        limit=max_candidate_pages,
+    )
 
     if len(high_value_links) < 5 and max_candidate_pages >= 5:
         fallback_triggered = True
@@ -501,27 +531,29 @@ def crawl_single_municipality(
 
     second_hop_seen_urls: set[str] = set()
     second_hop_fetches = 0
+    processed_candidate_urls: set[str] = set()
 
-    for candidate in high_value_links:
-        target_url = str(candidate["url"])
-        target_norm = normalize_url(target_url) or target_url
-        if target_norm in processed_seed_urls or target_norm in external_seed_urls:
-            continue
-
-        source_url = str(candidate.get("source_url") or primary_seed_url or website_url)
-        label = str(candidate.get("label") or "")
-        link_score = float(candidate.get("score") or 0.0)
-        candidate_page_type = str(candidate.get("page_type") or classify_page_type(target_url, label))
-
+    def process_discovered_page(
+        target_url: str,
+        label: str,
+        source_url: str,
+        page_type: str,
+        link_score: float,
+        referer: str | None = None,
+    ) -> tuple[bool, str, str | None]:
         category, class_conf = classify_service_link(target_url, label)
-        referer = str(primary_seed_url or source_url) if is_internal_link(target_url, municipality_domain) else None
         ok, final_target_url, page_text, _, _ = fetch_and_record(
             target_url,
-            candidate_page_type,
+            page_type,
             source_url,
             referer=referer,
         )
         active_url = normalize_url(final_target_url or target_url) or (final_target_url or target_url)
+
+        active_category, active_class_conf = classify_service_link(active_url, label)
+        if active_category:
+            category = active_category
+            class_conf = max(class_conf, active_class_conf)
 
         vendor, vendor_conf = detect_vendor(active_url, page_text if ok else None)
         if category:
@@ -555,81 +587,102 @@ def crawl_single_municipality(
                 municipality_id,
                 active_url,
                 page_text,
-                page_type=candidate_page_type,
+                page_type=page_type,
             )
             stats["contacts"] += c_count
             stats["locations"] += l_count
+        return ok, active_url, page_text
 
-            if is_contact_oriented_page_type(candidate_page_type) and second_hop_fetches < MAX_CONTACT_SECOND_HOP_PAGES:
-                child_links = extract_links_from_html(page_text, active_url)
-                child_candidates = select_contact_child_links(
-                    child_links,
-                    municipality_domain=municipality_domain,
-                    max_links=CONTACT_SECOND_HOP_LINKS_PER_PAGE,
+    def crawl_contact_children(
+        parent_url: str,
+        parent_text: str,
+        parent_page_type: str,
+        depth: int,
+    ) -> None:
+        nonlocal second_hop_fetches
+        if depth > MAX_CONTACT_DISCOVERY_DEPTH:
+            return
+        if second_hop_fetches >= MAX_CONTACT_SECOND_HOP_PAGES:
+            return
+        if not is_drillable_page_type(parent_page_type):
+            return
+
+        child_links = extract_links_from_html(parent_text, parent_url)
+        child_candidates = select_contact_child_links(
+            child_links,
+            municipality_domain=municipality_domain,
+            parent_page_type=parent_page_type,
+            max_links=CONTACT_SECOND_HOP_LINKS_PER_PAGE,
+        )
+        for child in child_candidates:
+            if second_hop_fetches >= MAX_CONTACT_SECOND_HOP_PAGES:
+                break
+            child_url = str(child.get("url") or "")
+            if not child_url:
+                continue
+            child_norm = normalize_url(child_url) or child_url
+            if child_norm in second_hop_seen_urls:
+                continue
+            if child_norm in processed_candidate_urls:
+                continue
+            if child_norm in processed_seed_urls or child_norm in external_seed_urls:
+                continue
+            second_hop_seen_urls.add(child_norm)
+            processed_candidate_urls.add(child_norm)
+            second_hop_fetches += 1
+
+            child_label = str(child.get("label") or "")
+            child_page_type = str(
+                child.get("page_type")
+                or classify_page_type(child_url, child_label, parent_page_type=parent_page_type)
+            )
+            child_score = float(child.get("score") or 0.0)
+            child_ok, child_active_url, child_text = process_discovered_page(
+                target_url=child_url,
+                label=child_label,
+                source_url=parent_url,
+                page_type=child_page_type,
+                link_score=child_score,
+                referer=parent_url,
+            )
+            if child_ok and child_text and depth < MAX_CONTACT_DISCOVERY_DEPTH:
+                crawl_contact_children(
+                    parent_url=child_active_url,
+                    parent_text=child_text,
+                    parent_page_type=child_page_type,
+                    depth=depth + 1,
                 )
-                for child in child_candidates:
-                    if second_hop_fetches >= MAX_CONTACT_SECOND_HOP_PAGES:
-                        break
-                    child_url = str(child.get("url") or "")
-                    if not child_url:
-                        continue
-                    child_norm = normalize_url(child_url) or child_url
-                    if child_norm in second_hop_seen_urls:
-                        continue
-                    if child_norm in processed_seed_urls or child_norm in external_seed_urls:
-                        continue
-                    second_hop_seen_urls.add(child_norm)
 
-                    child_label = str(child.get("label") or "")
-                    child_page_type = str(child.get("page_type") or classify_page_type(child_url, child_label))
-                    child_score = float(child.get("score") or 0.0)
-                    child_source_url = active_url
-                    second_hop_fetches += 1
-                    child_ok, child_final_url, child_text, _, _ = fetch_and_record(
-                        child_url,
-                        child_page_type,
-                        child_source_url,
-                        referer=active_url,
-                    )
-                    child_active_url = normalize_url(child_final_url or child_url) or (child_final_url or child_url)
+    for candidate in high_value_links:
+        target_url = str(candidate["url"])
+        target_norm = normalize_url(target_url) or target_url
+        if target_norm in processed_seed_urls or target_norm in external_seed_urls:
+            continue
+        if target_norm in processed_candidate_urls:
+            continue
+        processed_candidate_urls.add(target_norm)
 
-                    child_category, child_class_conf = classify_service_link(child_active_url, child_label)
-                    child_vendor, child_vendor_conf = detect_vendor(child_active_url, child_text if child_ok else None)
-                    if child_category:
-                        child_service_conf = min(0.99, 0.35 + (child_score / 10.0) + (child_class_conf * 0.4))
-                        child_service_id = make_id("svc", municipality_id, child_category.strip().lower(), child_active_url)
-                        if child_service_id not in seen_service_ids:
-                            seen_service_ids.add(child_service_id)
-                            db.upsert_service_link(
-                                conn,
-                                {
-                                    "service_id": child_service_id,
-                                    "municipality_id": municipality_id,
-                                    "category": child_category,
-                                    "label": child_label or child_active_url,
-                                    "url": child_active_url,
-                                    "domain": get_domain(child_active_url),
-                                    "vendor": child_vendor,
-                                    "service_page_type": classify_service_page_type(child_active_url, municipality_domain),
-                                    "confidence": round(child_service_conf, 3),
-                                    "source_url": child_source_url,
-                                },
-                            )
-                            stats["service_links"] += 1
+        source_url = str(candidate.get("source_url") or primary_seed_url or website_url)
+        label = str(candidate.get("label") or "")
+        link_score = float(candidate.get("score") or 0.0)
+        candidate_page_type = str(candidate.get("page_type") or classify_page_type(target_url, label))
+        referer = str(primary_seed_url or source_url) if is_internal_link(target_url, municipality_domain) else None
+        ok, active_url, page_text = process_discovered_page(
+            target_url=target_url,
+            label=label,
+            source_url=source_url,
+            page_type=candidate_page_type,
+            link_score=link_score,
+            referer=referer,
+        )
 
-                    if child_vendor:
-                        register_vendor_signal(child_vendor, child_vendor_conf, child_active_url)
-
-                    if child_ok and child_text:
-                        c2, l2 = process_text_extractions(
-                            conn,
-                            municipality_id,
-                            child_active_url,
-                            child_text,
-                            page_type=child_page_type,
-                        )
-                        stats["contacts"] += c2
-                        stats["locations"] += l2
+        if ok and page_text and is_contact_oriented_page_type(candidate_page_type):
+            crawl_contact_children(
+                parent_url=active_url,
+                parent_text=page_text,
+                parent_page_type=candidate_page_type,
+                depth=1,
+            )
 
     for vendor, (confidence, signal_url) in sorted(vendor_best.items()):
         upsert_signal(conn, municipality_id, "vendor_detected", vendor, confidence, signal_url)
@@ -797,6 +850,25 @@ def merge_candidate_links(
         if len(merged) >= limit:
             break
     return merged
+
+
+def compose_candidate_links(
+    knowledge_links: list[dict[str, str | float]],
+    service_links: list[dict[str, str | float]],
+    limit: int,
+) -> list[dict[str, str | float]]:
+    if limit <= 0:
+        return []
+
+    service_budget = min(max(3, limit // 4), limit)
+    knowledge_budget = max(0, limit - service_budget)
+
+    selected: list[dict[str, str | float]] = []
+    selected = merge_candidate_links(selected, knowledge_links[:knowledge_budget], limit)
+    selected = merge_candidate_links(selected, service_links[:service_budget], limit)
+    selected = merge_candidate_links(selected, knowledge_links[knowledge_budget:], limit)
+    selected = merge_candidate_links(selected, service_links[service_budget:], limit)
+    return selected
 
 
 def build_unscored_internal_candidates(

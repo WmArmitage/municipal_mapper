@@ -197,7 +197,13 @@ NAME_STOPWORDS = {
     "return",
     "calls",
 }
-STAFF_FRIENDLY_PAGE_TYPES = {"official_page", "department_page", "directory_page", "contact_page"}
+STAFF_FRIENDLY_PAGE_TYPES = {
+    "official_page",
+    "department_page",
+    "directory_page",
+    "directory_category_page",
+    "contact_page",
+}
 
 SERVICE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
     "gis": {
@@ -369,13 +375,15 @@ def extract_contacts(
     lines = [normalize_whitespace(line) or "" for line in cleaned_text.splitlines()]
     lines = [line for line in lines if len(line) >= 3]
     contacts: list[dict[str, str | float | None]] = []
-    seen_keys: set[tuple[str, str, str]] = set()
+    seen_keys: set[tuple[str, str, str, str, str]] = set()
     all_phone_candidates = extract_phone_candidates(cleaned_text)
     staff_mode = is_staff_friendly_page_type(page_type)
 
     for idx, line in enumerate(lines):
         nearby_lines = _neighboring_lines(lines, idx, radius=2 if staff_mode else 1)
         nearby_blob = normalize_whitespace(" ".join(nearby_lines)) or line
+        nearby_hours = _extract_best_hours(nearby_lines)
+        nearby_address = _extract_address_from_lines(nearby_lines)
 
         line_emails = extract_emails(line)
         line_phones = extract_phone_candidates(line)
@@ -451,7 +459,13 @@ def extract_contacts(
                 confidence += 0.05
             confidence = round(min(max(confidence, 0.2), 0.99), 3)
 
-            dedupe_key = ((email or "").lower(), source_url, phone or "")
+            dedupe_key = (
+                (email or "").lower(),
+                phone or "",
+                (name or "").strip().lower(),
+                (title or "").strip().lower(),
+                (department or "").strip().lower(),
+            )
             if dedupe_key in seen_keys:
                 continue
             seen_keys.add(dedupe_key)
@@ -465,6 +479,8 @@ def extract_contacts(
                     "email_type": email_type,
                     "phone": phone,
                     "phone_ext": phone_ext,
+                    "address": nearby_address,
+                    "hours": nearby_hours,
                     "source_context": source_context,
                     "source_url": source_url,
                     "confidence": confidence,
@@ -472,12 +488,18 @@ def extract_contacts(
             )
 
     if staff_mode:
-        for structured in extract_structured_contact_blocks(text, source_url):
+        for structured in [*extract_table_contact_rows(text, source_url), *extract_structured_contact_blocks(text, source_url)]:
             email = str(structured.get("email") or "").strip().lower() or None
             phone = str(structured.get("phone") or "").strip() or None
             if not email and not phone:
                 continue
-            dedupe_key = ((email or ""), source_url, phone or "")
+            dedupe_key = (
+                (email or "").lower(),
+                phone or "",
+                str(structured.get("name") or "").strip().lower(),
+                str(structured.get("title") or "").strip().lower(),
+                str(structured.get("department") or "").strip().lower(),
+            )
             if dedupe_key in seen_keys:
                 continue
             seen_keys.add(dedupe_key)
@@ -639,21 +661,130 @@ def is_staff_friendly_page_type(page_type: str | None) -> bool:
     return str(page_type or "").strip().lower() in STAFF_FRIENDLY_PAGE_TYPES
 
 
+def extract_table_contact_rows(text: str, source_url: str) -> list[dict[str, str | float | None]]:
+    raw = text or ""
+    if "<" not in raw or ">" not in raw or BeautifulSoup is None:
+        return []
+
+    soup = BeautifulSoup(raw, "html.parser")
+    out: list[dict[str, str | float | None]] = []
+    seen_keys: set[tuple[str, str, str, str, str]] = set()
+
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cells = row.find_all(["th", "td"])
+            if len(cells) < 2:
+                continue
+            parts = [normalize_whitespace(cell.get_text(" ", strip=True)) or "" for cell in cells]
+            parts = [part for part in parts if part]
+            if not parts:
+                continue
+
+            row_blob = " | ".join(parts)
+            mailto_emails: list[str] = []
+            for anchor in row.find_all("a", href=True):
+                href = str(anchor.get("href") or "")
+                if href.lower().startswith("mailto:"):
+                    email = href.split(":", 1)[1].split("?", 1)[0].strip().lower()
+                    if EMAIL_RE.fullmatch(email):
+                        mailto_emails.append(email)
+            emails = sorted({*extract_emails(row_blob), *mailto_emails})
+            phones = extract_phone_candidates(row_blob)
+            if not emails and not phones:
+                continue
+
+            headers = []
+            parent_section = row.find_parent("table")
+            if parent_section:
+                header_cells = parent_section.find_all("th")
+                headers = [normalize_whitespace(cell.get_text(" ", strip=True) or "") or "" for cell in header_cells]
+            mapped = _map_table_cells(headers, parts)
+
+            name = mapped.get("name") or _guess_name_from_lines(parts[:3])
+            title = mapped.get("title")
+            department = mapped.get("department")
+            if not title:
+                guessed_title, _ = guess_title(parts[:4])
+                title = guessed_title
+            if not department:
+                department, dep_score = guess_department_with_score(" ".join(parts[:5]))
+                if not title and department and dep_score >= 1.0:
+                    title = department
+
+            email = (mapped.get("email") or (emails[0].lower() if emails else None))
+            phone = str(phones[0].get("phone")) if phones and phones[0].get("phone") else None
+            phone_ext = str(phones[0].get("phone_ext")) if phones and phones[0].get("phone_ext") else None
+            address = _extract_address_from_lines(parts)
+            hours = _extract_best_hours(parts)
+            source_context = str(phones[0].get("source_context")) if phones and phones[0].get("source_context") else row_blob[:180]
+            email_type = infer_email_type(email)
+
+            dedupe_key = (
+                (email or "").lower(),
+                phone or "",
+                (name or "").strip().lower(),
+                (title or "").strip().lower(),
+                (department or "").strip().lower(),
+            )
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+
+            confidence = 0.58
+            if email:
+                confidence += 0.14
+            if phone:
+                confidence += 0.12
+            if name:
+                confidence += 0.08
+            if title:
+                confidence += 0.06
+            if department:
+                confidence += 0.06
+            confidence = round(min(confidence, 0.97), 3)
+
+            out.append(
+                {
+                    "name": name,
+                    "title": title,
+                    "department": department,
+                    "email": email,
+                    "email_type": email_type,
+                    "phone": phone,
+                    "phone_ext": phone_ext,
+                    "address": address,
+                    "hours": hours,
+                    "source_context": source_context,
+                    "source_url": source_url,
+                    "confidence": confidence,
+                }
+            )
+
+    return out
+
+
 def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[str, str | float | None]]:
     raw = text or ""
     if "<" not in raw or ">" not in raw or BeautifulSoup is None:
         return []
 
     soup = BeautifulSoup(raw, "html.parser")
-    blocks = soup.find_all(["tr", "li", "article", "section", "div"])
+    blocks = soup.find_all(["tr", "li", "article", "section", "div", "p"])
     out: list[dict[str, str | float | None]] = []
-    seen_block_keys: set[tuple[str, str]] = set()
+    seen_block_keys: set[tuple[str, str, str, str, str]] = set()
 
     for block in blocks:
         snippet = normalize_whitespace(block.get_text("\n", strip=True))
         if not snippet or len(snippet) < 12:
             continue
-        emails = extract_emails(snippet)
+        mailto_emails: list[str] = []
+        for anchor in block.find_all("a", href=True):
+            href = str(anchor.get("href") or "")
+            if href.lower().startswith("mailto:"):
+                email = href.split(":", 1)[1].split("?", 1)[0].strip().lower()
+                if EMAIL_RE.fullmatch(email):
+                    mailto_emails.append(email)
+        emails = sorted({*extract_emails(snippet), *mailto_emails})
         phones = extract_phone_candidates(snippet)
         if not emails and not phones:
             continue
@@ -664,7 +795,7 @@ def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[s
             continue
 
         name = _guess_name_from_lines(lines)
-        title, _ = guess_title(lines[:4])
+        title = _guess_title_from_lines(lines) or guess_title(lines[:4])[0]
         department, dep_score = guess_department_with_score(" ".join(lines[:5]))
         if not title and department and dep_score >= 1.0:
             title = department
@@ -674,8 +805,16 @@ def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[s
         source_context = str(phones[0].get("source_context")) if phones and phones[0].get("source_context") else snippet[:180]
         email = emails[0].lower() if emails else None
         email_type = infer_email_type(email)
+        address = _extract_address_from_lines(lines)
+        hours = _extract_best_hours(lines)
 
-        block_key = (email or "", phone or "")
+        block_key = (
+            (email or "").lower(),
+            phone or "",
+            (name or "").strip().lower(),
+            (title or "").strip().lower(),
+            (department or "").strip().lower(),
+        )
         if block_key in seen_block_keys:
             continue
         seen_block_keys.add(block_key)
@@ -702,6 +841,8 @@ def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[s
                 "email_type": email_type,
                 "phone": phone,
                 "phone_ext": phone_ext,
+                "address": address,
+                "hours": hours,
                 "source_context": source_context,
                 "source_url": source_url,
                 "confidence": confidence,
@@ -725,6 +866,47 @@ def _guess_name_from_lines(lines: list[str]) -> str | None:
     return None
 
 
+def _guess_title_from_lines(lines: list[str]) -> str | None:
+    for line in lines[:4]:
+        candidate = normalize_whitespace(line)
+        if not candidate:
+            continue
+        if len(candidate) > 80:
+            continue
+        lowered = candidate.lower()
+        if lowered in GENERIC_NAV_TEXT:
+            continue
+        if _looks_like_person_name(candidate):
+            continue
+        if guess_department(candidate):
+            return candidate
+        if any(token in lowered for token in TITLE_HINTS):
+            return candidate
+    return None
+
+
+def _map_table_cells(headers: list[str], values: list[str]) -> dict[str, str | None]:
+    if not headers:
+        return {"name": None, "title": None, "department": None, "email": None}
+    out: dict[str, str | None] = {"name": None, "title": None, "department": None, "email": None}
+    mapped_headers = [(_normalize_keyword_blob(header), idx) for idx, header in enumerate(headers)]
+    for normalized_header, idx in mapped_headers:
+        if idx >= len(values):
+            continue
+        value = normalize_whitespace(values[idx]) or None
+        if not value:
+            continue
+        if any(token in normalized_header for token in ("name", "employee")):
+            out["name"] = out["name"] or value
+        elif any(token in normalized_header for token in ("title", "position", "role")):
+            out["title"] = out["title"] or value
+        elif any(token in normalized_header for token in ("department", "office", "division")):
+            out["department"] = out["department"] or value
+        elif "email" in normalized_header:
+            out["email"] = out["email"] or value
+    return out
+
+
 def _looks_like_person_name(value: str) -> bool:
     candidate = normalize_whitespace(value)
     if not candidate:
@@ -740,7 +922,18 @@ def _prepare_text_for_extraction(text: str) -> str:
         return raw
 
     if BeautifulSoup is None:
-        raw_with_mailto = re.sub(r"(?i)mailto:([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})", r" \1 ", raw)
+        def mailto_replacer(match: re.Match[str]) -> str:
+            email = (match.group("email") or "").strip().lower()
+            anchor_text = normalize_whitespace(match.group("label") or "") or ""
+            if not EMAIL_RE.fullmatch(email):
+                return anchor_text
+            return f"{anchor_text} {email}".strip()
+
+        raw_with_mailto = re.sub(
+            r"(?is)<a\b[^>]*href=[\"']mailto:(?P<email>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})(?:\?[^\"'>]*)?[\"'][^>]*>(?P<label>.*?)</a>",
+            mailto_replacer,
+            raw,
+        )
         without_assets = re.sub(r"(?is)<(script|style|noscript)\b[^>]*>.*?</\1>", " ", raw_with_mailto)
         return re.sub(r"(?s)<[^>]+>", "\n", without_assets)
 
@@ -772,9 +965,33 @@ def _canonical_location_text(value: str | None) -> str:
 
 
 def _keyword_in_text(blob: str, keyword: str) -> bool:
-    if " " in keyword:
-        return keyword in blob
-    return re.search(rf"\b{re.escape(keyword)}\b", blob) is not None
+    normalized_blob = _normalize_keyword_blob(blob)
+    normalized_keyword = _normalize_keyword_blob(keyword)
+    if not normalized_blob or not normalized_keyword:
+        return False
+    if " " in normalized_keyword:
+        return normalized_keyword in normalized_blob
+    return re.search(rf"\b{re.escape(normalized_keyword)}\b", normalized_blob) is not None
+
+
+def _normalize_keyword_blob(value: str | None) -> str:
+    lowered = (value or "").lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", lowered).strip()
+
+
+def _extract_address_from_lines(lines: list[str]) -> str | None:
+    for line in lines:
+        normalized = normalize_whitespace(line)
+        if not normalized:
+            continue
+        match = ADDRESS_RE.search(normalized)
+        if not match:
+            continue
+        address = normalize_address_text(match.group(0))
+        if address:
+            return address
+    return None
 
 
 def _is_likely_address_line(line: str) -> bool:

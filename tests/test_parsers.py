@@ -115,6 +115,45 @@ class ParserDepartmentTests(unittest.TestCase):
         self.assertTrue(any(c.get("phone") == "8605551212" for c in contacts))
         self.assertTrue(any((c.get("title") or "").lower() == "assessor" for c in contacts))
 
+    def test_table_rows_with_shared_email_keep_multiple_people(self) -> None:
+        html = """
+        <table>
+            <thead>
+                <tr><th>Name</th><th>Title</th><th>Email</th><th>Phone</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Jane Doe</td>
+                    <td>Town Clerk</td>
+                    <td><a href="mailto:staff@townct.gov">Email</a></td>
+                    <td>(860) 555-1111</td>
+                </tr>
+                <tr>
+                    <td>John Roe</td>
+                    <td>Assistant Town Clerk</td>
+                    <td><a href="mailto:staff@townct.gov">Email</a></td>
+                    <td>(860) 555-2222</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+        contacts = extract_contacts(html, "https://example.org/directory", page_type="directory_page")
+        names = {str(c.get("name") or "") for c in contacts if c.get("email") == "staff@townct.gov"}
+        self.assertIn("Jane Doe", names)
+        self.assertIn("John Roe", names)
+
+    def test_contact_row_includes_address_and_hours_context(self) -> None:
+        text = """
+        Town Clerk
+        123 Main Street
+        Office Hours: Monday 8am - 4pm
+        clerk@townct.gov
+        """
+        contacts = extract_contacts(text, "https://example.org/town-clerk", page_type="department_page")
+        self.assertGreaterEqual(len(contacts), 1)
+        self.assertEqual(contacts[0].get("address"), "123 Main Street")
+        self.assertIn("Monday", contacts[0].get("hours") or "")
+
 
 if __name__ == "__main__":
     unittest.main()
