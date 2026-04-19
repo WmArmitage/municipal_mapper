@@ -144,6 +144,7 @@ def crawl_single_municipality(
     website_url = municipality.get("website_url")
     municipality_domain = (municipality.get("domain") or get_domain(website_url) or "").lower()
     if not website_url:
+        print(f"Fallback triggered for {municipality_id}")
         upsert_signal(conn, municipality_id, "crawl_status", "missing_website_url", 1.0, "")
         db.commit(conn)
         return {"municipality_id": municipality_id, "fetched_pages": 0, "service_links": 0, "contacts": 0, "locations": 0}
@@ -217,6 +218,7 @@ def crawl_single_municipality(
 
     home_ok, home_url, home_text, _ = fetch_and_record(website_url, "homepage", "seed")
     if not home_ok or not home_url:
+        print(f"Fallback triggered for {municipality_id}")
         upsert_signal(conn, municipality_id, "crawl_status", "homepage_fetch_failed", 1.0, website_url)
         db.commit(conn)
         return stats
@@ -236,6 +238,53 @@ def crawl_single_municipality(
             )
 
     high_value_links = select_high_value_links(discovered_links, min_score=2.5, max_links=max_candidate_pages)
+    fallback_triggered = False
+    fallback_logged = False
+
+    internal_discovered_links = [
+        link
+        for link in discovered_links
+        if is_internal_link(str(link.get("url") or ""), municipality_domain)
+    ]
+    homepage_internal_links = [
+        link
+        for link in internal_discovered_links
+        if str(link.get("source_url") or "") == home_url
+    ]
+
+    target_min_candidates = min(max_candidate_pages, 10)
+    if max_candidate_pages >= 5:
+        target_min_candidates = max(5, target_min_candidates)
+
+    if not high_value_links:
+        fallback_triggered = True
+        seed_links = homepage_internal_links or internal_discovered_links
+        high_value_links = select_high_value_links(
+            seed_links,
+            min_score=1.2,
+            max_links=max(max_candidate_pages, 20),
+            broad_mode=True,
+        )
+
+    if len(high_value_links) < 5 and max_candidate_pages >= 5:
+        fallback_triggered = True
+        relaxed_links = select_high_value_links(
+            internal_discovered_links,
+            min_score=0.8,
+            max_links=max(max_candidate_pages, 40),
+            broad_mode=True,
+        )
+        high_value_links = merge_candidate_links(high_value_links, relaxed_links, max_candidate_pages)
+
+    if len(high_value_links) < target_min_candidates:
+        fallback_triggered = True
+        seed_links = homepage_internal_links or internal_discovered_links
+        unscored_links = build_unscored_internal_candidates(seed_links, limit=max(max_candidate_pages, 30))
+        high_value_links = merge_candidate_links(high_value_links, unscored_links, max_candidate_pages)
+
+    if fallback_triggered:
+        print(f"Fallback triggered for {municipality_id}")
+        fallback_logged = True
 
     for candidate in high_value_links:
         target_url = str(candidate["url"])
@@ -284,6 +333,8 @@ def crawl_single_municipality(
     upsert_signal(conn, municipality_id, "crawl_status", "completed", 1.0, home_url)
     upsert_signal(conn, municipality_id, "fetched_pages_count", str(stats["fetched_pages"]), 1.0, home_url)
     upsert_signal(conn, municipality_id, "high_value_links_count", str(len(high_value_links)), 0.95, home_url)
+    if (stats["fetched_pages"] == 0 or stats["contacts"] == 0 or stats["service_links"] == 0) and not fallback_logged:
+        print(f"Fallback triggered for {municipality_id}")
     db.commit(conn)
     return stats
 
@@ -355,6 +406,60 @@ def classify_service_page_type(url: str, municipality_domain: str) -> str:
     if domain and muni and (domain == muni or domain.endswith(f".{muni}")):
         return "internal_page"
     return "external_portal"
+
+
+def is_internal_link(url: str, municipality_domain: str) -> bool:
+    link_domain = (get_domain(url) or "").lower()
+    muni = (municipality_domain or "").lower()
+    if not link_domain or not muni:
+        return False
+    return link_domain == muni or link_domain.endswith(f".{muni}")
+
+
+def merge_candidate_links(
+    primary: list[dict[str, str | float]],
+    secondary: list[dict[str, str | float]],
+    limit: int,
+) -> list[dict[str, str | float]]:
+    merged: list[dict[str, str | float]] = []
+    seen_urls: set[str] = set()
+    for candidate in [*primary, *secondary]:
+        url = str(candidate.get("url") or "")
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        merged.append(candidate)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def build_unscored_internal_candidates(
+    links: list[dict[str, str]],
+    limit: int,
+) -> list[dict[str, str | float]]:
+    out: list[dict[str, str | float]] = []
+    seen_urls: set[str] = set()
+    blocked_ext = (".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".js", ".ico", ".zip")
+    for link in links:
+        url = str(link.get("url") or "")
+        if not url or url in seen_urls:
+            continue
+        if url.lower().endswith(blocked_ext):
+            continue
+        seen_urls.add(url)
+        out.append(
+            {
+                "url": url,
+                "label": str(link.get("label") or ""),
+                "score": 0.5,
+                "reasons": "internal_fallback",
+                "source_url": str(link.get("source_url") or ""),
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
 
 
 if __name__ == "__main__":

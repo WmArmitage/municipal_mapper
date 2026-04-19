@@ -34,6 +34,21 @@ HIGH_VALUE_KEYWORDS: dict[str, float] = {
     "meeting": 1.5,
 }
 
+BROAD_FALLBACK_KEYWORDS: dict[str, float] = {
+    "services": 0.9,
+    "government": 0.9,
+    "board": 0.9,
+    "commission": 0.9,
+    "committee": 0.8,
+    "office": 0.8,
+    "forms": 0.8,
+    "documents": 0.7,
+    "administration": 0.7,
+    "town hall": 0.7,
+    "clerk": 0.7,
+    "finance": 0.7,
+}
+
 
 def extract_links_from_html(html: str, base_url: str) -> list[dict[str, str]]:
     soup = BeautifulSoup(html or "", "html.parser")
@@ -58,7 +73,7 @@ def extract_links_from_sitemap_xml(xml_text: str) -> list[dict[str, str]]:
     return links
 
 
-def score_link(url: str, label: str) -> tuple[float, list[str]]:
+def score_link(url: str, label: str, broad_mode: bool = False) -> tuple[float, list[str]]:
     blob = f"{label} {url}".lower()
     score = 0.0
     reasons: list[str] = []
@@ -66,6 +81,11 @@ def score_link(url: str, label: str) -> tuple[float, list[str]]:
         if keyword_in_text(blob, keyword):
             score += weight
             reasons.append(keyword)
+    if broad_mode:
+        for keyword, weight in BROAD_FALLBACK_KEYWORDS.items():
+            if keyword_in_text(blob, keyword):
+                score += weight
+                reasons.append(f"broad:{keyword}")
     # Slightly de-prioritize known document links unless strongly keyword-matched.
     if any(url.lower().endswith(ext) for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx")):
         score -= 0.5
@@ -85,6 +105,7 @@ def select_high_value_links(
     links: Iterable[dict[str, str]],
     min_score: float = 2.5,
     max_links: int = 35,
+    broad_mode: bool = False,
 ) -> list[dict[str, str | float]]:
     dedup: dict[str, dict[str, str | float]] = {}
     for link in links:
@@ -96,7 +117,7 @@ def select_high_value_links(
             continue
         label = link.get("label") or ""
         source_url = link.get("source_url") or ""
-        score, reasons = score_link(url, label)
+        score, reasons = score_link(url, label, broad_mode=broad_mode)
         if score < min_score:
             continue
         prior = dedup.get(url)
