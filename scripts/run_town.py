@@ -25,6 +25,11 @@ from src.parsers import (
 from src.vendors import detect_vendor
 
 ALTERNATE_SEED_COLUMNS = ("jobs_url", "directory_url", "assessor_url", "tax_url")
+SEED_CATEGORY_HINTS = {
+    "jobs_url": "jobs",
+    "assessor_url": "property_cards",
+    "tax_url": "tax_payment",
+}
 
 
 def extract_title(html: str) -> str | None:
@@ -242,18 +247,66 @@ def crawl_single_municipality(
         if blocked_value:
             upsert_signal(conn, municipality_id, "blocked_homepage", blocked_value, 0.98, website_url)
 
-        alternate_urls = get_alternate_seed_urls(municipality, website_url)
+        alternate_urls = get_alternate_seed_entries(municipality, website_url, municipality_domain)
         alternate_successes: list[str] = []
+        external_seed_recovered = False
         if alternate_urls:
             alternate_seed_attempted = True
             upsert_signal(conn, municipality_id, "alternate_seed_attempted", "true", 1.0, website_url)
             print(f"Alternate seed fallback triggered for {municipality_id}")
             raw_dir.mkdir(parents=True, exist_ok=True)
-            for seed_url in alternate_urls:
+            for seed in alternate_urls:
+                seed_url = str(seed["url"])
+                seed_key = str(seed["seed_key"])
+                seed_kind = str(seed["seed_kind"])
+                upsert_signal(conn, municipality_id, "seed_url_used", seed_key, 1.0, seed_url)
+
+                if seed_kind == "external":
+                    category, class_conf = classify_service_link(seed_url, seed_key.replace("_", " "))
+                    if not category:
+                        category = SEED_CATEGORY_HINTS.get(seed_key)
+                        class_conf = 0.7 if category else 0.0
+
+                    vendor, vendor_conf = detect_vendor(seed_url, None)
+                    if category:
+                        service_id = make_id("svc", municipality_id, category.strip().lower(), seed_url)
+                        if service_id not in seen_service_ids:
+                            seen_service_ids.add(service_id)
+                            db.upsert_service_link(
+                                conn,
+                                {
+                                    "service_id": service_id,
+                                    "municipality_id": municipality_id,
+                                    "category": category,
+                                    "label": seed_key,
+                                    "url": seed_url,
+                                    "domain": get_domain(seed_url),
+                                    "vendor": vendor,
+                                    "service_page_type": "external_portal",
+                                    "confidence": round(min(0.95, max(0.55, class_conf)), 3),
+                                    "source_url": seed_url,
+                                },
+                            )
+                            stats["service_links"] += 1
+                            external_seed_recovered = True
+                    if vendor:
+                        register_vendor_signal(vendor, max(vendor_conf, 0.8), seed_url)
+                        external_seed_recovered = True
+                        if category:
+                            upsert_signal(
+                                conn,
+                                municipality_id,
+                                f"{category}_vendor",
+                                vendor,
+                                max(vendor_conf, 0.8),
+                                seed_url,
+                            )
+                    continue
+
                 ok, final_seed_url, seed_text, _, _ = fetch_and_record(
                     seed_url,
                     "alternate_seed",
-                    "seed_fallback",
+                    f"seed_fallback:{seed_key}",
                     referer=None,
                 )
                 if not ok or not final_seed_url:
@@ -273,6 +326,8 @@ def crawl_single_municipality(
             primary_seed_url = alternate_successes[0]
             entry_url = normalize_url(primary_seed_url) or primary_seed_url
             upsert_signal(conn, municipality_id, "alternate_seed_recovered", "true", 0.95, primary_seed_url)
+        elif external_seed_recovered:
+            upsert_signal(conn, municipality_id, "alternate_seed_recovered", "true", 0.95, website_url)
         else:
             if alternate_seed_attempted:
                 upsert_signal(conn, municipality_id, "alternate_seed_recovered", "false", 0.95, website_url)
@@ -451,8 +506,12 @@ def main() -> None:
         print(json.dumps(counts, indent=2))
 
 
-def get_alternate_seed_urls(municipality: dict, homepage_url: str | None) -> list[str]:
-    urls: list[str] = []
+def get_alternate_seed_entries(
+    municipality: dict,
+    homepage_url: str | None,
+    municipality_domain: str,
+) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
     seen: set[str] = set()
     home_norm = normalize_url(homepage_url or "") or (homepage_url or "")
     for column in ALTERNATE_SEED_COLUMNS:
@@ -465,8 +524,9 @@ def get_alternate_seed_urls(municipality: dict, homepage_url: str | None) -> lis
         if normalized in seen:
             continue
         seen.add(normalized)
-        urls.append(normalized)
-    return urls
+        seed_kind = "internal" if is_internal_link(normalized, municipality_domain) else "external"
+        entries.append({"seed_key": column, "url": normalized, "seed_kind": seed_kind})
+    return entries
 
 
 def classify_blocked_homepage(result: FetchResult | None) -> str | None:

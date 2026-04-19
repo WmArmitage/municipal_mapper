@@ -7,6 +7,7 @@ VENDOR_DOMAIN_RULES: dict[str, tuple[str, ...]] = {
     "AxisGIS": ("axisgis.com",),
     "PropertyRecordCards": ("propertyrecordcards.com", "propertycards.com"),
     "MyTaxBill": ("mytaxbill.org",),
+    "GovernmentJobs": ("governmentjobs.com",),
     "RecDesk": ("recdesk.com",),
     "GovOffice": ("govoffice.com",),
     "Revize": ("revize.com",),
@@ -17,6 +18,7 @@ VENDOR_TEXT_RULES: dict[str, tuple[str, ...]] = {
     "AxisGIS": ("axisgis",),
     "PropertyRecordCards": ("propertyrecordcards", "property record cards"),
     "MyTaxBill": ("mytaxbill",),
+    "GovernmentJobs": ("governmentjobs",),
     "RecDesk": ("recdesk",),
     "GovOffice": ("govoffice", "gov office"),
     "Revize": ("revize", "govoffice by revize"),
@@ -40,4 +42,3 @@ def detect_vendor(url: str | None, text: str | None = None) -> tuple[str | None,
                     return vendor, 0.75
 
     return None, 0.0
-
