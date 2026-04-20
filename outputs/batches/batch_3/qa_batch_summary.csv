@@ -1,0 +1,19 @@
+municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
+ct_darien,Darien,Fairfield County,200,78,8,3
+ct_norwalk,Norwalk,Fairfield County,296,140,5,6
+ct_burlington,Burlington,Hartford County,191,55,6,3
+ct_newington,Newington,Hartford County,234,86,8,4
+ct_windsor,Windsor,Hartford County,182,100,6,5
+ct_harwinton,Harwinton,Litchfield County,185,59,7,3
+ct_torrington,Torrington,Litchfield County,83,69,7,2
+ct_cromwell,Cromwell,Middlesex County,112,90,8,4
+ct_westbrook,Westbrook,Middlesex County,201,61,7,3
+ct_branford,Branford,New Haven County,99,46,7,21
+ct_milford,Milford,New Haven County,157,56,6,5
+ct_wolcott,Wolcott,New Haven County,122,55,7,12
+ct_colchester,Colchester,New London County,127,46,6,12
+ct_lisbon,Lisbon,New London County,127,42,6,4
+ct_salem,Salem,New London County,0,0,0,0
+ct_coventry,Coventry,Tolland County,152,66,7,6
+ct_canterbury,Canterbury,Windham County,0,0,0,0
+ct_thompson,Thompson,Windham County,0,0,0,0

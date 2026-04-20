@@ -1,0 +1,13 @@
+municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
+ct_darien,Darien,finance,1,executive; assessment; tax; clerk; building; planning,"executive: First Selectman, Town Administrator; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner, Land Use"
+ct_norwalk,Norwalk,building; finance,2,executive; assessment; tax; clerk; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner
+ct_burlington,Burlington,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_windsor,Windsor,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_torrington,Torrington,clerk,1,executive; assessment; tax; building; planning; finance,"executive: Mayor; assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner, Land Use; finance: Treasurer"
+ct_westbrook,Westbrook,building,1,executive; assessment; tax; clerk; planning; finance,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner, Land Use; finance: Treasurer"
+ct_milford,Milford,clerk; finance,2,executive; assessment; tax; building; planning,"executive: Mayor; assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner, Land Use"
+ct_colchester,Colchester,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_lisbon,Lisbon,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_salem,Salem,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_canterbury,Canterbury,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_thompson,Thompson,executive; assessment; tax; clerk; building; planning; finance,7,,

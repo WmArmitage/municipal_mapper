@@ -1,0 +1,4 @@
+municipality_id,role_normalized,name,email,phone,department,page_type,source_url,suspicious_reason
+ct_milford,Assessor,,milfordassessor@milfordct.gov,2037833215,"Assessor's Office Milford, CT Email: Message Office Of Tax Collector",department_page,https://www.milfordct.us/663/Tax-Collector,assessor_tax_mismatch
+ct_norwalk,Assessor,,,2038547888,Assessor,department_page,https://www.norwalkct.gov/224/Tax-Assessor,assessor_tax_mismatch
+ct_windsor,Assessor,FAQs Are,,8602851817,"Yes. You need to contact the Assessor’s Office at since there are age, income, or other requirements",department_page,https://www.windsorct.gov/216/Tax-Collector,assessor_tax_mismatch

@@ -98,6 +98,7 @@ MANUAL_REVIEW_FIELDS = (
     "missing_role_groups",
     "missing_group_count",
     "suspicious_reason",
+    "coverage_interpretation",
 )
 
 SUMMARY_FIELDS = (
@@ -128,6 +129,38 @@ CRAWL_DIAGNOSTIC_FIELDS = (
     "detected_block_signal",
     "detected_js_shell_signal",
     "diagnostic_class",
+)
+
+BLOCKED_TOWN_FIELDS = (
+    "municipality_id",
+    "town_name",
+    "batch_id",
+    "seed_url_attempted",
+    "final_url_fetched",
+    "fallback_used",
+    "http_status",
+    "redirect_count",
+    "content_type",
+    "page_title",
+    "response_text_length",
+    "extracted_link_count",
+    "candidate_service_link_count",
+    "candidate_directory_link_count",
+    "contact_rows_extracted",
+    "detected_block_signal",
+    "detected_js_shell_signal",
+    "diagnostic_class",
+    "blocked_reason",
+)
+
+COVERAGE_SUMMARY_FIELDS = (
+    "batch_id",
+    "municipalities_total",
+    "municipalities_blocked",
+    "municipalities_unblocked",
+    "municipalities_with_zero_yield_unblocked",
+    "municipalities_with_any_missing_groups_unblocked",
+    "municipalities_fully_covered_unblocked",
 )
 
 CRAWL_FAILURE_DIAGNOSTIC_CLASSES = {
@@ -411,6 +444,103 @@ def fetch_crawl_diagnostics(
     return [rows_by_id[municipality_id] for municipality_id in municipality_ids]
 
 
+def derive_blocked_reason(diagnostic_row: dict[str, str | int]) -> str:
+    status = _coerce_int(diagnostic_row.get("http_status"), default=-1)
+    if status in {401, 403}:
+        return "http_forbidden"
+    if status == 429:
+        return "rate_limited"
+    if status == 503:
+        return "service_unavailable_or_protected"
+    if _coerce_int(diagnostic_row.get("detected_block_signal")) == 1:
+        return "block_signal_detected"
+    return "blocked_or_forbidden"
+
+
+def build_blocked_towns_rows(
+    municipalities: list[dict[str, str]],
+    crawl_diagnostics: list[dict[str, str | int]],
+) -> list[dict[str, str | int]]:
+    town_name_by_id = {row["municipality_id"]: row["town_name"] for row in municipalities}
+    out: list[dict[str, str | int]] = []
+    for diagnostic in crawl_diagnostics:
+        if str(diagnostic.get("diagnostic_class") or "") != "blocked_or_forbidden":
+            continue
+        municipality_id = str(diagnostic.get("municipality_id") or "")
+        out.append(
+            {
+                "municipality_id": municipality_id,
+                "town_name": town_name_by_id.get(municipality_id, ""),
+                "batch_id": str(diagnostic.get("batch_id") or ""),
+                "seed_url_attempted": str(diagnostic.get("seed_url_attempted") or ""),
+                "final_url_fetched": str(diagnostic.get("final_url_fetched") or ""),
+                "fallback_used": 1 if _coerce_int(diagnostic.get("fallback_used")) > 0 else 0,
+                "http_status": diagnostic.get("http_status") if diagnostic.get("http_status") not in ("", None) else "",
+                "redirect_count": _coerce_int(diagnostic.get("redirect_count")),
+                "content_type": str(diagnostic.get("content_type") or ""),
+                "page_title": str(diagnostic.get("page_title") or ""),
+                "response_text_length": _coerce_int(diagnostic.get("response_text_length")),
+                "extracted_link_count": _coerce_int(diagnostic.get("extracted_link_count")),
+                "candidate_service_link_count": _coerce_int(diagnostic.get("candidate_service_link_count")),
+                "candidate_directory_link_count": _coerce_int(diagnostic.get("candidate_directory_link_count")),
+                "contact_rows_extracted": _coerce_int(diagnostic.get("contact_rows_extracted")),
+                "detected_block_signal": 1 if _coerce_int(diagnostic.get("detected_block_signal")) > 0 else 0,
+                "detected_js_shell_signal": 1 if _coerce_int(diagnostic.get("detected_js_shell_signal")) > 0 else 0,
+                "diagnostic_class": str(diagnostic.get("diagnostic_class") or ""),
+                "blocked_reason": derive_blocked_reason(diagnostic),
+            }
+        )
+    out.sort(key=lambda row: str(row.get("municipality_id") or ""))
+    return out
+
+
+def build_coverage_summary_row(
+    batch_id: str,
+    municipalities: list[dict[str, str]],
+    raw_counts: dict[str, int],
+    clean_counts: dict[str, int],
+    winner_counts: dict[str, int],
+    missing_role_rows: list[dict[str, str | int]],
+    crawl_diagnostics: list[dict[str, str | int]],
+) -> dict[str, int | str]:
+    municipality_ids = {row["municipality_id"] for row in municipalities}
+    blocked_ids = {
+        str(row.get("municipality_id") or "")
+        for row in crawl_diagnostics
+        if str(row.get("diagnostic_class") or "") == "blocked_or_forbidden"
+    } & municipality_ids
+    unblocked_ids = municipality_ids - blocked_ids
+
+    municipalities_with_zero_yield_unblocked = sum(
+        1
+        for municipality_id in unblocked_ids
+        if raw_counts.get(municipality_id, 0) == 0
+        and clean_counts.get(municipality_id, 0) == 0
+        and winner_counts.get(municipality_id, 0) == 0
+    )
+    missing_unblocked_ids = {
+        str(row.get("municipality_id") or "")
+        for row in missing_role_rows
+        if str(row.get("municipality_id") or "") in unblocked_ids
+    }
+    municipalities_with_any_missing_groups_unblocked = len(missing_unblocked_ids)
+    municipalities_unblocked = len(unblocked_ids)
+    municipalities_fully_covered_unblocked = max(
+        0,
+        municipalities_unblocked - municipalities_with_any_missing_groups_unblocked,
+    )
+
+    return {
+        "batch_id": batch_id,
+        "municipalities_total": len(municipality_ids),
+        "municipalities_blocked": len(blocked_ids),
+        "municipalities_unblocked": municipalities_unblocked,
+        "municipalities_with_zero_yield_unblocked": municipalities_with_zero_yield_unblocked,
+        "municipalities_with_any_missing_groups_unblocked": municipalities_with_any_missing_groups_unblocked,
+        "municipalities_fully_covered_unblocked": municipalities_fully_covered_unblocked,
+    }
+
+
 def build_missing_key_roles(
     municipalities: list[dict[str, str]],
     winners: list[dict],
@@ -486,6 +616,7 @@ def build_manual_review_rows(
                 "missing_role_groups": "",
                 "missing_group_count": "",
                 "suspicious_reason": row.get("suspicious_reason"),
+                "coverage_interpretation": "suspicious_winner",
             }
         )
 
@@ -504,6 +635,11 @@ def build_manual_review_rows(
             continue
 
         zero_yield_diag_municipalities.add(municipality_id)
+        coverage_interpretation = (
+            "blocked_town"
+            if diagnostic_class == "blocked_or_forbidden"
+            else "crawl_diagnostic_nonblocked_failure"
+        )
         out.append(
             {
                 "municipality_id": municipality_id,
@@ -519,6 +655,7 @@ def build_manual_review_rows(
                 "missing_role_groups": "",
                 "missing_group_count": "",
                 "suspicious_reason": f"crawl_diagnostic:{diagnostic_class}",
+                "coverage_interpretation": coverage_interpretation,
             }
         )
 
@@ -544,6 +681,7 @@ def build_manual_review_rows(
                 "missing_role_groups": row["missing_role_groups"],
                 "missing_group_count": missing_group_count,
                 "suspicious_reason": "",
+                "coverage_interpretation": "normal_coverage_gap",
             }
         )
 
@@ -607,6 +745,18 @@ def main() -> None:
         suspicious_winners = fetch_suspicious_winners(conn, municipality_ids)
         crawl_diagnostics = fetch_crawl_diagnostics(conn, municipality_ids, args.batch_id)
         missing_key_roles = build_missing_key_roles(municipalities, role_winners)
+        blocked_towns = build_blocked_towns_rows(municipalities, crawl_diagnostics)
+        coverage_summary_rows = [
+            build_coverage_summary_row(
+                batch_id=args.batch_id,
+                municipalities=municipalities,
+                raw_counts=raw_counts,
+                clean_counts=clean_counts,
+                winner_counts=winner_counts,
+                missing_role_rows=missing_key_roles,
+                crawl_diagnostics=crawl_diagnostics,
+            )
+        ]
         manual_review_rows = build_manual_review_rows(
             municipalities=municipalities,
             suspicious_rows=suspicious_winners,
@@ -664,6 +814,16 @@ def main() -> None:
             batch_dir / "qa_crawl_diagnostics.csv",
             crawl_diagnostics,
             CRAWL_DIAGNOSTIC_FIELDS,
+        ),
+        "qa_blocked_towns.csv": write_csv(
+            batch_dir / "qa_blocked_towns.csv",
+            blocked_towns,
+            BLOCKED_TOWN_FIELDS,
+        ),
+        "qa_coverage_summary.csv": write_csv(
+            batch_dir / "qa_coverage_summary.csv",
+            coverage_summary_rows,
+            COVERAGE_SUMMARY_FIELDS,
         ),
     }
 

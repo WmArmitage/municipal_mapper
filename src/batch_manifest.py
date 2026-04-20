@@ -20,6 +20,8 @@ QA_PLACEHOLDER_FILENAMES = (
     "qa_missing_key_roles.csv",
     "qa_manual_review.csv",
     "qa_crawl_diagnostics.csv",
+    "qa_blocked_towns.csv",
+    "qa_coverage_summary.csv",
 )
 
 

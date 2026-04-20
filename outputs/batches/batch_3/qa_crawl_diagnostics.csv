@@ -1,0 +1,19 @@
+municipality_id,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class
+ct_darien,batch_3,https://www.darienct.gov/,https://www.darienct.gov/,0,200,0,text/html,"Darien, CT | Official Website",104221,798,50,9,214,0,1,probable_js_shell
+ct_norwalk,batch_3,https://www.norwalkct.gov/,https://www.norwalkct.gov/,0,200,0,text/html,"Norwalk, CT - Official Website | Official Website",126270,2484,50,5,466,0,1,probable_js_shell
+ct_burlington,batch_3,https://www.burlingtonct.gov/,https://www.burlingtonct.gov/,0,200,0,text/html,"Burlington, CT | Official Website",109142,613,50,9,287,0,1,probable_js_shell
+ct_newington,batch_3,https://www.newingtonct.gov/,https://www.newingtonct.gov/,0,200,0,text/html,"Newington, CT | Official Website",125770,2496,50,10,351,0,1,probable_js_shell
+ct_windsor,batch_3,https://www.windsorct.gov/,https://www.windsorct.gov/,0,200,0,text/html,"Windsor, CT | Official Website",147093,1573,50,7,290,0,1,probable_js_shell
+ct_harwinton,batch_3,https://www.harwinton.gov/,https://www.harwinton.gov/,0,200,0,text/html,"Harwinton, CT | Official Website",132740,576,48,7,232,0,1,probable_js_shell
+ct_torrington,batch_3,https://www.torringtonct.org/,https://www.torringtonct.gov,0,200,1,text/html,"Torrington, CT | Official Website",112452,1016,50,0,198,0,1,probable_js_shell
+ct_cromwell,batch_3,https://www.cromwellct.com/,https://www.cromwellct.gov/,0,200,2,text/html,"Cromwell, CT | Official Website",112697,790,50,0,123,0,1,probable_js_shell
+ct_westbrook,batch_3,https://www.westbrookct.us/,https://www.westbrookct.us/,0,200,0,text/html,"Westbrook, CT | Official Website",105026,835,50,4,296,0,1,probable_js_shell
+ct_branford,batch_3,https://www.branford-ct.gov/,https://www.branford-ct.gov/,0,200,0,text/html,"Branford, CT | Official Website",117453,768,50,5,112,0,1,probable_js_shell
+ct_milford,batch_3,https://www.milfordct.us/,https://www.milfordct.us/,0,200,0,text/html,"Milford, CT | Official Website",89007,1299,50,5,201,0,1,probable_js_shell
+ct_wolcott,batch_3,https://wolcottct.org/,https://wolcottct.org/,0,200,0,text/html,"Wolcott, CT | Official Website",95538,421,27,3,165,0,1,probable_js_shell
+ct_colchester,batch_3,https://www.colchesterct.gov/,https://www.colchesterct.gov/,0,200,0,text/html,colchesterct |,111988,1007,50,48,149,1,1,blocked_or_forbidden
+ct_lisbon,batch_3,https://www.lisbonct.gov/,https://www.lisbonct.gov/,0,200,0,text/html,"Lisbon, CT | Official Website",90716,404,50,6,206,0,1,probable_js_shell
+ct_salem,batch_3,https://www.salemct.gov/,https://www.salemct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_coventry,batch_3,https://www.coventry-ct.gov/,https://www.coventry-ct.gov/,0,200,0,text/html,"Coventry, CT - Official Website | Official Website",150152,864,50,6,263,0,1,probable_js_shell
+ct_canterbury,batch_3,http://canterburyct.org/,https://canterburyct.org/,1,403,1,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_thompson,batch_3,https://www.thompsonct.org/,https://www.thompsonct.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
