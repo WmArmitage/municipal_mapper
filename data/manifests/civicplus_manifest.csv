@@ -1,0 +1,16 @@
+municipality_id,town_name,county,batch_id,priority,status,notes
+ct_chester,Chester,Middlesex County,batch_1,1,pending,known_civicplus_vendor_signal_in_master
+ct_essex,Essex,Middlesex County,batch_1,1,pending,known_civicplus_vendor_signal_in_master
+ct_haddam,Haddam,Middlesex County,batch_1,1,pending,known_civicplus_vendor_signal_in_master
+ct_middletown,Middletown,Middlesex County,batch_1,1,pending,known_civicplus_vendor_signal_in_master
+ct_old_saybrook,Old Saybrook,Middlesex County,batch_1,1,pending,known_civicplus_vendor_signal_in_master
+ct_brookfield,Brookfield,Fairfield County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_granby,Granby,Hartford County,batch_1,1,pending,jobs_url_on_civicplus_domain
+ct_wethersfield,Wethersfield,Hartford County,batch_1,1,pending,jobs_url_on_civicplus_domain
+ct_sharon,Sharon,Litchfield County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_east_haven,East Haven,New Haven County,batch_1,2,pending,platform_column_verified_civicplus
+ct_orange,Orange,New Haven County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_waterford,Waterford,New London County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_preston,Preston,New London County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_willington,Willington,Tolland County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_brooklyn,Brooklyn,Windham County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance

@@ -1,0 +1,1 @@
+SELECT entity_type, COUNT(*) FROM vw_contacts_clean GROUP BY entity_type;
