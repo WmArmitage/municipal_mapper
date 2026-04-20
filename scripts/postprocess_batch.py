@@ -74,6 +74,90 @@ WITH ranked AS (
       PARTITION BY v.municipality_id, v.role_normalized
       ORDER BY
         CASE WHEN v.email IS NOT NULL AND TRIM(v.email) <> '' THEN 1 ELSE 0 END DESC,
+        CASE
+          WHEN v.role_normalized = 'Assessor'
+               AND (
+                   LOWER(COALESCE(v.source_url, '')) LIKE '%tax%'
+                   OR LOWER(COALESCE(v.email, '')) LIKE '%tax%'
+               )
+          THEN 1
+          WHEN v.role_normalized = 'Tax Collector'
+               AND (
+                   LOWER(COALESCE(v.source_url, '')) LIKE '%clerk%'
+                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%planning%'
+               )
+          THEN 1
+          WHEN v.role_normalized = 'Town Clerk'
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%planning%'
+          THEN 1
+          WHEN v.role_normalized = 'First Selectman'
+               AND (
+                   LOWER(COALESCE(v.source_url, '')) LIKE '%finance%'
+                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%building%'
+               )
+          THEN 1
+          ELSE 0
+        END ASC,
+        CASE
+          WHEN (v.email IS NULL OR TRIM(v.email) = '')
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%directory.aspx%'
+          THEN 1
+          ELSE 0
+        END ASC,
+        CASE
+          WHEN v.role_normalized = 'Tax Collector'
+               AND (
+                   LOWER(COALESCE(v.source_url, '')) LIKE '%tax-collector%'
+                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%/tax%'
+               )
+          THEN 2
+          WHEN v.role_normalized = 'Assessor'
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%assessor%'
+          THEN 2
+          WHEN v.role_normalized = 'Town Clerk'
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%town-clerk%'
+          THEN 2
+          WHEN v.role_normalized = 'Building Official'
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%building%'
+          THEN 2
+          WHEN v.role_normalized IN ('Planner', 'Land Use')
+               AND (
+                   LOWER(COALESCE(v.source_url, '')) LIKE '%planning%'
+                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%land-use%'
+               )
+          THEN 2
+          WHEN v.role_normalized IN ('Finance Director', 'Treasurer')
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%finance%'
+          THEN 2
+          WHEN v.role_normalized = 'First Selectman'
+               AND (
+                   LOWER(COALESCE(v.source_url, '')) LIKE '%first-selectman%'
+                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%board-of-selectmen%'
+                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%selectman%'
+               )
+          THEN 2
+          WHEN LOWER(COALESCE(v.source_url, '')) LIKE '%directory.aspx%'
+          THEN 0
+          ELSE 1
+        END DESC,
+        CASE
+          WHEN v.role_normalized IN ('First Selectman', 'Mayor', 'Town Manager')
+               AND (
+                   LOWER(COALESCE(v.name, '')) LIKE '%assistant%'
+                   OR LOWER(COALESCE(v.title, '')) LIKE '%assistant%'
+                   OR LOWER(COALESCE(v.department, '')) LIKE '%assistant%'
+                   OR LOWER(COALESCE(v.name, '')) LIKE '%admin assistant%'
+                   OR LOWER(COALESCE(v.title, '')) LIKE '%admin assistant%'
+                   OR LOWER(COALESCE(v.name, '')) LIKE '%administrative%'
+                   OR LOWER(COALESCE(v.title, '')) LIKE '%administrative%'
+                   OR LOWER(COALESCE(v.name, '')) LIKE '%executive assistant%'
+                   OR LOWER(COALESCE(v.title, '')) LIKE '%executive assistant%'
+               )
+          THEN 1
+          ELSE 0
+        END ASC,
+        CASE WHEN v.phone IS NOT NULL AND TRIM(v.phone) <> '' THEN 1 ELSE 0 END DESC,
+        CASE WHEN v.name IS NOT NULL AND TRIM(v.name) <> '' THEN 1 ELSE 0 END DESC,
         CASE WHEN c.is_likely_noise = 0 THEN 1 ELSE 0 END DESC,
         v.display_confidence DESC
     ) AS rn
@@ -670,13 +754,12 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
 
 def refresh_views(conn: sqlite3.Connection) -> None:
     current_vw_contacts_clean = get_view_sql(conn, "vw_contacts_clean")
-    current_vw_best_role = get_view_sql(conn, "vw_best_role_per_town")
 
     conn.execute("DROP VIEW IF EXISTS vw_best_role_per_town")
     conn.execute("DROP VIEW IF EXISTS vw_contacts_clean")
 
     conn.execute(current_vw_contacts_clean or FALLBACK_VW_CONTACTS_CLEAN_SQL)
-    conn.execute(current_vw_best_role or FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
+    conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
 
 
 def print_metrics(title: str, metrics: dict[str, int]) -> None:

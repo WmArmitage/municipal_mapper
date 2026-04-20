@@ -184,21 +184,86 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
           page_type,
           source_url,
           CASE
-            WHEN email IS NULL OR TRIM(email) = '' THEN 'missing_email'
-            WHEN LOWER(COALESCE(name, '')) LIKE '%assistant%' THEN 'assistant_name'
-            WHEN role_normalized = 'Assessor' AND LOWER(COALESCE(source_url, '')) LIKE '%tax%' THEN 'assessor_tax_url_mismatch'
-            WHEN role_normalized = 'Tax Collector' AND LOWER(COALESCE(source_url, '')) LIKE '%clerk%' THEN 'tax_collector_clerk_url_mismatch'
-            WHEN role_normalized = 'Town Clerk' AND LOWER(COALESCE(source_url, '')) LIKE '%planning%' THEN 'town_clerk_planning_url_mismatch'
+            WHEN (email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = '') THEN 'missing_email_and_phone'
+            WHEN role_normalized = 'Assessor'
+                 AND (
+                     LOWER(COALESCE(source_url, '')) LIKE '%tax%'
+                     OR LOWER(COALESCE(email, '')) LIKE '%tax%'
+                 )
+            THEN 'assessor_tax_mismatch'
+            WHEN role_normalized = 'Tax Collector'
+                 AND (
+                     LOWER(COALESCE(source_url, '')) LIKE '%clerk%'
+                     OR LOWER(COALESCE(source_url, '')) LIKE '%planning%'
+                 )
+            THEN 'tax_collector_role_page_mismatch'
+            WHEN role_normalized = 'Town Clerk'
+                 AND LOWER(COALESCE(source_url, '')) LIKE '%planning%'
+            THEN 'town_clerk_planning_mismatch'
+            WHEN role_normalized = 'First Selectman'
+                 AND (
+                     LOWER(COALESCE(source_url, '')) LIKE '%finance%'
+                     OR LOWER(COALESCE(source_url, '')) LIKE '%building%'
+                 )
+            THEN 'first_selectman_role_page_mismatch'
+            WHEN role_normalized IN ('First Selectman', 'Mayor', 'Town Manager')
+                 AND (
+                     LOWER(COALESCE(name, '')) LIKE '%assistant%'
+                     OR LOWER(COALESCE(title, '')) LIKE '%assistant%'
+                     OR LOWER(COALESCE(department, '')) LIKE '%assistant%'
+                     OR LOWER(COALESCE(name, '')) LIKE '%admin assistant%'
+                     OR LOWER(COALESCE(title, '')) LIKE '%admin assistant%'
+                     OR LOWER(COALESCE(name, '')) LIKE '%administrative%'
+                     OR LOWER(COALESCE(title, '')) LIKE '%administrative%'
+                     OR LOWER(COALESCE(name, '')) LIKE '%executive assistant%'
+                     OR LOWER(COALESCE(title, '')) LIKE '%executive assistant%'
+                 )
+            THEN 'chief_role_assistant_contamination'
             ELSE 'review'
           END AS suspicious_reason
         FROM vw_best_role_per_town
         WHERE municipality_id IN ({placeholders(len(municipality_ids))})
           AND (
-            email IS NULL OR TRIM(email) = ''
-            OR LOWER(COALESCE(name, '')) LIKE '%assistant%'
-            OR (role_normalized = 'Assessor' AND LOWER(COALESCE(source_url, '')) LIKE '%tax%')
-            OR (role_normalized = 'Tax Collector' AND LOWER(COALESCE(source_url, '')) LIKE '%clerk%')
-            OR (role_normalized = 'Town Clerk' AND LOWER(COALESCE(source_url, '')) LIKE '%planning%')
+            ((email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = ''))
+            OR (
+                role_normalized = 'Assessor'
+                AND (
+                    LOWER(COALESCE(source_url, '')) LIKE '%tax%'
+                    OR LOWER(COALESCE(email, '')) LIKE '%tax%'
+                )
+            )
+            OR (
+                role_normalized = 'Tax Collector'
+                AND (
+                    LOWER(COALESCE(source_url, '')) LIKE '%clerk%'
+                    OR LOWER(COALESCE(source_url, '')) LIKE '%planning%'
+                )
+            )
+            OR (
+                role_normalized = 'Town Clerk'
+                AND LOWER(COALESCE(source_url, '')) LIKE '%planning%'
+            )
+            OR (
+                role_normalized = 'First Selectman'
+                AND (
+                    LOWER(COALESCE(source_url, '')) LIKE '%finance%'
+                    OR LOWER(COALESCE(source_url, '')) LIKE '%building%'
+                )
+            )
+            OR (
+                role_normalized IN ('First Selectman', 'Mayor', 'Town Manager')
+                AND (
+                    LOWER(COALESCE(name, '')) LIKE '%assistant%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%assistant%'
+                    OR LOWER(COALESCE(department, '')) LIKE '%assistant%'
+                    OR LOWER(COALESCE(name, '')) LIKE '%admin assistant%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%admin assistant%'
+                    OR LOWER(COALESCE(name, '')) LIKE '%administrative%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%administrative%'
+                    OR LOWER(COALESCE(name, '')) LIKE '%executive assistant%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%executive assistant%'
+                )
+            )
           )
         ORDER BY municipality_id, role_normalized
     """
