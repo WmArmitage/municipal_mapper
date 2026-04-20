@@ -476,8 +476,29 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                 THEN 'Assessor'
                 WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%tax collector%'
                 THEN 'Tax Collector'
+                WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                    'town and city clerk, registrar of vital statistics',
+                    'town and city clerk',
+                    'deputy town and city clerk',
+                    'deputy town and city clerk, cctc',
+                    'city clerk'
+                )
+                THEN 'Town Clerk'
                 WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%town clerk%'
                 THEN 'Town Clerk'
+                WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                    'chief building official',
+                    'acting building official',
+                    'assistant building official'
+                )
+                THEN 'Building Official'
+                WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                    'code enforcement officer',
+                    'zoning/code enforcement officer',
+                    'zoning/ code enforcement officer'
+                )
+                     AND LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%building%'
+                THEN 'Building Official'
                 WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%building official%'
                      OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%building department%'
                      OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%building%'
@@ -492,9 +513,12 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                     'director of finance',
                     'title: director of finance',
                     'assistant director of finance',
+                    'assistant director of finance - budget & grants',
+                    'assistant director of finance - operations',
                     'director of finance and revenue',
                     'director of finance and administration'
                 )
+                     OR LOWER(TRIM(COALESCE(title, ''))) LIKE 'assistant director of finance -%'
                      OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
                 THEN 'Finance Director'
                 WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
@@ -546,9 +570,16 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                 'director of finance',
                 'title: director of finance',
                 'assistant director of finance',
+                'assistant director of finance - budget & grants',
+                'assistant director of finance - operations',
                 'director of finance and revenue',
-                'director of finance and administration'
+                'director of finance and administration',
+                'comptroller',
+                'chief financial officer',
+                'cfo'
             ) THEN 'Finance Director'
+            WHEN LOWER(TRIM(COALESCE(title, ''))) LIKE 'assistant director of finance -%'
+            THEN 'Finance Director'
             WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
                 'treasurer',
                 'town treasurer',
@@ -560,16 +591,24 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
         WHERE {where_contacts}
           AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NULL
           AND role_family = 'finance'
-          AND LOWER(TRIM(COALESCE(title, ''))) IN (
-                'director of finance',
-                'title: director of finance',
-                'assistant director of finance',
-                'director of finance and revenue',
-                'director of finance and administration',
-                'treasurer',
-                'town treasurer',
-                'city treasurer',
-                'borough treasurer'
+          AND (
+                LOWER(TRIM(COALESCE(title, ''))) IN (
+                    'director of finance',
+                    'title: director of finance',
+                    'assistant director of finance',
+                    'assistant director of finance - budget & grants',
+                    'assistant director of finance - operations',
+                    'director of finance and revenue',
+                    'director of finance and administration',
+                    'comptroller',
+                    'chief financial officer',
+                    'cfo',
+                    'treasurer',
+                    'town treasurer',
+                    'city treasurer',
+                    'borough treasurer'
+                )
+                OR LOWER(TRIM(COALESCE(title, ''))) LIKE 'assistant director of finance -%'
           )
         """,
         params,
