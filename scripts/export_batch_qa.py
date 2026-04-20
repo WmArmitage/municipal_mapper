@@ -169,6 +169,7 @@ CRAWL_FAILURE_DIAGNOSTIC_CLASSES = {
     "discovery_failure",
     "low_extraction",
 }
+JS_SHELL_LINK_NEAR_ZERO_THRESHOLD = 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -457,6 +458,35 @@ def derive_blocked_reason(diagnostic_row: dict[str, str | int]) -> str:
     return "blocked_or_forbidden"
 
 
+def is_effectively_blocked_diagnostic(diagnostic_row: dict[str, str | int]) -> bool:
+    status_code = _coerce_int(diagnostic_row.get("http_status"), default=-1)
+    contact_rows_extracted = _coerce_int(diagnostic_row.get("contact_rows_extracted"))
+    candidate_service_link_count = _coerce_int(diagnostic_row.get("candidate_service_link_count"))
+    extracted_link_count = _coerce_int(diagnostic_row.get("extracted_link_count"))
+    detected_block_signal = _coerce_int(diagnostic_row.get("detected_block_signal"))
+
+    # Hard HTTP block statuses beat all.
+    if status_code in {401, 403, 429, 503}:
+        return True
+
+    # Successful extraction beats all soft heuristics.
+    if contact_rows_extracted > 0:
+        return False
+    if status_code == 200 and extracted_link_count > 0 and candidate_service_link_count > 0:
+        return False
+
+    # Soft block only for low-success / zero-yield cases.
+    if (
+        status_code == 200
+        and detected_block_signal == 1
+        and contact_rows_extracted == 0
+        and candidate_service_link_count == 0
+        and extracted_link_count <= JS_SHELL_LINK_NEAR_ZERO_THRESHOLD
+    ):
+        return True
+    return False
+
+
 def build_blocked_towns_rows(
     municipalities: list[dict[str, str]],
     crawl_diagnostics: list[dict[str, str | int]],
@@ -464,7 +494,7 @@ def build_blocked_towns_rows(
     town_name_by_id = {row["municipality_id"]: row["town_name"] for row in municipalities}
     out: list[dict[str, str | int]] = []
     for diagnostic in crawl_diagnostics:
-        if str(diagnostic.get("diagnostic_class") or "") != "blocked_or_forbidden":
+        if not is_effectively_blocked_diagnostic(diagnostic):
             continue
         municipality_id = str(diagnostic.get("municipality_id") or "")
         out.append(
@@ -486,7 +516,7 @@ def build_blocked_towns_rows(
                 "contact_rows_extracted": _coerce_int(diagnostic.get("contact_rows_extracted")),
                 "detected_block_signal": 1 if _coerce_int(diagnostic.get("detected_block_signal")) > 0 else 0,
                 "detected_js_shell_signal": 1 if _coerce_int(diagnostic.get("detected_js_shell_signal")) > 0 else 0,
-                "diagnostic_class": str(diagnostic.get("diagnostic_class") or ""),
+                "diagnostic_class": "blocked_or_forbidden",
                 "blocked_reason": derive_blocked_reason(diagnostic),
             }
         )
@@ -507,7 +537,7 @@ def build_coverage_summary_row(
     blocked_ids = {
         str(row.get("municipality_id") or "")
         for row in crawl_diagnostics
-        if str(row.get("diagnostic_class") or "") == "blocked_or_forbidden"
+        if is_effectively_blocked_diagnostic(row)
     } & municipality_ids
     unblocked_ids = municipality_ids - blocked_ids
 
