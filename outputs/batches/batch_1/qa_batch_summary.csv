@@ -1,16 +1,16 @@
 municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
-ct_chester,Chester,Middlesex County,3,3,2,10
-ct_essex,Essex,Middlesex County,493,22,5,18
-ct_haddam,Haddam,Middlesex County,13,10,4,7
-ct_middletown,Middletown,Middlesex County,9,9,3,8
-ct_old_saybrook,Old Saybrook,Middlesex County,2,2,2,8
-ct_brookfield,Brookfield,Fairfield County,188,0,0,5
-ct_granby,Granby,Hartford County,156,0,0,2
-ct_wethersfield,Wethersfield,Hartford County,153,0,0,2
-ct_sharon,Sharon,Litchfield County,114,0,0,4
-ct_east_haven,East Haven,New Haven County,185,0,0,5
-ct_orange,Orange,New Haven County,170,0,0,6
-ct_waterford,Waterford,New London County,151,0,0,22
-ct_preston,Preston,New London County,169,0,0,3
-ct_willington,Willington,Tolland County,56,0,0,17
-ct_brooklyn,Brooklyn,Windham County,145,0,0,4
+ct_chester,Chester,Middlesex County,131,53,7,24
+ct_essex,Essex,Middlesex County,509,71,8,18
+ct_haddam,Haddam,Middlesex County,182,53,8,9
+ct_middletown,Middletown,Middlesex County,159,124,6,15
+ct_old_saybrook,Old Saybrook,Middlesex County,159,43,8,20
+ct_brookfield,Brookfield,Fairfield County,196,44,7,9
+ct_granby,Granby,Hartford County,178,49,6,6
+ct_wethersfield,Wethersfield,Hartford County,165,70,5,4
+ct_sharon,Sharon,Litchfield County,125,35,7,7
+ct_east_haven,East Haven,New Haven County,221,85,7,7
+ct_orange,Orange,New Haven County,187,74,8,6
+ct_waterford,Waterford,New London County,179,81,7,25
+ct_preston,Preston,New London County,178,52,8,5
+ct_willington,Willington,Tolland County,68,47,7,21
+ct_brooklyn,Brooklyn,Windham County,159,39,7,7

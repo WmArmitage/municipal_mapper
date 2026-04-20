@@ -150,6 +150,15 @@ CONTACT_ORIENTED_PAGE_TYPES = {
 }
 DRILLABLE_PAGE_TYPES = CONTACT_ORIENTED_PAGE_TYPES
 NON_HTML_LINK_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".js", ".ico", ".zip", ".pdf", ".doc", ".docx")
+KEY_ROLE_URL_HINTS = (
+    "first-selectman",
+    "mayor",
+    "town-manager",
+    "town-administrator",
+    "assessor",
+    "tax-collector",
+    "town-clerk",
+)
 
 
 def extract_links_from_html(html: str, base_url: str) -> list[dict[str, str]]:
@@ -334,6 +343,12 @@ def select_contact_child_links(
         if page_type in CONTACT_ORIENTED_PAGE_TYPES:
             score += 1.6
             reasons.append(f"contact_child:{page_type}")
+        if normalized_parent in {"directory_page", "directory_category_page"} and _is_low_value_directory_eid(url):
+            score -= 1.25
+            reasons.append("directory_eid_penalty")
+        if page_type in {"department_page", "contact_page", "official_page"} and _is_key_role_url(url):
+            score += 1.1
+            reasons.append("key_role_url_boost")
         if score < min_score and page_type == "candidate":
             continue
 
@@ -386,6 +401,16 @@ def _is_directory_category_path(url: str) -> bool:
             "registrar",
         )
     )
+
+
+def _is_low_value_directory_eid(url: str) -> bool:
+    lowered = (url or "").lower()
+    return "directory.aspx?eid=" in lowered
+
+
+def _is_key_role_url(url: str) -> bool:
+    lowered = (url or "").lower()
+    return any(token in lowered for token in KEY_ROLE_URL_HINTS)
 
 
 def _normalize_keyword_blob(value: str) -> str:

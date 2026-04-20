@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import html
 import re
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 try:
     from bs4 import BeautifulSoup
@@ -290,7 +291,21 @@ PERMIT_NEGATIVE_TOKENS = ("calendar", "agenda", "minutes", "meeting", "event")
 
 
 def extract_emails(text: str) -> list[str]:
-    return sorted({match.group(1).strip().lower() for match in EMAIL_RE.finditer(text or "")})
+    normalized_text = _normalize_email_text(text or "")
+    return sorted({match.group(1).strip().lower() for match in EMAIL_RE.finditer(normalized_text)})
+
+
+def extract_emails_from_href(href: str | None) -> list[str]:
+    normalized_href = _normalize_email_text(unquote(href or ""))
+    out: set[str] = set()
+    for match in re.finditer(
+        r"(?i)mailto\s*:\s*([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})",
+        normalized_href,
+    ):
+        out.add(match.group(1).strip().lower())
+    for match in EMAIL_RE.finditer(normalized_href):
+        out.add(match.group(1).strip().lower())
+    return sorted(out)
 
 
 def extract_phone_candidates(text: str) -> list[dict[str, str | None]]:
@@ -464,6 +479,7 @@ def extract_contacts(
         nearby_address = _extract_address_from_lines(nearby_lines)
 
         line_emails = extract_emails(line)
+        nearby_emails = extract_emails(nearby_blob)
         line_phones = extract_phone_candidates(line)
         nearby_phones = extract_phone_candidates(nearby_blob)
 
@@ -479,10 +495,11 @@ def extract_contacts(
 
         emit_department_phone_row = bool((not line_emails) and line_department and line_phones)
         emit_staff_phone_row = bool(staff_mode and line_phones)
-        if not line_emails and not emit_department_phone_row and not emit_staff_phone_row:
+        nearby_email_rescue = bool((not line_emails) and line_phones and len(nearby_emails) == 1)
+        if not line_emails and not nearby_email_rescue and not emit_department_phone_row and not emit_staff_phone_row:
             continue
 
-        emails_to_emit = line_emails if line_emails else [None]
+        emails_to_emit = line_emails if line_emails else (nearby_emails if nearby_email_rescue else [None])
         for email in emails_to_emit:
             phone = None
             phone_ext = None
@@ -602,8 +619,8 @@ def _normalize_contact_candidate(
     source_url: str,
 ) -> dict[str, str | float | None]:
     name = _normalize_contact_name(candidate.get("name"))
-    title = normalize_whitespace(str(candidate.get("title") or "")) or None
-    department = normalize_whitespace(str(candidate.get("department") or "")) or None
+    title = _strip_email_label_prefix(normalize_whitespace(str(candidate.get("title") or "")) or None)
+    department = _strip_email_label_prefix(normalize_whitespace(str(candidate.get("department") or "")) or None)
     if name and _is_role_label(name):
         if not title:
             title = name
@@ -692,6 +709,29 @@ def _normalize_key_text(value: str | float | None) -> str:
     lowered = str(value or "").strip().lower()
     lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
     return re.sub(r"\s+", " ", lowered).strip()
+
+
+def _normalize_email_text(value: str) -> str:
+    normalized = html.unescape(value or "")
+    normalized = re.sub(
+        r"(?i)(?<=[A-Z0-9._%+\-])\s*(?:\(|\[)?\s*at\s*(?:\)|\])\s*(?=[A-Z0-9.\-])",
+        "@",
+        normalized,
+    )
+    normalized = re.sub(
+        r"(?i)(?<=[A-Z0-9.\-])\s*(?:\(|\[)?\s*dot\s*(?:\)|\])\s*(?=[A-Z0-9.\-])",
+        ".",
+        normalized,
+    )
+    return normalized
+
+
+def _strip_email_label_prefix(value: str | None) -> str | None:
+    text = normalize_whitespace(value or "")
+    if not text:
+        return None
+    text = re.sub(r"(?i)^email\s+", "", text).strip(" -:;,.")
+    return text or None
 
 
 def extract_locations(text: str, source_url: str) -> list[dict[str, str | None]]:
@@ -887,10 +927,7 @@ def extract_table_contact_rows(text: str, source_url: str) -> list[dict[str, str
             mailto_emails: list[str] = []
             for anchor in row.find_all("a", href=True):
                 href = str(anchor.get("href") or "")
-                if href.lower().startswith("mailto:"):
-                    email = href.split(":", 1)[1].split("?", 1)[0].strip().lower()
-                    if EMAIL_RE.fullmatch(email):
-                        mailto_emails.append(email)
+                mailto_emails.extend(extract_emails_from_href(href))
             emails = sorted({*extract_emails(row_blob), *mailto_emails})
             phones = extract_phone_candidates(row_blob)
             if not emails and not phones:
@@ -984,10 +1021,7 @@ def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[s
         mailto_emails: list[str] = []
         for anchor in block.find_all("a", href=True):
             href = str(anchor.get("href") or "")
-            if href.lower().startswith("mailto:"):
-                email = href.split(":", 1)[1].split("?", 1)[0].strip().lower()
-                if EMAIL_RE.fullmatch(email):
-                    mailto_emails.append(email)
+            mailto_emails.extend(extract_emails_from_href(href))
         emails = sorted({*extract_emails(snippet), *mailto_emails})
         phones = extract_phone_candidates(snippet)
         if not emails and not phones:
@@ -1217,11 +1251,9 @@ def _prepare_text_for_extraction(text: str) -> str:
         tag.decompose()
     for anchor in soup.find_all("a", href=True):
         href = str(anchor.get("href") or "")
-        if not href.lower().startswith("mailto:"):
-            continue
-        email = href.split(":", 1)[1].split("?", 1)[0].strip()
-        if EMAIL_RE.fullmatch(email):
-            anchor.append(f" {email}")
+        href_emails = extract_emails_from_href(href)
+        if href_emails:
+            anchor.append(" " + " ".join(href_emails))
     return soup.get_text("\n")
 
 
@@ -1238,8 +1270,21 @@ def _prepare_text_with_regex_fallback(raw: str) -> str:
         mailto_replacer,
         raw,
     )
+    href_email_matches = re.findall(
+        r"(?is)\bhref\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))",
+        raw_with_mailto,
+    )
+    href_emails: set[str] = set()
+    for quoted_double, quoted_single, unquoted in href_email_matches:
+        href_value = quoted_double or quoted_single or unquoted
+        for email in extract_emails_from_href(href_value):
+            href_emails.add(email)
+
     without_assets = re.sub(r"(?is)<(script|style|noscript)\b[^>]*>.*?</\1>", " ", raw_with_mailto)
-    return re.sub(r"(?s)<[^>]+>", "\n", without_assets)
+    text_only = re.sub(r"(?s)<[^>]+>", "\n", without_assets)
+    if not href_emails:
+        return text_only
+    return text_only + "\n" + "\n".join(sorted(href_emails))
 
 
 def _neighboring_lines(lines: list[str], idx: int, radius: int = 1) -> list[str]:
