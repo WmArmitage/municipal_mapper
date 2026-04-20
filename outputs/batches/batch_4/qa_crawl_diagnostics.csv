@@ -1,0 +1,19 @@
+municipality_id,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class
+ct_easton,batch_4,https://www.eastonct.gov/,https://www.eastonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_trumbull,batch_4,https://www.trumbull-ct.gov/,https://www.trumbull-ct.gov/,0,200,0,text/html,"Trumbull, CT | Official Website",124840,1672,50,7,273,0,1,ok
+ct_east_hartford,batch_4,https://www.easthartfordct.gov/,https://www.easthartfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_plainville,batch_4,https://www.plainvillect.com/,https://www.plainvillect.com/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_bridgewater,batch_4,https://www.bridgewater-ct.gov/,https://www.bridgewater-ct.gov/,0,200,0,text/html,"Bridgewater, CT | Official Website",80519,539,50,4,78,0,1,ok
+ct_new_hartford,batch_4,https://www.newhartfordct.gov/,https://www.newhartfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_washington,batch_4,https://www.washingtonct.org/,https://www.washingtonct.org/,0,200,0,text/html,"Washington, CT | Official Website",78284,662,50,3,240,0,1,ok
+ct_deep_river,batch_4,https://www.deepriverct.us/,https://www.deepriverct.us/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_hamden,batch_4,https://www.hamden.com/,https://www.hamden.com/,0,200,0,text/html,"Hamden, CT | Official Website",169850,1226,50,6,338,0,1,ok
+ct_north_branford,batch_4,https://www.northbranfordct.gov/,https://www.northbranfordct.gov/,0,200,0,text/html,"North Branford Town, CT | Official Website",95049,331,36,5,181,0,1,ok
+ct_woodbridge,batch_4,https://www.woodbridgect.org/,https://www.woodbridgect.org/,0,200,0,text/html,"Woodbridge, CT | Official Website",162443,955,50,15,181,0,1,ok
+ct_franklin,batch_4,https://www.franklinct.gov/,https://www.franklinct.gov/,0,200,0,text/html,Franklin CT |,116482,608,50,75,29,1,1,ok
+ct_north_stonington,batch_4,https://www.northstoningtonct.gov/,https://www.northstoningtonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_stonington,batch_4,https://www.stonington-ct.gov/,https://www.stonington-ct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_andover,batch_4,https://www.andoverconnecticut.org/,https://www.andoverconnecticut.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_tolland,batch_4,https://www.tollandct.gov/,https://www.tollandct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_eastford,batch_4,https://www.eastfordct.gov/,https://www.eastfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_windham,batch_4,https://www.windhamct.gov/,https://www.windhamct.gov/,0,200,0,text/html,"Windham, CT | Official Website",147594,837,50,10,178,0,1,ok

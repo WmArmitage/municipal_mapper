@@ -70,6 +70,7 @@ WITH ranked AS (
     v.source_url,
     v.display_confidence,
     c.is_likely_noise,
+    c.suspicious_reason,
     ROW_NUMBER() OVER (
       PARTITION BY v.municipality_id, v.role_normalized
       ORDER BY
@@ -237,6 +238,20 @@ def get_view_sql(conn: sqlite3.Connection, name: str) -> str | None:
         return None
     sql = row[0]
     return str(sql).strip() if sql else None
+
+
+def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
+    existing = {
+        str(row["name"]).strip().lower()
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name.strip().lower() in existing:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+
+
+def ensure_hygiene_columns(conn: sqlite3.Connection) -> None:
+    _ensure_column(conn, "contacts", "suspicious_reason", "TEXT")
 
 
 def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict[str, int]:
@@ -408,6 +423,49 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                 OR (
                     (LOWER(COALESCE(name, '')) LIKE '%committee%' OR LOWER(COALESCE(title, '')) LIKE '%committee%')
                     AND (LOWER(COALESCE(name, '')) LIKE '%phone%' OR LOWER(COALESCE(title, '')) LIKE '%phone%')
+                )
+                OR LOWER(TRIM(COALESCE(name, ''))) LIKE 'the %'
+                OR LOWER(COALESCE(name, '')) LIKE '%google maps%'
+                OR LOWER(COALESCE(name, '')) LIKE '%requested%'
+                OR LOWER(COALESCE(name, '')) LIKE '%hours%'
+                OR LOWER(COALESCE(name, '')) LIKE '%office%'
+                OR LOWER(COALESCE(name, '')) LIKE '%department%'
+                OR LOWER(COALESCE(name, '')) LIKE '%click%'
+                OR LOWER(COALESCE(name, '')) LIKE '%view%'
+                OR LOWER(COALESCE(name, '')) LIKE '%faq%'
+                OR LENGTH(TRIM(COALESCE(name, ''))) > 80
+                OR (
+                    NULLIF(TRIM(COALESCE(name, '')), '') IS NOT NULL
+                    AND LOWER(TRIM(COALESCE(name, ''))) NOT GLOB '*[a-z]*'
+                )
+                OR (
+                    NULLIF(TRIM(COALESCE(name, '')), '') IS NOT NULL
+                    AND NULLIF(TRIM(COALESCE(title, '')), '') IS NOT NULL
+                    AND LOWER(
+                        TRIM(
+                            REPLACE(
+                                REPLACE(
+                                    REPLACE(REPLACE(COALESCE(name, ''), '.', ''), ',', ''),
+                                    '-',
+                                    ' '
+                                ),
+                                '  ',
+                                ' '
+                            )
+                        )
+                    ) = LOWER(
+                        TRIM(
+                            REPLACE(
+                                REPLACE(
+                                    REPLACE(REPLACE(COALESCE(title, ''), '.', ''), ',', ''),
+                                    '-',
+                                    ' '
+                                ),
+                                '  ',
+                                ' '
+                            )
+                        )
+                    )
                 )
             THEN 1
             ELSE 0
@@ -654,6 +712,32 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
     conn.execute(
         f"""
         UPDATE contacts
+        SET suspicious_reason = CASE
+            WHEN role_normalized = 'Assessor'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%assessor%'
+            THEN 'role_department_mismatch'
+            WHEN role_normalized = 'Tax Collector'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%tax%'
+            THEN 'role_department_mismatch'
+            WHEN role_normalized = 'Town Clerk'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%clerk%'
+            THEN 'role_department_mismatch'
+            WHEN role_normalized = 'Building Official'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%building%'
+            THEN 'role_department_mismatch'
+            WHEN role_normalized = 'Finance Director'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%finance%'
+            THEN 'role_department_mismatch'
+            ELSE NULL
+        END
+        WHERE {where_contacts}
+        """,
+        params,
+    )
+
+    conn.execute(
+        f"""
+        UPDATE contacts
         SET semantic_confidence = MAX(
             0.0,
             MIN(
@@ -701,10 +785,10 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                 ROW_NUMBER() OVER (
                     PARTITION BY COALESCE(dedupe_key, '')
                     ORDER BY
+                        COALESCE(is_likely_noise, 0) ASC,
                         COALESCE(has_name, 0) DESC,
                         COALESCE(has_email, 0) DESC,
                         COALESCE(has_phone, 0) DESC,
-                        COALESCE(is_likely_noise, 0) ASC,
                         COALESCE(semantic_confidence, 0.0) DESC,
                         COALESCE(source_url, '') ASC
                 ) AS rn
@@ -728,6 +812,32 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
         SET display_confidence = CASE
             WHEN COALESCE(record_rank, 1) = 1 THEN COALESCE(semantic_confidence, 0.0)
             ELSE MAX(0.0, MIN(1.0, COALESCE(semantic_confidence, 0.0) - 0.20))
+        END
+        WHERE {where_contacts}
+        """,
+        params,
+    )
+
+    conn.execute(
+        f"""
+        UPDATE contacts
+        SET title = CASE
+            WHEN NULLIF(TRIM(COALESCE(title, '')), '') IS NULL THEN NULL
+            WHEN LOWER(COALESCE(title, '')) LIKE '%is responsible for%' THEN NULL
+            WHEN (
+                LENGTH(TRIM(COALESCE(title, ''))) - LENGTH(REPLACE(TRIM(COALESCE(title, '')), ' ', '')) + 1
+            ) > 12 THEN NULL
+            WHEN (
+                (
+                    LOWER(COALESCE(title, '')) LIKE '%.%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%?%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%!%'
+                )
+                AND (
+                    LENGTH(TRIM(COALESCE(title, ''))) - LENGTH(REPLACE(TRIM(COALESCE(title, '')), ' ', '')) + 1
+                ) >= 6
+            ) THEN NULL
+            ELSE TRIM(title)
         END
         WHERE {where_contacts}
         """,
@@ -872,6 +982,7 @@ def main() -> None:
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
     try:
+        ensure_hygiene_columns(conn)
         before = count_metrics(conn, municipality_ids)
         run_batch_enrichment(conn, municipality_ids)
         refresh_views(conn)

@@ -72,6 +72,7 @@ SUSPICIOUS_FIELDS = (
     "department",
     "page_type",
     "source_url",
+    "is_likely_noise",
     "suspicious_reason",
 )
 
@@ -260,8 +261,30 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
           department,
           page_type,
           source_url,
+          COALESCE(is_likely_noise, 0) AS is_likely_noise,
           CASE
             WHEN (email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = '') THEN 'missing_email_and_phone'
+            WHEN (
+                role_normalized = 'Assessor'
+                AND LOWER(COALESCE(department, '')) NOT LIKE '%assessor%'
+            )
+            OR (
+                role_normalized = 'Tax Collector'
+                AND LOWER(COALESCE(department, '')) NOT LIKE '%tax%'
+            )
+            OR (
+                role_normalized = 'Town Clerk'
+                AND LOWER(COALESCE(department, '')) NOT LIKE '%clerk%'
+            )
+            OR (
+                role_normalized = 'Building Official'
+                AND LOWER(COALESCE(department, '')) NOT LIKE '%building%'
+            )
+            OR (
+                role_normalized = 'Finance Director'
+                AND LOWER(COALESCE(department, '')) NOT LIKE '%finance%'
+            )
+            THEN 'role_department_mismatch'
             WHEN role_normalized = 'Assessor'
                  AND (
                      LOWER(COALESCE(source_url, '')) LIKE '%tax%'
@@ -296,12 +319,36 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
                      OR LOWER(COALESCE(title, '')) LIKE '%executive assistant%'
                  )
             THEN 'chief_role_assistant_contamination'
+            WHEN COALESCE(is_likely_noise, 0) = 1
+            THEN 'likely_noise_flag'
             ELSE 'review'
           END AS suspicious_reason
         FROM vw_best_role_per_town
         WHERE municipality_id IN ({placeholders(len(municipality_ids))})
           AND (
             ((email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = ''))
+            OR (
+                (
+                    role_normalized = 'Assessor'
+                    AND LOWER(COALESCE(department, '')) NOT LIKE '%assessor%'
+                )
+                OR (
+                    role_normalized = 'Tax Collector'
+                    AND LOWER(COALESCE(department, '')) NOT LIKE '%tax%'
+                )
+                OR (
+                    role_normalized = 'Town Clerk'
+                    AND LOWER(COALESCE(department, '')) NOT LIKE '%clerk%'
+                )
+                OR (
+                    role_normalized = 'Building Official'
+                    AND LOWER(COALESCE(department, '')) NOT LIKE '%building%'
+                )
+                OR (
+                    role_normalized = 'Finance Director'
+                    AND LOWER(COALESCE(department, '')) NOT LIKE '%finance%'
+                )
+            )
             OR (
                 role_normalized = 'Assessor'
                 AND (
@@ -341,6 +388,7 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
                     OR LOWER(COALESCE(title, '')) LIKE '%executive assistant%'
                 )
             )
+            OR COALESCE(is_likely_noise, 0) = 1
           )
         ORDER BY municipality_id, role_normalized
     """

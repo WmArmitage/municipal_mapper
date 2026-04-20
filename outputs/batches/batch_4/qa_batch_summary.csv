@@ -1,0 +1,19 @@
+municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
+ct_easton,Easton,Fairfield County,0,0,0,0
+ct_trumbull,Trumbull,Fairfield County,231,88,7,3
+ct_east_hartford,East Hartford,Hartford County,0,0,0,1
+ct_plainville,Plainville,Hartford County,0,0,0,0
+ct_bridgewater,Bridgewater,Litchfield County,68,43,7,18
+ct_new_hartford,New Hartford,Litchfield County,0,0,0,0
+ct_washington,Washington,Litchfield County,188,53,9,7
+ct_deep_river,Deep River,Middlesex County,0,0,0,0
+ct_hamden,Hamden,New Haven County,232,109,6,1
+ct_north_branford,North Branford,New Haven County,151,62,7,8
+ct_woodbridge,Woodbridge,New Haven County,148,70,6,11
+ct_franklin,Franklin,New London County,29,10,5,16
+ct_north_stonington,North Stonington,New London County,0,0,0,0
+ct_stonington,Stonington,New London County,0,0,0,0
+ct_andover,Andover,Tolland County,0,0,0,0
+ct_tolland,Tolland,Tolland County,0,0,0,0
+ct_eastford,Eastford,Windham County,0,0,0,0
+ct_windham,Windham,Windham County,148,59,7,9

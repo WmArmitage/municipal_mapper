@@ -1,0 +1,2 @@
+municipality_id,role_normalized,name,email,phone,department,page_type,source_url,suspicious_reason
+ct_trumbull,Assessor,The Tax,taxassessor@trumbull-ct.gov,2034525016,Assessor,department_page,https://www.trumbull-ct.gov/274/Tax-Assessor,assessor_tax_mismatch

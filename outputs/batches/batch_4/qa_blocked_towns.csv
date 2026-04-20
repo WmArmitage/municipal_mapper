@@ -1,0 +1,11 @@
+municipality_id,town_name,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class,blocked_reason
+ct_andover,Andover,batch_4,https://www.andoverconnecticut.org/,https://www.andoverconnecticut.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_deep_river,Deep River,batch_4,https://www.deepriverct.us/,https://www.deepriverct.us/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_east_hartford,East Hartford,batch_4,https://www.easthartfordct.gov/,https://www.easthartfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_eastford,Eastford,batch_4,https://www.eastfordct.gov/,https://www.eastfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_easton,Easton,batch_4,https://www.eastonct.gov/,https://www.eastonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_new_hartford,New Hartford,batch_4,https://www.newhartfordct.gov/,https://www.newhartfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_north_stonington,North Stonington,batch_4,https://www.northstoningtonct.gov/,https://www.northstoningtonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_plainville,Plainville,batch_4,https://www.plainvillect.com/,https://www.plainvillect.com/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_stonington,Stonington,batch_4,https://www.stonington-ct.gov/,https://www.stonington-ct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_tolland,Tolland,batch_4,https://www.tollandct.gov/,https://www.tollandct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden

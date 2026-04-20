@@ -279,6 +279,7 @@ def _run_lightweight_migrations(conn: sqlite3.Connection) -> None:
         _ensure_column(conn, "contacts", "address", "TEXT")
         _ensure_column(conn, "contacts", "hours", "TEXT")
         _ensure_column(conn, "contacts", "source_context", "TEXT")
+        _ensure_column(conn, "contacts", "suspicious_reason", "TEXT")
     if _table_exists(conn, "municipalities"):
         _ensure_column(conn, "municipalities", "jobs_url", "TEXT")
         _ensure_column(conn, "municipalities", "directory_url", "TEXT")
