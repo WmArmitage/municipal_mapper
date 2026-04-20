@@ -15,3 +15,4 @@ ct_tolland,Tolland,crawl_diagnostic_zero_yield,,,,,,,https://www.tollandct.gov/,
 ct_trumbull,Trumbull,suspicious_winner,Finance Director,Maria Pires,,2034525013,,staff_directory,https://www.trumbull-ct.gov/Directory.aspx?did=11,,,role_department_mismatch,suspicious_winner
 ct_washington,Washington,suspicious_winner,Finance Director,,,8608682259,,staff_directory,https://www.washingtonct.org/Directory.aspx?did=39,,,role_department_mismatch,suspicious_winner
 ct_windham,Windham,missing_role_groups_2plus,,,,,,,,tax; finance,2,,normal_coverage_gap
+ct_woodbridge,Woodbridge,suspicious_winner,Finance Director,of Finance,,2033893482,,staff_directory,https://www.woodbridgect.org/Directory.aspx?DID=17,,,role_department_mismatch,suspicious_winner

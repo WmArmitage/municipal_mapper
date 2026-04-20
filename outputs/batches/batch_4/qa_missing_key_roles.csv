@@ -6,7 +6,6 @@ ct_plainville,Plainville,executive; assessment; tax; clerk; building; planning; 
 ct_new_hartford,New Hartford,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_deep_river,Deep River,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_hamden,Hamden,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
-ct_woodbridge,Woodbridge,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Land Use
 ct_franklin,Franklin,planning; finance,2,executive; assessment; tax; clerk; building,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official
 ct_north_stonington,North Stonington,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_stonington,Stonington,executive; assessment; tax; clerk; building; planning; finance,7,,
