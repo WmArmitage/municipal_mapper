@@ -14,3 +14,72 @@ ct_waterford,Waterford,New London County,batch_1,2,pending,jobs_aspx_candidate_f
 ct_preston,Preston,New London County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
 ct_willington,Willington,Tolland County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
 ct_brooklyn,Brooklyn,Windham County,batch_1,2,pending,jobs_aspx_candidate_for_county_balance
+ct_danbury,Danbury,Fairfield County,batch_2,2,pending,platform_column_verified_civicplus
+ct_newtown,Newtown,Fairfield County,batch_2,2,pending,platform_column_verified_civicplus
+ct_bristol,Bristol,Hartford County,batch_2,2,pending,platform_column_verified_civicplus
+ct_enfield,Enfield,Hartford County,batch_2,2,pending,platform_column_verified_civicplus
+ct_south_windsor,South Windsor,Hartford County,batch_2,2,pending,platform_column_verified_civicplus
+ct_goshen,Goshen,Litchfield County,batch_2,2,pending,platform_column_verified_civicplus
+ct_roxbury,Roxbury,Litchfield County,batch_2,2,pending,platform_column_verified_civicplus
+ct_clinton,Clinton,Middlesex County,batch_2,2,pending,platform_column_verified_civicplus
+ct_middlefield,Middlefield,Middlesex County,batch_2,2,pending,platform_column_verified_civicplus
+ct_beacon_falls,Beacon Falls,New Haven County,batch_2,2,pending,platform_column_verified_civicplus
+ct_middlebury,Middlebury,New Haven County,batch_2,2,pending,platform_column_verified_civicplus
+ct_west_haven,West Haven,New Haven County,batch_2,2,pending,platform_column_verified_civicplus
+ct_bozrah,Bozrah,New London County,batch_2,2,pending,platform_column_verified_civicplus
+ct_ledyard,Ledyard,New London County,batch_2,2,pending,platform_column_verified_civicplus
+ct_old_lyme,Old Lyme,New London County,batch_2,2,pending,platform_column_verified_civicplus
+ct_columbia,Columbia,Tolland County,batch_2,2,pending,platform_column_verified_civicplus
+ct_ashford,Ashford,Windham County,batch_2,2,pending,platform_column_verified_civicplus
+ct_sterling,Sterling,Windham County,batch_2,2,pending,platform_column_verified_civicplus
+ct_darien,Darien,Fairfield County,batch_3,2,pending,platform_column_verified_civicplus
+ct_norwalk,Norwalk,Fairfield County,batch_3,2,pending,platform_column_verified_civicplus
+ct_burlington,Burlington,Hartford County,batch_3,2,pending,platform_column_verified_civicplus
+ct_newington,Newington,Hartford County,batch_3,2,pending,platform_column_verified_civicplus
+ct_windsor,Windsor,Hartford County,batch_3,2,pending,platform_column_verified_civicplus
+ct_harwinton,Harwinton,Litchfield County,batch_3,2,pending,platform_column_verified_civicplus
+ct_torrington,Torrington,Litchfield County,batch_3,2,pending,platform_column_verified_civicplus
+ct_cromwell,Cromwell,Middlesex County,batch_3,2,pending,platform_column_verified_civicplus
+ct_westbrook,Westbrook,Middlesex County,batch_3,2,pending,platform_column_verified_civicplus
+ct_branford,Branford,New Haven County,batch_3,2,pending,platform_column_verified_civicplus
+ct_milford,Milford,New Haven County,batch_3,2,pending,platform_column_verified_civicplus
+ct_wolcott,Wolcott,New Haven County,batch_3,2,pending,platform_column_verified_civicplus
+ct_colchester,Colchester,New London County,batch_3,2,pending,platform_column_verified_civicplus
+ct_lisbon,Lisbon,New London County,batch_3,2,pending,platform_column_verified_civicplus
+ct_salem,Salem,New London County,batch_3,2,pending,platform_column_verified_civicplus
+ct_coventry,Coventry,Tolland County,batch_3,2,pending,platform_column_verified_civicplus
+ct_canterbury,Canterbury,Windham County,batch_3,2,pending,platform_column_verified_civicplus
+ct_thompson,Thompson,Windham County,batch_3,2,pending,platform_column_verified_civicplus
+ct_easton,Easton,Fairfield County,batch_4,2,pending,platform_column_verified_civicplus
+ct_trumbull,Trumbull,Fairfield County,batch_4,2,pending,platform_column_verified_civicplus
+ct_east_hartford,East Hartford,Hartford County,batch_4,2,pending,platform_column_verified_civicplus
+ct_plainville,Plainville,Hartford County,batch_4,2,pending,platform_column_verified_civicplus
+ct_bridgewater,Bridgewater,Litchfield County,batch_4,2,pending,platform_column_verified_civicplus
+ct_new_hartford,New Hartford,Litchfield County,batch_4,2,pending,platform_column_verified_civicplus
+ct_washington,Washington,Litchfield County,batch_4,2,pending,platform_column_verified_civicplus
+ct_deep_river,Deep River,Middlesex County,batch_4,2,pending,platform_column_verified_civicplus
+ct_hamden,Hamden,New Haven County,batch_4,2,pending,platform_column_verified_civicplus
+ct_north_branford,North Branford,New Haven County,batch_4,2,pending,platform_column_verified_civicplus
+ct_woodbridge,Woodbridge,New Haven County,batch_4,2,pending,platform_column_verified_civicplus
+ct_franklin,Franklin,New London County,batch_4,2,pending,platform_column_verified_civicplus
+ct_north_stonington,North Stonington,New London County,batch_4,2,pending,platform_column_verified_civicplus
+ct_stonington,Stonington,New London County,batch_4,2,pending,platform_column_verified_civicplus
+ct_andover,Andover,Tolland County,batch_4,2,pending,platform_column_verified_civicplus
+ct_tolland,Tolland,Tolland County,batch_4,2,pending,platform_column_verified_civicplus
+ct_eastford,Eastford,Windham County,batch_4,2,pending,platform_column_verified_civicplus
+ct_windham,Windham,Windham County,batch_4,2,pending,platform_column_verified_civicplus
+ct_greenwich,Greenwich,Fairfield County,batch_5,2,pending,platform_column_verified_civicplus
+ct_wilton,Wilton,Fairfield County,batch_5,2,pending,platform_column_verified_civicplus
+ct_east_windsor,East Windsor,Hartford County,batch_5,2,pending,platform_column_verified_civicplus
+ct_rocky_hill,Rocky Hill,Hartford County,batch_5,2,pending,platform_column_verified_civicplus
+ct_kent,Kent,Litchfield County,batch_5,2,pending,platform_column_verified_civicplus
+ct_warren,Warren,Litchfield County,batch_5,2,pending,platform_column_verified_civicplus
+ct_east_hampton,East Hampton,Middlesex County,batch_5,2,pending,platform_column_verified_civicplus
+ct_madison,Madison,New Haven County,batch_5,2,pending,platform_column_verified_civicplus
+ct_oxford,Oxford,New Haven County,batch_5,2,pending,platform_column_verified_civicplus
+ct_lebanon,Lebanon,New London County,batch_5,2,pending,platform_column_verified_civicplus
+ct_norwich,Norwich,New London County,batch_5,2,pending,platform_column_verified_civicplus
+ct_voluntown,Voluntown,New London County,batch_5,2,pending,platform_column_verified_civicplus
+ct_mansfield,Mansfield,Tolland County,batch_5,2,pending,platform_column_verified_civicplus
+ct_pomfret,Pomfret,Windham County,batch_5,2,pending,platform_column_verified_civicplus
+ct_woodstock,Woodstock,Windham County,batch_5,2,pending,platform_column_verified_civicplus
