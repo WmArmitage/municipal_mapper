@@ -1,2 +1,5 @@
-municipality_id,role_normalized,name,email,phone,department,page_type,source_url,suspicious_reason
-ct_trumbull,Assessor,The Tax,taxassessor@trumbull-ct.gov,2034525016,Assessor,department_page,https://www.trumbull-ct.gov/274/Tax-Assessor,assessor_tax_mismatch
+municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
+ct_franklin,Assessor,,,8606427352,"If you are being taxed on property you no longer own, please contact the assessor’s office at",department_page,https://www.franklinct.gov/tax-collector,0,assessor_tax_mismatch
+ct_north_branford,Assessor,Fire Marshal,bbunnell@northbranfordct.gov,4753178773,,other,https://www.northbranfordct.gov/224/Fire-Department,0,role_department_mismatch
+ct_trumbull,Finance Director,Maria Pires,,2034525013,,staff_directory,https://www.trumbull-ct.gov/Directory.aspx?did=11,0,role_department_mismatch
+ct_washington,Finance Director,,,8608682259,,staff_directory,https://www.washingtonct.org/Directory.aspx?did=39,0,role_department_mismatch

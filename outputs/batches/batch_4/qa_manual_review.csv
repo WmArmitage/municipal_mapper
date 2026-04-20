@@ -5,10 +5,13 @@ ct_east_hartford,East Hartford,crawl_diagnostic_zero_yield,,,,,,,https://www.eas
 ct_eastford,Eastford,crawl_diagnostic_zero_yield,,,,,,,https://www.eastfordct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_easton,Easton,crawl_diagnostic_zero_yield,,,,,,,https://www.eastonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_franklin,Franklin,missing_role_groups_2plus,,,,,,,,planning; finance,2,,normal_coverage_gap
+ct_franklin,Franklin,suspicious_winner,Assessor,,,8606427352,"If you are being taxed on property you no longer own, please contact the assessor’s office at",department_page,https://www.franklinct.gov/tax-collector,,,assessor_tax_mismatch,suspicious_winner
 ct_new_hartford,New Hartford,crawl_diagnostic_zero_yield,,,,,,,https://www.newhartfordct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_north_branford,North Branford,suspicious_winner,Assessor,Fire Marshal,bbunnell@northbranfordct.gov,4753178773,,other,https://www.northbranfordct.gov/224/Fire-Department,,,role_department_mismatch,suspicious_winner
 ct_north_stonington,North Stonington,crawl_diagnostic_zero_yield,,,,,,,https://www.northstoningtonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_plainville,Plainville,crawl_diagnostic_zero_yield,,,,,,,https://www.plainvillect.com/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_stonington,Stonington,crawl_diagnostic_zero_yield,,,,,,,https://www.stonington-ct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_tolland,Tolland,crawl_diagnostic_zero_yield,,,,,,,https://www.tollandct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
-ct_trumbull,Trumbull,suspicious_winner,Assessor,The Tax,taxassessor@trumbull-ct.gov,2034525016,Assessor,department_page,https://www.trumbull-ct.gov/274/Tax-Assessor,,,assessor_tax_mismatch,suspicious_winner
+ct_trumbull,Trumbull,suspicious_winner,Finance Director,Maria Pires,,2034525013,,staff_directory,https://www.trumbull-ct.gov/Directory.aspx?did=11,,,role_department_mismatch,suspicious_winner
+ct_washington,Washington,suspicious_winner,Finance Director,,,8608682259,,staff_directory,https://www.washingtonct.org/Directory.aspx?did=39,,,role_department_mismatch,suspicious_winner
 ct_windham,Windham,missing_role_groups_2plus,,,,,,,,tax; finance,2,,normal_coverage_gap

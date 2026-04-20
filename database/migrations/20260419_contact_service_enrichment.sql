@@ -235,6 +235,16 @@ SET
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%tax collector%'
         THEN 'Tax Collector'
         WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+            'revenue collector',
+            'tax office clerk',
+            'delinquent & deferral tax clerk'
+        )
+             AND (
+                 LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%tax%'
+                 OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%revenue%'
+             )
+        THEN 'Tax Collector'
+        WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
             'town and city clerk, registrar of vital statistics',
             'town and city clerk',
             'deputy town and city clerk',
@@ -251,6 +261,12 @@ SET
         )
         THEN 'Building Official'
         WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+            'building inspector',
+            'code official'
+        )
+             AND LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%building%'
+        THEN 'Building Official'
+        WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
             'code enforcement officer',
             'zoning/code enforcement officer',
             'zoning/ code enforcement officer'
@@ -261,6 +277,19 @@ SET
              OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%building department%'
              OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%building%'
         THEN 'Building Official'
+        WHEN LOWER(TRIM(COALESCE(title, ''))) = 'land use administrator'
+             AND (
+                 LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%land use%'
+                 OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%planning%'
+                 OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%zoning%'
+             )
+        THEN 'Planner'
+        WHEN LOWER(TRIM(COALESCE(title, ''))) = 'zoning administrator'
+             AND (
+                 LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%planning%'
+                 OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%zoning%'
+             )
+        THEN 'Planner'
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%land use%'
         THEN 'Land Use'
     WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%planner%'
@@ -274,9 +303,21 @@ SET
         'assistant director of finance - budget & grants',
         'assistant director of finance - operations',
         'director of finance and revenue',
-        'director of finance and administration'
+        'director of finance and administration',
+        'administrative officer / director of finance'
     )
          OR LOWER(TRIM(COALESCE(title, ''))) LIKE 'assistant director of finance -%'
+         OR (
+             LOWER(TRIM(COALESCE(title, ''))) IN (
+                 'finance manager',
+                 'finance administrator',
+                 'accounting manager'
+             )
+             AND (
+                 LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%finance%'
+                 OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
+             )
+         )
          OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
     THEN 'Finance Director'
     WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
@@ -299,6 +340,17 @@ END,
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%assessor%'
         THEN 'assessor'
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%tax collector%'
+             OR (
+                 LOWER(TRIM(COALESCE(title, ''))) IN (
+                     'revenue collector',
+                     'tax office clerk',
+                     'delinquent & deferral tax clerk'
+                 )
+                 AND (
+                     LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%tax%'
+                     OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%revenue%'
+                 )
+             )
         THEN 'tax_collector'
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%town clerk%'
         THEN 'town_clerk'
@@ -312,6 +364,13 @@ END,
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
              OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
              OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance%'
+             OR (
+                 LOWER(TRIM(COALESCE(title, ''))) = 'accounting manager'
+                 AND (
+                     LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%finance%'
+                     OR LOWER(COALESCE(NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
+                 )
+             )
         THEN 'finance'
         ELSE NULL
     END;
@@ -327,6 +386,7 @@ SET role_normalized = CASE
         'assistant director of finance - operations',
         'director of finance and revenue',
         'director of finance and administration',
+        'administrative officer / director of finance',
         'comptroller',
         'chief financial officer',
         'cfo'
@@ -352,6 +412,7 @@ WHERE NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NULL
           'assistant director of finance - operations',
           'director of finance and revenue',
           'director of finance and administration',
+          'administrative officer / director of finance',
           'comptroller',
           'chief financial officer',
           'cfo',
