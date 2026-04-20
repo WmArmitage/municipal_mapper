@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+database/master.sqlite
+data/raw/*
+data/processed/*
+data/exports/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/exports/.gitkeep
+

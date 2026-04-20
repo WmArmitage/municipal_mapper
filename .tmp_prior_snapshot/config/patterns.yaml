@@ -1,0 +1,61 @@
+link_keywords:
+  gis:
+    - gis
+    - map
+    - mapping
+    - assessor map
+  property_cards:
+    - property card
+    - property record
+    - card
+    - assessor database
+  tax_payment:
+    - tax bill
+    - tax payment
+    - pay taxes
+    - tax collector
+  jobs:
+    - jobs
+    - employment
+    - careers
+    - human resources
+  permits:
+    - permit
+    - permits
+    - land use
+    - zoning
+    - building
+  agendas_minutes:
+    - agenda
+    - minutes
+    - meeting
+    - board of selectmen
+
+contact_patterns:
+  role_prefixes:
+    - assessor
+    - clerk
+    - taxcollector
+    - tax
+    - zoning
+    - building
+    - planning
+    - police
+    - fire
+    - recreation
+
+vendor_hints:
+  CivicPlus:
+    - civicplus.com
+  AxisGIS:
+    - axisgis.com
+  PropertyRecordCards:
+    - propertyrecordcards.com
+  MyTaxBill:
+    - mytaxbill.org
+  RecDesk:
+    - recdesk.com
+  GovOffice:
+    - govoffice.com
+  Revize:
+    - revize.com
