@@ -1,0 +1,16 @@
+municipality_id,town_name,missing_roles,missing_count,present_key_roles
+ct_chester,Chester,First Selectman; Mayor; Town Manager; Assessor; Town Clerk,5,Tax Collector
+ct_essex,Essex,Mayor; Town Manager; Assessor,3,First Selectman; Tax Collector; Town Clerk
+ct_haddam,Haddam,First Selectman; Mayor; Town Manager; Town Clerk,4,Assessor; Tax Collector
+ct_middletown,Middletown,First Selectman; Mayor; Town Manager; Town Clerk,4,Assessor; Tax Collector
+ct_old_saybrook,Old Saybrook,First Selectman; Mayor; Town Manager; Town Clerk,4,Assessor; Tax Collector
+ct_brookfield,Brookfield,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_granby,Granby,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_wethersfield,Wethersfield,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_sharon,Sharon,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_east_haven,East Haven,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_orange,Orange,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_waterford,Waterford,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_preston,Preston,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_willington,Willington,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
+ct_brooklyn,Brooklyn,First Selectman; Mayor; Town Manager; Assessor; Tax Collector; Town Clerk,6,
