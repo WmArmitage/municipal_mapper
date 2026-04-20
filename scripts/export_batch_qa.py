@@ -16,14 +16,28 @@ from src.batch_manifest import (
     load_seed_platform_map,
 )
 
-KEY_ROLES = (
-    "First Selectman",
-    "Mayor",
-    "Town Manager",
-    "Assessor",
-    "Tax Collector",
-    "Town Clerk",
-)
+ROLE_GROUPS: dict[str, tuple[str, ...]] = {
+    "executive": (
+        "First Selectman",
+        "Mayor",
+        "Town Manager",
+        "Town Administrator",
+    ),
+    "assessment": ("Assessor",),
+    "tax": ("Tax Collector",),
+    "clerk": ("Town Clerk",),
+    "building": ("Building Official",),
+    "planning": (
+        "Planner",
+        "Land Use",
+        "Zoning Enforcement Officer",
+        "ZEO",
+    ),
+    "finance": (
+        "Finance Director",
+        "Treasurer",
+    ),
+}
 
 ROLE_WINNER_FIELDS = (
     "contact_id",
@@ -63,9 +77,10 @@ SUSPICIOUS_FIELDS = (
 MISSING_KEY_ROLE_FIELDS = (
     "municipality_id",
     "town_name",
-    "missing_roles",
-    "missing_count",
-    "present_key_roles",
+    "missing_role_groups",
+    "missing_group_count",
+    "present_role_groups",
+    "present_group_roles",
 )
 
 MANUAL_REVIEW_FIELDS = (
@@ -79,8 +94,8 @@ MANUAL_REVIEW_FIELDS = (
     "department",
     "page_type",
     "source_url",
-    "missing_roles",
-    "missing_count",
+    "missing_role_groups",
+    "missing_group_count",
     "suspicious_reason",
 )
 
@@ -287,17 +302,26 @@ def build_missing_key_roles(
     for municipality in municipalities:
         municipality_id = municipality["municipality_id"]
         present = role_map.get(municipality_id, set())
-        missing = [role for role in KEY_ROLES if role not in present]
-        if not missing:
+        present_groups: list[str] = []
+        missing_groups: list[str] = []
+        present_group_roles: list[str] = []
+        for group_name, group_roles in ROLE_GROUPS.items():
+            matched_roles = [role for role in group_roles if role in present]
+            if matched_roles:
+                present_groups.append(group_name)
+                present_group_roles.append(f"{group_name}: {', '.join(matched_roles)}")
+            else:
+                missing_groups.append(group_name)
+        if not missing_groups:
             continue
-        present_key = [role for role in KEY_ROLES if role in present]
         out.append(
             {
                 "municipality_id": municipality_id,
                 "town_name": municipality["town_name"],
-                "missing_roles": "; ".join(missing),
-                "missing_count": len(missing),
-                "present_key_roles": "; ".join(present_key),
+                "missing_role_groups": "; ".join(missing_groups),
+                "missing_group_count": len(missing_groups),
+                "present_role_groups": "; ".join(present_groups),
+                "present_group_roles": "; ".join(present_group_roles),
             }
         )
     return out
@@ -325,21 +349,21 @@ def build_manual_review_rows(
                 "department": row.get("department"),
                 "page_type": row.get("page_type"),
                 "source_url": row.get("source_url"),
-                "missing_roles": "",
-                "missing_count": "",
+                "missing_role_groups": "",
+                "missing_group_count": "",
                 "suspicious_reason": row.get("suspicious_reason"),
             }
         )
 
     for row in missing_role_rows:
-        missing_count = int(row.get("missing_count") or 0)
-        if missing_count < 2:
+        missing_group_count = int(row.get("missing_group_count") or 0)
+        if missing_group_count < 2:
             continue
         out.append(
             {
                 "municipality_id": row["municipality_id"],
                 "town_name": row["town_name"],
-                "review_type": "missing_key_roles_2plus",
+                "review_type": "missing_role_groups_2plus",
                 "role_normalized": "",
                 "name": "",
                 "email": "",
@@ -347,8 +371,8 @@ def build_manual_review_rows(
                 "department": "",
                 "page_type": "",
                 "source_url": "",
-                "missing_roles": row["missing_roles"],
-                "missing_count": missing_count,
+                "missing_role_groups": row["missing_role_groups"],
+                "missing_group_count": missing_group_count,
                 "suspicious_reason": "",
             }
         )

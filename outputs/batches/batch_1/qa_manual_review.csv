@@ -1,67 +1,20 @@
 municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_roles,missing_count,suspicious_reason
 ct_brookfield,Brookfield,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_brookfield,Brookfield,suspicious_winner,Assessor,,,8607249100,Assessor,department_page,https://www.brookfieldct.gov/217/Tax-Collector,,,missing_email
-ct_brookfield,Brookfield,suspicious_winner,Building Official,Assistant Building,,2037757305,Building Official,department_page,https://www.brookfieldct.gov/231/Building-Department,,,missing_email
-ct_brookfield,Brookfield,suspicious_winner,First Selectman,Executive Assistant,,2037757301,,other,https://www.brookfieldct.gov/228/First-Selectmans-Office,,,missing_email
-ct_brookfield,Brookfield,suspicious_winner,Land Use,Amy Curran,,2037757316,Planning,department_page,https://www.brookfieldct.gov/169/Planning-Zoning-Commission,,,missing_email
-ct_brookfield,Brookfield,suspicious_winner,Planner,Francis Lollie,,2037757859,Planning,department_page,https://www.brookfieldct.gov/169/Planning-Zoning-Commission,,,missing_email
-ct_brookfield,Brookfield,suspicious_winner,Tax Collector,,,2037757304,"If you have any questions, you can email the Tax Collector or by phone",department_page,https://www.brookfieldct.gov/217/Tax-Collector,,,missing_email
-ct_brookfield,Brookfield,suspicious_winner,Town Clerk,New Milford,,8603556029,Town Clerk,department_page,https://www.brookfieldct.gov/216/Town-Clerk,,,missing_email
+ct_brookfield,Brookfield,suspicious_winner,Assessor,,,8607249100,Assessor,department_page,https://www.brookfieldct.gov/217/Tax-Collector,,,assessor_tax_mismatch
+ct_brookfield,Brookfield,suspicious_winner,First Selectman,Executive Assistant,,2037757301,,other,https://www.brookfieldct.gov/228/First-Selectmans-Office,,,chief_role_assistant_contamination
 ct_brooklyn,Brooklyn,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_brooklyn,Brooklyn,suspicious_winner,Land Use,,,8607793411,Land Use Department Parks & Recreation,staff_directory,https://www.brooklynct.org/Directory.aspx,,,missing_email
-ct_brooklyn,Brooklyn,suspicious_winner,Tax Collector,,,8607793411,"Jocelyne Ruffo CCMC, Tax Collector Phone",department_page,https://www.brooklynct.org/341/Tax-Collector,,,missing_email
 ct_chester,Chester,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_chester,Chester,suspicious_winner,Assessor,Emily Eckenroth,,8605260013,"Emily Eckenroth Assessor, CCMA I",department_page,https://www.chesterct.org/1393/Assessor,,,missing_email
-ct_chester,Chester,suspicious_winner,Treasurer,Emergency Management,,8605260013,Emergency Management Finance/Treasurer,staff_directory,https://www.chesterct.org/Directory.aspx,,,missing_email
 ct_east_haven,East Haven,missing_key_roles_2plus,,,,,,,,First Selectman; Town Manager,2,
-ct_east_haven,East Haven,suspicious_winner,Building Official,Administrative Assistant,rdeluca@easthaven-ct.gov,2034683217,Building Official,department_page,https://www.easthaven-ct.gov/168/Building-Department,,,assistant_name
-ct_east_haven,East Haven,suspicious_winner,Finance Director,,,2034683210,,staff_directory,https://www.easthaven-ct.gov/Directory.aspx?did=11,,,missing_email
-ct_east_haven,East Haven,suspicious_winner,Planner,Administrative Assistant,msantamaria@easthaven-ct.gov,,Administrative Assistant Email Melissa SantaMaria Planning & Zoning Department Physical Address,department_page,https://www.easthaven-ct.gov/183/Planning-Zoning-Department,,,assistant_name
 ct_essex,Essex,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_essex,Essex,suspicious_winner,Assessor,,assessor@essexct.gov,8607674340,assessor,department_page,https://www.essexct.gov/261/Tax-Collector,,,assessor_tax_url_mismatch
-ct_essex,Essex,suspicious_winner,Land Use,,,8607674340,Planning,department_page,https://www.essexct.gov/703/Land-Use---Planning-Zoning-and-Inland-We,,,missing_email
-ct_essex,Essex,suspicious_winner,Treasurer,,,8607674340,Treasurer,staff_directory,https://www.essexct.gov/Directory.aspx,,,missing_email
+ct_essex,Essex,suspicious_winner,Assessor,,assessor@essexct.gov,8607674340,assessor,department_page,https://www.essexct.gov/261/Tax-Collector,,,assessor_tax_mismatch
 ct_granby,Granby,missing_key_roles_2plus,,,,,,,,Mayor; Tax Collector,2,
-ct_granby,Granby,suspicious_winner,Assessor,,,8608445311,"Susan Altieri, CCMA II Assessor Phone",department_page,https://www.granby-ct.gov/162/Assessor,,,missing_email
-ct_granby,Granby,suspicious_winner,Building Official,Land Use Coordinator,,8608445318,"Deltenre, Renee Land Use Coordinator Skilton, Joel Building Official / Zoning Enforcement",staff_directory,https://www.granby-ct.gov/Directory.aspx?did=7,,,missing_email
-ct_granby,Granby,suspicious_winner,First Selectman,,,8608445240,,board_page,https://www.granby-ct.gov/190/Board-of-Selectmen,,,missing_email
-ct_granby,Granby,suspicious_winner,Planner,Land Use Coordinator,,8608445318,Zoning,department_page,https://www.granby-ct.gov/169/Building-Zoning-Enforcement,,,missing_email
-ct_granby,Granby,suspicious_winner,Town Manager,,,8608445319,Planning,department_page,https://www.granby-ct.gov/385/Planning-Zoning-Commission,,,missing_email
 ct_haddam,Haddam,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_haddam,Haddam,suspicious_winner,Land Use,,,8603458531,Higganum Cove Preserve Commission Land Use Department,staff_directory,https://www.haddam.org/Directory.aspx,,,missing_email
-ct_haddam,Haddam,suspicious_winner,Town Clerk,,,8603450979,,other,https://www.haddam.org/509/Registrar-of-Voters,,,missing_email
 ct_middletown,Middletown,missing_key_roles_2plus,,,,,,,,First Selectman; Town Manager,2,
-ct_middletown,Middletown,suspicious_winner,Building Official,Assistant Building,bill.lardi@middletownct.gov,8606384875,Building Official,department_page,https://www.middletownct.gov/188/Building-Division,,,assistant_name
-ct_middletown,Middletown,suspicious_winner,Land Use,Land Use,,8606384590,Land Use Middletown Fire Department,staff_directory,https://www.middletownct.gov/Directory.aspx,,,missing_email
 ct_old_saybrook,Old Saybrook,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_old_saybrook,Old Saybrook,suspicious_winner,Assessor,Floor West,taxserv@taxserv.com,8607249100,Erin Colwell Tax Collector,department_page,https://www.oldsaybrookct.gov/165/Tax-Collector,,,assessor_tax_url_mismatch
-ct_old_saybrook,Old Saybrook,suspicious_winner,Building Official,Old Saybrook,,8603953123,Building Department,department_page,https://www.oldsaybrookct.gov/formcenter/Building-Department-5/Contact-the-Building-Department-46,,,missing_email
-ct_old_saybrook,Old Saybrook,suspicious_winner,Finance Director,,,8603953525,,other,https://www.oldsaybrookct.gov/175/Finance-Department,,,missing_email
-ct_old_saybrook,Old Saybrook,suspicious_winner,Planner,Old Saybrook,,8603953123,Zoning,department_page,https://www.oldsaybrookct.gov/AgendaCenter/Zoning-Commission-18/,,,missing_email
-ct_old_saybrook,Old Saybrook,suspicious_winner,Town Clerk,Old Saybrook,,8603953123,Town Clerk,department_page,https://www.oldsaybrookct.gov/164/Town-Clerk,,,missing_email
-ct_old_saybrook,Old Saybrook,suspicious_winner,Treasurer,Transfer Station,,8603953187,Transfer Station Treasurer,staff_directory,https://www.oldsaybrookct.gov/directory.aspx,,,missing_email
+ct_old_saybrook,Old Saybrook,suspicious_winner,First Selectman,,building.department@oldsaybrookct.gov,8606613300,,department_page,https://www.oldsaybrookct.gov/179/Building,,,first_selectman_role_page_mismatch
 ct_orange,Orange,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_orange,Orange,suspicious_winner,Assessor,,,2038914736,tax collector,department_page,https://www.orange-ct.gov/206/Tax-Collector,,,missing_email
-ct_orange,Orange,suspicious_winner,Building Official,,,2038914713,Bob Wagner Building Official Contact Building Department Phone: More Information,department_page,https://www.orange-ct.gov/158/Building-Department,,,missing_email
-ct_orange,Orange,suspicious_winner,Finance Director,,,2038914740,,other,https://www.orange-ct.gov/162/Finance-Department,,,missing_email
-ct_orange,Orange,suspicious_winner,Planner,,,2038914700,Zoning,department_page,https://www.orange-ct.gov/165/Plan-Zoning-Department,,,missing_email
-ct_orange,Orange,suspicious_winner,Tax Collector,General Tax Line,,2038914736,General Tax Line Phone: Thomas Hurley Tax Collector,department_page,https://www.orange-ct.gov/206/Tax-Collector,,,missing_email
-ct_orange,Orange,suspicious_winner,Town Clerk,,,2038914730,Us Mary Shaw Town Clerk Contact Town Clerk's Office Phone: More Information,department_page,https://www.orange-ct.gov/212/Town-Clerk,,,missing_email
-ct_orange,Orange,suspicious_winner,Treasurer,,,2032912186,,other,https://www.orange-ct.gov/368/Treasury-Department,,,missing_email
 ct_preston,Preston,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_preston,Preston,suspicious_winner,Tax Collector,Remove Vehicle from,,8608875581,Phone: FAQs of the Tax Collector Remove Vehicle from Tax Roll,department_page,https://www.preston-ct.org/214/Tax-Collector,,,missing_email
-ct_preston,Preston,suspicious_winner,Treasurer,Transfer Station,,8608861836,Transfer Station Treasurer,staff_directory,https://www.preston-ct.org/Directory.aspx,,,missing_email
 ct_sharon,Sharon,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_sharon,Sharon,suspicious_winner,Building Official,Sharon Housing Authority,,8603641400,Sharon Housing Authority Sharon Parks & Recreation Committee Town Garage Building Committee Town Hall Committee,staff_directory,https://www.sharonct.gov/Directory.aspx,,,missing_email
-ct_sharon,Sharon,suspicious_winner,Planner,,,8603645224,Zoning,department_page,https://www.sharonct.gov/162/Zoning-Board-of-Appeals,,,missing_email
-ct_sharon,Sharon,suspicious_winner,Treasurer,,,8603645789,Town Treasurer,staff_directory,https://www.sharonct.gov/Directory.aspx,,,missing_email
 ct_waterford,Waterford,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_waterford,Waterford,suspicious_winner,Assessor,,,8604420553,Planning,department_page,https://www.waterfordct.org/AgendaCenter/Planning-Zoning-Commission-33/,,,missing_email
-ct_waterford,Waterford,suspicious_winner,Building Official,Assistant Building,bmacko@waterfordct.org,8604445826,Building Official,department_page,https://ct-waterford.civicplus.com/201/Building,,,assistant_name
-ct_waterford,Waterford,suspicious_winner,First Selectman,Executive Assistant,swithey@waterfordct.org,8604445834,,other,https://www.waterfordct.org/227/First-Selectmans-Office,,,assistant_name
 ct_wethersfield,Wethersfield,missing_key_roles_2plus,,,,,,,,First Selectman; Mayor,2,
-ct_wethersfield,Wethersfield,suspicious_winner,Tax Collector,Senior Center,,8607212770,Senior Center Tax Collector,staff_directory,https://wethersfieldct.gov/directory.aspx,,,missing_email
 ct_willington,Willington,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_willington,Willington,suspicious_winner,First Selectman,,,8604873100,,staff_directory,https://www.willingtonct.gov/Directory.aspx?did=46,,,missing_email
-ct_willington,Willington,suspicious_winner,Planner,Transfer Station,,8606843626,Tri-Centennial Committee Transfer Station Zoning Board of Appeals Willington Cemetery Association,staff_directory,https://www.willingtonct.gov/Directory.aspx,,,missing_email
-ct_willington,Willington,suspicious_winner,Tax Collector,,,8604873111,Tax Collector,staff_directory,https://www.willingtonct.gov/Directory.aspx,,,missing_email
