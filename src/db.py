@@ -135,21 +135,56 @@ def upsert_contact(conn: sqlite3.Connection, row: dict) -> None:
             :contact_id, :municipality_id, :name, :title, :department, :email, :email_type, :phone, :phone_ext, :address, :hours, :source_context, :source_url, :confidence
         )
         ON CONFLICT(contact_id) DO UPDATE SET
-            name = COALESCE(excluded.name, contacts.name),
-            title = COALESCE(excluded.title, contacts.title),
-            department = COALESCE(excluded.department, contacts.department),
-            email_type = COALESCE(excluded.email_type, contacts.email_type),
-            phone = COALESCE(excluded.phone, contacts.phone),
-            phone_ext = COALESCE(excluded.phone_ext, contacts.phone_ext),
-            address = COALESCE(excluded.address, contacts.address),
-            hours = COALESCE(excluded.hours, contacts.hours),
+            name = CASE
+                WHEN contacts.name IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.name, contacts.name)
+                ELSE contacts.name
+            END,
+            title = CASE
+                WHEN contacts.title IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.title, contacts.title)
+                ELSE contacts.title
+            END,
+            department = CASE
+                WHEN contacts.department IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.department, contacts.department)
+                ELSE contacts.department
+            END,
+            email_type = CASE
+                WHEN contacts.email_type IS NULL OR contacts.email_type = '' OR contacts.email_type = 'unknown' OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.email_type, contacts.email_type)
+                ELSE contacts.email_type
+            END,
+            phone = CASE
+                WHEN contacts.phone IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.phone, contacts.phone)
+                ELSE contacts.phone
+            END,
+            phone_ext = CASE
+                WHEN contacts.phone_ext IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.phone_ext, contacts.phone_ext)
+                ELSE contacts.phone_ext
+            END,
+            address = CASE
+                WHEN contacts.address IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.address, contacts.address)
+                ELSE contacts.address
+            END,
+            hours = CASE
+                WHEN contacts.hours IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.hours, contacts.hours)
+                ELSE contacts.hours
+            END,
             source_context = CASE
-                WHEN excluded.phone IS NOT NULL
-                    AND (contacts.phone IS NULL OR excluded.confidence >= contacts.confidence)
+                WHEN contacts.source_context IS NULL OR excluded.confidence >= contacts.confidence
                 THEN COALESCE(excluded.source_context, contacts.source_context)
                 ELSE contacts.source_context
             END,
-            source_url = COALESCE(excluded.source_url, contacts.source_url),
+            source_url = CASE
+                WHEN contacts.source_url IS NULL OR excluded.confidence >= contacts.confidence
+                THEN COALESCE(excluded.source_url, contacts.source_url)
+                ELSE contacts.source_url
+            END,
             confidence = MAX(contacts.confidence, excluded.confidence)
         """,
         row,

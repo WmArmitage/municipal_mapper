@@ -59,6 +59,28 @@ class ParserDepartmentTests(unittest.TestCase):
         self.assertIsNone(contacts[0]["name"])
         self.assertEqual(contacts[0]["department"], "Building Official")
 
+    def test_reject_email_prefix_as_name(self) -> None:
+        text = "Email Tax Collector taxcollector@townct.gov (860) 555-1212"
+        contacts = extract_contacts(text, "https://example.org/tax", page_type="department_page")
+        self.assertGreaterEqual(len(contacts), 1)
+        row = contacts[0]
+        self.assertIsNone(row["name"])
+        self.assertIn("Tax Collector", str(row.get("title") or row.get("department") or ""))
+
+    def test_reject_for_prefix_as_name(self) -> None:
+        text = "For Motor Vehicle Questions assessor@townct.gov (860) 555-1212"
+        contacts = extract_contacts(text, "https://example.org/assessor", page_type="department_page")
+        self.assertGreaterEqual(len(contacts), 1)
+        self.assertIsNone(contacts[0]["name"])
+
+    def test_first_selectman_preserved_as_role_not_name(self) -> None:
+        text = "First Selectman nneedleman@townct.gov (860) 555-1212"
+        contacts = extract_contacts(text, "https://example.org/selectmen", page_type="official_page")
+        self.assertGreaterEqual(len(contacts), 1)
+        row = contacts[0]
+        self.assertIsNone(row["name"])
+        self.assertEqual(str(row.get("title") or ""), "First Selectman")
+
     def test_no_contact_row_without_email_or_phone(self) -> None:
         text = "Public Works Department"
         contacts = extract_contacts(text, "https://example.org/public-works")
@@ -115,7 +137,7 @@ class ParserDepartmentTests(unittest.TestCase):
         self.assertTrue(any(c.get("phone") == "8605551212" for c in contacts))
         self.assertTrue(any((c.get("title") or "").lower() == "assessor" for c in contacts))
 
-    def test_table_rows_with_shared_email_keep_multiple_people(self) -> None:
+    def test_table_rows_with_shared_email_are_deduped(self) -> None:
         html = """
         <table>
             <thead>
@@ -138,9 +160,35 @@ class ParserDepartmentTests(unittest.TestCase):
         </table>
         """
         contacts = extract_contacts(html, "https://example.org/directory", page_type="directory_page")
-        names = {str(c.get("name") or "") for c in contacts if c.get("email") == "staff@townct.gov"}
-        self.assertIn("Jane Doe", names)
-        self.assertIn("John Roe", names)
+        shared = [c for c in contacts if c.get("email") == "staff@townct.gov"]
+        self.assertEqual(len(shared), 1)
+
+    def test_town_clerk_style_rows_keep_distinct_titles(self) -> None:
+        html = """
+        <table>
+            <thead>
+                <tr><th>Name</th><th>Title</th><th>Email</th><th>Phone</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Caitlin Riley</td>
+                    <td>Town Clerk</td>
+                    <td><a href="mailto:criley@townct.gov">Email</a></td>
+                    <td>(860) 555-1290</td>
+                </tr>
+                <tr>
+                    <td>Mary Hermann</td>
+                    <td>Assistant Town Clerk</td>
+                    <td><a href="mailto:mhermann@townct.gov">Email</a></td>
+                    <td>(860) 555-1280</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+        contacts = extract_contacts(html, "https://example.org/town-clerk", page_type="directory_page")
+        by_email = {str(c.get("email") or ""): c for c in contacts}
+        self.assertEqual(by_email["criley@townct.gov"]["title"], "Town Clerk")
+        self.assertEqual(by_email["mhermann@townct.gov"]["title"], "Assistant Town Clerk")
 
     def test_contact_row_includes_address_and_hours_context(self) -> None:
         text = """

@@ -62,6 +62,8 @@ TITLE_HINTS = (
     "zoning enforcement officer",
     "planner",
     "finance director",
+    "assistant town clerk",
+    "regional animal control officer",
     "human resources",
     "police chief",
     "fire chief",
@@ -197,6 +199,59 @@ NAME_STOPWORDS = {
     "return",
     "calls",
 }
+ROLE_LABEL_NAME_REJECTS = {
+    "first selectman",
+    "board of selectmen",
+    "selectman",
+    "mayor",
+    "town manager",
+    "town administrator",
+    "town clerk",
+    "assistant town clerk",
+    "tax collector",
+    "assessor",
+    "finance director",
+    "building official",
+    "registrar",
+    "regional animal control officer",
+    "animal control officer",
+}
+NAME_ARTIFACT_PREFIXES = (
+    "email ",
+    "for ",
+    "click ",
+    "view ",
+    "contact ",
+    "call ",
+)
+NAME_ARTIFACT_TOKENS = {
+    "email",
+    "phone",
+    "contact",
+    "click",
+    "view",
+    "here",
+    "learn more",
+    "read more",
+    "details",
+}
+TITLE_NEAR_NAME_HINTS = {
+    "assistant",
+    "director",
+    "officer",
+    "chief",
+    "manager",
+    "administrator",
+    "clerk",
+    "collector",
+    "assessor",
+    "selectman",
+    "mayor",
+    "finance",
+    "animal control",
+    "registrar",
+    "planner",
+}
 STAFF_FRIENDLY_PAGE_TYPES = {
     "official_page",
     "department_page",
@@ -288,6 +343,24 @@ def guess_title(snippets: list[str]) -> tuple[str | None, float]:
     return None, 0.0
 
 
+def _is_role_label(value: str | None) -> bool:
+    normalized = _normalize_key_text(value)
+    if not normalized:
+        return False
+    if normalized in ROLE_LABEL_NAME_REJECTS:
+        return True
+    return any(_keyword_in_text(normalized, role) for role in ROLE_LABEL_NAME_REJECTS)
+
+
+def _normalize_contact_name(value: str | float | None) -> str | None:
+    candidate = normalize_whitespace(str(value or ""))
+    if not candidate:
+        return None
+    if not _is_name_candidate(candidate):
+        return None
+    return candidate
+
+
 def guess_name(context: str, email: str | None = None, prefer_department: bool = False) -> str | None:
     if not context:
         return None
@@ -374,10 +447,15 @@ def extract_contacts(
     cleaned_text = _prepare_text_for_extraction(text or "")
     lines = [normalize_whitespace(line) or "" for line in cleaned_text.splitlines()]
     lines = [line for line in lines if len(line) >= 3]
-    contacts: list[dict[str, str | float | None]] = []
-    seen_keys: set[tuple[str, str, str, str, str]] = set()
+    contacts_by_key: dict[tuple[str, ...], dict[str, str | float | None]] = {}
     all_phone_candidates = extract_phone_candidates(cleaned_text)
     staff_mode = is_staff_friendly_page_type(page_type)
+
+    if staff_mode:
+        for structured in extract_table_contact_rows(text, source_url):
+            _upsert_contact_candidate(contacts_by_key, structured, source_url)
+        for structured in extract_structured_contact_blocks(text, source_url):
+            _upsert_contact_candidate(contacts_by_key, structured, source_url)
 
     for idx, line in enumerate(lines):
         nearby_lines = _neighboring_lines(lines, idx, radius=2 if staff_mode else 1)
@@ -439,6 +517,17 @@ def extract_contacts(
                     if candidate and _is_name_candidate(candidate):
                         name = candidate
 
+            if name and _is_role_label(name):
+                if not title:
+                    title = normalize_whitespace(name)
+                name = None
+
+            nearest_title = _infer_nearest_title(nearby_lines, name=name, anchor_line=line)
+            if nearest_title and (not title or _is_role_label(title)):
+                title = nearest_title
+            if not title and department and _is_role_label(department):
+                title = department
+
             email_type = infer_email_type(email)
             confidence = 0.28
             if email:
@@ -459,18 +548,8 @@ def extract_contacts(
                 confidence += 0.05
             confidence = round(min(max(confidence, 0.2), 0.99), 3)
 
-            dedupe_key = (
-                (email or "").lower(),
-                phone or "",
-                (name or "").strip().lower(),
-                (title or "").strip().lower(),
-                (department or "").strip().lower(),
-            )
-            if dedupe_key in seen_keys:
-                continue
-            seen_keys.add(dedupe_key)
-
-            contacts.append(
+            _upsert_contact_candidate(
+                contacts_by_key,
                 {
                     "name": name,
                     "title": title,
@@ -484,28 +563,135 @@ def extract_contacts(
                     "source_context": source_context,
                     "source_url": source_url,
                     "confidence": confidence,
-                }
+                },
+                source_url,
             )
 
-    if staff_mode:
-        for structured in [*extract_table_contact_rows(text, source_url), *extract_structured_contact_blocks(text, source_url)]:
-            email = str(structured.get("email") or "").strip().lower() or None
-            phone = str(structured.get("phone") or "").strip() or None
-            if not email and not phone:
-                continue
-            dedupe_key = (
-                (email or "").lower(),
-                phone or "",
-                str(structured.get("name") or "").strip().lower(),
-                str(structured.get("title") or "").strip().lower(),
-                str(structured.get("department") or "").strip().lower(),
-            )
-            if dedupe_key in seen_keys:
-                continue
-            seen_keys.add(dedupe_key)
-            contacts.append(structured)
+    return sorted(
+        contacts_by_key.values(),
+        key=lambda row: (
+            -float(row.get("confidence") or 0.0),
+            str(row.get("email") or ""),
+            str(row.get("name") or ""),
+            str(row.get("title") or ""),
+        ),
+    )
 
-    return contacts
+
+def _upsert_contact_candidate(
+    store: dict[tuple[str, ...], dict[str, str | float | None]],
+    candidate: dict[str, str | float | None],
+    source_url: str,
+) -> None:
+    normalized = _normalize_contact_candidate(candidate, source_url)
+    email = str(normalized.get("email") or "").strip().lower()
+    phone = str(normalized.get("phone") or "").strip()
+    if not email and not phone:
+        return
+
+    key = _contact_candidate_key(normalized, source_url)
+    existing = store.get(key)
+    if existing is None:
+        store[key] = normalized
+        return
+    store[key] = _merge_contact_candidates(existing, normalized)
+
+
+def _normalize_contact_candidate(
+    candidate: dict[str, str | float | None],
+    source_url: str,
+) -> dict[str, str | float | None]:
+    name = _normalize_contact_name(candidate.get("name"))
+    title = normalize_whitespace(str(candidate.get("title") or "")) or None
+    department = normalize_whitespace(str(candidate.get("department") or "")) or None
+    if name and _is_role_label(name):
+        if not title:
+            title = name
+        name = None
+    if title and _looks_like_person_name(title):
+        title = None
+    if not title and department and _is_role_label(department):
+        title = department
+
+    return {
+        "name": name,
+        "title": title,
+        "department": department,
+        "email": (str(candidate.get("email") or "").strip().lower() or None),
+        "email_type": str(candidate.get("email_type") or "unknown"),
+        "phone": (str(candidate.get("phone") or "").strip() or None),
+        "phone_ext": (str(candidate.get("phone_ext") or "").strip() or None),
+        "address": normalize_whitespace(str(candidate.get("address") or "")) or None,
+        "hours": normalize_whitespace(str(candidate.get("hours") or "")) or None,
+        "source_context": normalize_whitespace(str(candidate.get("source_context") or "")) or None,
+        "source_url": source_url,
+        "confidence": float(candidate.get("confidence") or 0.45),
+    }
+
+
+def _contact_candidate_key(
+    candidate: dict[str, str | float | None],
+    source_url: str,
+) -> tuple[str, ...]:
+    email = str(candidate.get("email") or "").strip().lower()
+    if email:
+        return ("email", email)
+
+    name_key = _normalize_key_text(candidate.get("name"))
+    title_key = _normalize_key_text(candidate.get("title") or candidate.get("department"))
+    if not title_key:
+        title_key = _normalize_key_text(candidate.get("phone"))
+    return ("row", name_key, title_key, _normalize_key_text(source_url))
+
+
+def _merge_contact_candidates(
+    left: dict[str, str | float | None],
+    right: dict[str, str | float | None],
+) -> dict[str, str | float | None]:
+    left_rich = _contact_candidate_richness(left)
+    right_rich = _contact_candidate_richness(right)
+    if right_rich > left_rich:
+        primary, secondary = right, left
+    elif left_rich > right_rich:
+        primary, secondary = left, right
+    else:
+        primary, secondary = (right, left) if float(right.get("confidence") or 0.0) >= float(left.get("confidence") or 0.0) else (left, right)
+
+    merged = dict(primary)
+    for field in ("name", "title", "department", "email", "phone", "phone_ext", "address", "hours", "source_context"):
+        if not merged.get(field):
+            merged[field] = secondary.get(field)
+    if merged.get("email") and (merged.get("email_type") in {None, "", "unknown"}):
+        merged["email_type"] = secondary.get("email_type") or "unknown"
+    merged["confidence"] = round(max(float(left.get("confidence") or 0.0), float(right.get("confidence") or 0.0)), 3)
+    return merged
+
+
+def _contact_candidate_richness(candidate: dict[str, str | float | None]) -> int:
+    score = 0
+    if candidate.get("name"):
+        score += 4
+    if candidate.get("title"):
+        score += 4
+    if candidate.get("department"):
+        score += 2
+    if candidate.get("email"):
+        score += 5
+    if candidate.get("phone"):
+        score += 3
+    if candidate.get("phone_ext"):
+        score += 1
+    if candidate.get("address"):
+        score += 1
+    if candidate.get("hours"):
+        score += 1
+    return score
+
+
+def _normalize_key_text(value: str | float | None) -> str:
+    lowered = str(value or "").strip().lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", lowered).strip()
 
 
 def extract_locations(text: str, source_url: str) -> list[dict[str, str | None]]:
@@ -633,12 +819,23 @@ def _clean_department_candidate(text: str) -> str | None:
 
 
 def _is_name_candidate(candidate: str) -> bool:
-    lowered = candidate.lower()
+    normalized = normalize_whitespace(candidate)
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    if any(lowered.startswith(prefix) for prefix in NAME_ARTIFACT_PREFIXES):
+        return False
+    if any(token in lowered for token in ("mailto:", "http://", "https://", "@")):
+        return False
+    if _is_role_label(lowered):
+        return False
+    if any(token in lowered for token in NAME_ARTIFACT_TOKENS):
+        return False
     if any(_keyword_in_text(lowered, token) for token in NAME_STOPWORDS):
         return False
-    if re.search(r"\d", candidate):
+    if re.search(r"\d", normalized):
         return False
-    if candidate.lower() in GENERIC_NAV_TEXT:
+    if lowered in GENERIC_NAV_TEXT:
         return False
     return True
 
@@ -671,9 +868,12 @@ def extract_table_contact_rows(text: str, source_url: str) -> list[dict[str, str
     seen_keys: set[tuple[str, str, str, str, str]] = set()
 
     for table in soup.find_all("table"):
+        table_headers = _extract_table_headers(table)
         for row in table.find_all("tr"):
             cells = row.find_all(["th", "td"])
             if len(cells) < 2:
+                continue
+            if row.find_all("th") and not row.find_all("td"):
                 continue
             parts = [normalize_whitespace(cell.get_text(" ", strip=True)) or "" for cell in cells]
             parts = [part for part in parts if part]
@@ -693,27 +893,25 @@ def extract_table_contact_rows(text: str, source_url: str) -> list[dict[str, str
             if not emails and not phones:
                 continue
 
-            headers = []
-            parent_section = row.find_parent("table")
-            if parent_section:
-                header_cells = parent_section.find_all("th")
-                headers = [normalize_whitespace(cell.get_text(" ", strip=True) or "") or "" for cell in header_cells]
-            mapped = _map_table_cells(headers, parts)
+            mapped = _map_table_cells(table_headers, parts)
 
             name = mapped.get("name") or _guess_name_from_lines(parts[:3])
             title = mapped.get("title")
             department = mapped.get("department")
             if not title:
-                guessed_title, _ = guess_title(parts[:4])
-                title = guessed_title
+                title = _infer_nearest_title(parts[:4], name=name, anchor_line=parts[0]) or guess_title(parts[:4])[0]
             if not department:
                 department, dep_score = guess_department_with_score(" ".join(parts[:5]))
                 if not title and department and dep_score >= 1.0:
                     title = department
 
             email = (mapped.get("email") or (emails[0].lower() if emails else None))
-            phone = str(phones[0].get("phone")) if phones and phones[0].get("phone") else None
-            phone_ext = str(phones[0].get("phone_ext")) if phones and phones[0].get("phone_ext") else None
+            phone = (str(mapped.get("phone") or "").strip() or None)
+            phone_ext = (str(mapped.get("phone_ext") or "").strip() or None)
+            if not phone:
+                phone = str(phones[0].get("phone")) if phones and phones[0].get("phone") else None
+            if not phone_ext:
+                phone_ext = str(phones[0].get("phone_ext")) if phones and phones[0].get("phone_ext") else None
             address = _extract_address_from_lines(parts)
             hours = _extract_best_hours(parts)
             source_context = str(phones[0].get("source_context")) if phones and phones[0].get("source_context") else row_blob[:180]
@@ -862,7 +1060,9 @@ def _guess_name_from_lines(lines: list[str]) -> str | None:
         if candidate.lower() in GENERIC_NAV_TEXT:
             continue
         if _looks_like_person_name(candidate):
-            return candidate
+            normalized = _normalize_contact_name(candidate)
+            if normalized:
+                return normalized
     return None
 
 
@@ -878,17 +1078,89 @@ def _guess_title_from_lines(lines: list[str]) -> str | None:
             continue
         if _looks_like_person_name(candidate):
             continue
-        if guess_department(candidate):
-            return candidate
-        if any(token in lowered for token in TITLE_HINTS):
+        if _looks_like_title_label(candidate) or guess_department(candidate):
             return candidate
     return None
 
 
+def _infer_nearest_title(
+    lines: list[str],
+    name: str | None,
+    anchor_line: str | None = None,
+) -> str | None:
+    if not lines:
+        return None
+    normalized_lines = [normalize_whitespace(line) or "" for line in lines]
+    anchor_idx = 0
+    if anchor_line:
+        anchor_norm = normalize_whitespace(anchor_line) or ""
+        if anchor_norm in normalized_lines:
+            anchor_idx = normalized_lines.index(anchor_norm)
+
+    name_idx = None
+    if name:
+        normalized_name = normalize_whitespace(name) or ""
+        for idx, line in enumerate(normalized_lines):
+            if line == normalized_name:
+                name_idx = idx
+                break
+
+    ordered: list[tuple[int, int]] = []
+    for idx, line in enumerate(normalized_lines):
+        if not line:
+            continue
+        if name and line == (normalize_whitespace(name) or ""):
+            continue
+        if not _looks_like_title_label(line):
+            continue
+        distance_anchor = abs(idx - anchor_idx)
+        distance_name = abs(idx - name_idx) if name_idx is not None else distance_anchor
+        ordered.append((distance_name * 10 + distance_anchor, idx))
+
+    if not ordered:
+        return None
+    ordered.sort(key=lambda item: item[0])
+    return normalized_lines[ordered[0][1]]
+
+
+def _looks_like_title_label(value: str) -> bool:
+    candidate = normalize_whitespace(value)
+    if not candidate:
+        return False
+    lowered = candidate.lower()
+    if lowered in GENERIC_NAV_TEXT:
+        return False
+    if any(token in lowered for token in ("mailto:", "@", "http://", "https://")):
+        return False
+    if PHONE_RE.search(candidate):
+        return False
+    if _looks_like_person_name(candidate):
+        return False
+    if _is_role_label(candidate):
+        return True
+    if guess_department(candidate):
+        return True
+    return any(_keyword_in_text(lowered, token) for token in TITLE_NEAR_NAME_HINTS)
+
+
+def _extract_table_headers(table) -> list[str]:
+    if table is None:
+        return []
+    for row in table.find_all("tr"):
+        headers = row.find_all("th")
+        if not headers:
+            continue
+        out = [normalize_whitespace(cell.get_text(" ", strip=True) or "") or "" for cell in headers]
+        out = [item for item in out if item]
+        if out:
+            return out
+    return []
+
+
 def _map_table_cells(headers: list[str], values: list[str]) -> dict[str, str | None]:
     if not headers:
-        return {"name": None, "title": None, "department": None, "email": None}
-    out: dict[str, str | None] = {"name": None, "title": None, "department": None, "email": None}
+        return {"name": None, "title": None, "department": None, "email": None, "phone": None, "phone_ext": None}
+    out: dict[str, str | None] = {"name": None, "title": None, "department": None, "email": None, "phone": None, "phone_ext": None}
     mapped_headers = [(_normalize_keyword_blob(header), idx) for idx, header in enumerate(headers)]
     for normalized_header, idx in mapped_headers:
         if idx >= len(values):
@@ -903,7 +1175,14 @@ def _map_table_cells(headers: list[str], values: list[str]) -> dict[str, str | N
         elif any(token in normalized_header for token in ("department", "office", "division")):
             out["department"] = out["department"] or value
         elif "email" in normalized_header:
-            out["email"] = out["email"] or value
+            emails = extract_emails(value)
+            if emails:
+                out["email"] = out["email"] or emails[0]
+        elif any(token in normalized_header for token in ("phone", "telephone", "tel")):
+            phones = extract_phone_candidates(value)
+            if phones:
+                out["phone"] = out["phone"] or str(phones[0].get("phone") or "")
+                out["phone_ext"] = out["phone_ext"] or str(phones[0].get("phone_ext") or "")
     return out
 
 

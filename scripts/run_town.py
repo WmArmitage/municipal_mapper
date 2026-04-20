@@ -150,7 +150,6 @@ def process_text_extractions(
 ) -> tuple[int, int]:
     contact_count = 0
     location_count = 0
-    seen_contacts: set[str] = set()
     seen_locations: set[str] = set()
     extracted_locations = extract_locations(text, source_url)
     fallback_address = None
@@ -159,6 +158,7 @@ def process_text_extractions(
         fallback_address = extracted_locations[0].get("address")
         fallback_hours = extracted_locations[0].get("hours")
 
+    merged_contacts: dict[tuple[str, ...], dict[str, str | float | None]] = {}
     for contact in extract_contacts(text, source_url, page_type=page_type):
         email = str(contact.get("email") or "").strip().lower()
         phone = str(contact.get("phone") or "").strip()
@@ -171,38 +171,48 @@ def process_text_extractions(
         source_context = str(contact.get("source_context") or "").strip()
         address = contact.get("address") or fallback_address
         hours = contact.get("hours") or fallback_hours
+        merged_row = {
+            "name": name or None,
+            "title": title or None,
+            "department": department or None,
+            "email": email or None,
+            "email_type": contact.get("email_type") or "unknown",
+            "phone": phone or None,
+            "phone_ext": contact.get("phone_ext"),
+            "address": address,
+            "hours": hours,
+            "source_context": source_context or None,
+            "source_url": source_url,
+            "confidence": float(contact.get("confidence") or 0.45),
+        }
+        merge_key = build_contact_merge_key(merged_row, source_url)
+        prior = merged_contacts.get(merge_key)
+        merged_contacts[merge_key] = merge_contact_rows(prior, merged_row) if prior else merged_row
 
-        contact_id = make_id(
-            "ctc",
-            municipality_id,
-            email,
-            phone,
-            name.lower(),
-            title.lower(),
-            department.lower(),
-            source_url,
+    for merged in merged_contacts.values():
+        effective_confidence = min(
+            0.995,
+            float(merged.get("confidence") or 0.45) + (contact_row_richness(merged) * 0.01),
         )
-        if contact_id in seen_contacts:
-            continue
-        seen_contacts.add(contact_id)
+        contact_id = build_contact_id(municipality_id, merged, source_url)
 
         db.upsert_contact(
             conn,
             {
                 "contact_id": contact_id,
                 "municipality_id": municipality_id,
-                "name": name or None,
-                "title": title or None,
-                "department": department or None,
-                "email": email or None,
-                "email_type": contact.get("email_type") or "unknown",
-                "phone": phone or None,
-                "phone_ext": contact.get("phone_ext"),
-                "address": address,
-                "hours": hours,
-                "source_context": source_context or None,
-                "source_url": source_url,
-                "confidence": contact.get("confidence") or 0.45,
+                "name": merged.get("name"),
+                "title": merged.get("title"),
+                "department": merged.get("department"),
+                "email": merged.get("email"),
+                "email_type": merged.get("email_type") or "unknown",
+                "phone": merged.get("phone"),
+                "phone_ext": merged.get("phone_ext"),
+                "address": merged.get("address"),
+                "hours": merged.get("hours"),
+                "source_context": merged.get("source_context"),
+                "source_url": merged.get("source_url") or source_url,
+                "confidence": round(effective_confidence, 3),
             },
         )
         contact_count += 1
@@ -816,6 +826,89 @@ def infer_department_from_url(source_url: str) -> str | None:
         if token in path:
             return label
     return None
+
+
+def build_contact_merge_key(
+    row: dict[str, str | float | None],
+    default_source_url: str,
+) -> tuple[str, ...]:
+    email = normalize_contact_token(row.get("email"))
+    if email:
+        return ("email", email)
+
+    name_key = normalize_contact_token(row.get("name"))
+    title_key = normalize_contact_token(row.get("title") or row.get("department"))
+    source_key = normalize_contact_token(row.get("source_url") or default_source_url)
+    return ("row", name_key, title_key, source_key)
+
+
+def build_contact_id(
+    municipality_id: str,
+    row: dict[str, str | float | None],
+    default_source_url: str,
+) -> str:
+    email = normalize_contact_token(row.get("email"))
+    if email:
+        return make_id("ctc", municipality_id, "email", email)
+
+    name_key = normalize_contact_token(row.get("name"))
+    title_key = normalize_contact_token(row.get("title") or row.get("department"))
+    source_key = normalize_contact_token(row.get("source_url") or default_source_url)
+    return make_id("ctc", municipality_id, "row", name_key, title_key, source_key)
+
+
+def contact_row_richness(row: dict[str, str | float | None]) -> int:
+    score = 0
+    if normalize_contact_token(row.get("name")):
+        score += 4
+    if normalize_contact_token(row.get("title")):
+        score += 4
+    if normalize_contact_token(row.get("department")):
+        score += 2
+    if normalize_contact_token(row.get("email")):
+        score += 5
+    if normalize_contact_token(row.get("phone")):
+        score += 3
+    if normalize_contact_token(row.get("phone_ext")):
+        score += 1
+    if normalize_contact_token(row.get("address")):
+        score += 1
+    if normalize_contact_token(row.get("hours")):
+        score += 1
+    return score
+
+
+def merge_contact_rows(
+    left: dict[str, str | float | None],
+    right: dict[str, str | float | None],
+) -> dict[str, str | float | None]:
+    left_score = contact_row_richness(left)
+    right_score = contact_row_richness(right)
+    if right_score > left_score:
+        primary, secondary = right, left
+    elif left_score > right_score:
+        primary, secondary = left, right
+    else:
+        primary, secondary = (
+            (right, left)
+            if float(right.get("confidence") or 0.0) >= float(left.get("confidence") or 0.0)
+            else (left, right)
+        )
+
+    merged = dict(primary)
+    for field in ("name", "title", "department", "email", "phone", "phone_ext", "address", "hours", "source_context", "source_url"):
+        if not normalize_contact_token(merged.get(field)):
+            merged[field] = secondary.get(field)
+    if (merged.get("email_type") in {None, "", "unknown"}) and secondary.get("email_type"):
+        merged["email_type"] = secondary.get("email_type")
+    merged["confidence"] = max(float(left.get("confidence") or 0.0), float(right.get("confidence") or 0.0))
+    return merged
+
+
+def normalize_contact_token(value: str | float | None) -> str:
+    lowered = str(value or "").strip().lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", lowered).strip()
 
 
 def classify_service_page_type(url: str, municipality_domain: str) -> str:
