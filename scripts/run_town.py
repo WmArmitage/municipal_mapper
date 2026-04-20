@@ -244,9 +244,35 @@ def classify_crawl_diagnostic(
     detected_block_signal = _coerce_int(diagnostics.get("detected_block_signal"))
     detected_js_shell_signal = _coerce_int(diagnostics.get("detected_js_shell_signal"))
 
-    if status_code in {401, 403, 429, 503} or detected_block_signal == 1:
+    # Hard HTTP block statuses beat all other signals.
+    if status_code in {401, 403, 429, 503}:
         return "blocked_or_forbidden"
-    if status_code == 200 and (response_text_length <= JS_SHELL_TEXT_LENGTH_THRESHOLD or detected_js_shell_signal == 1):
+
+    # Successful extraction beats soft text/HTML heuristics.
+    if contact_rows_extracted > 0:
+        return "ok"
+    if status_code == 200 and candidate_service_link_count > 0 and extracted_link_count > 0:
+        return "ok"
+
+    # Soft signals are only used for low-success / zero-yield cases.
+    if (
+        status_code == 200
+        and detected_block_signal == 1
+        and contact_rows_extracted == 0
+        and candidate_service_link_count == 0
+        and extracted_link_count <= JS_SHELL_LINK_NEAR_ZERO_THRESHOLD
+    ):
+        return "blocked_or_forbidden"
+    if (
+        status_code == 200
+        and contact_rows_extracted == 0
+        and candidate_service_link_count == 0
+        and (
+            response_text_length <= JS_SHELL_TEXT_LENGTH_THRESHOLD
+            or extracted_link_count <= JS_SHELL_LINK_NEAR_ZERO_THRESHOLD
+            or detected_js_shell_signal == 1
+        )
+    ):
         return "probable_js_shell"
     if status_code == 200 and extracted_link_count > 0 and candidate_service_link_count == 0 and contact_rows_extracted == 0:
         return "discovery_failure"
