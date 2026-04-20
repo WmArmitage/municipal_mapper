@@ -774,20 +774,38 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
         f"""
         UPDATE contacts
         SET suspicious_reason = CASE
+            WHEN LOWER(TRIM(COALESCE(page_type, ''))) IN ('staff_directory', 'directory')
+            THEN NULL
+            WHEN role_normalized = 'Finance Director'
+                 AND NULLIF(TRIM(COALESCE(department, '')), '') IS NULL
+            THEN 'low_context'
             WHEN role_normalized = 'Assessor'
+                 AND NULLIF(TRIM(COALESCE(department, '')), '') IS NOT NULL
+                 AND LOWER(TRIM(COALESCE(department, ''))) NOT IN ('staff', 'directory', 'staff directory')
                  AND LOWER(COALESCE(department, '')) NOT LIKE '%assessor%'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%assessment%'
             THEN 'role_department_mismatch'
             WHEN role_normalized = 'Tax Collector'
+                 AND NULLIF(TRIM(COALESCE(department, '')), '') IS NOT NULL
+                 AND LOWER(TRIM(COALESCE(department, ''))) NOT IN ('staff', 'directory', 'staff directory')
                  AND LOWER(COALESCE(department, '')) NOT LIKE '%tax%'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%revenue%'
             THEN 'role_department_mismatch'
             WHEN role_normalized = 'Town Clerk'
+                 AND NULLIF(TRIM(COALESCE(department, '')), '') IS NOT NULL
+                 AND LOWER(TRIM(COALESCE(department, ''))) NOT IN ('staff', 'directory', 'staff directory')
                  AND LOWER(COALESCE(department, '')) NOT LIKE '%clerk%'
             THEN 'role_department_mismatch'
             WHEN role_normalized = 'Building Official'
+                 AND NULLIF(TRIM(COALESCE(department, '')), '') IS NOT NULL
+                 AND LOWER(TRIM(COALESCE(department, ''))) NOT IN ('staff', 'directory', 'staff directory')
                  AND LOWER(COALESCE(department, '')) NOT LIKE '%building%'
             THEN 'role_department_mismatch'
             WHEN role_normalized = 'Finance Director'
+                 AND NULLIF(TRIM(COALESCE(department, '')), '') IS NOT NULL
+                 AND LOWER(TRIM(COALESCE(department, ''))) NOT IN ('staff', 'directory', 'staff directory')
                  AND LOWER(COALESCE(department, '')) NOT LIKE '%finance%'
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%treasurer%'
             THEN 'role_department_mismatch'
             ELSE NULL
         END
