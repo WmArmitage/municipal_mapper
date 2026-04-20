@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -108,6 +109,33 @@ SUMMARY_FIELDS = (
     "role_winners",
     "service_links",
 )
+
+CRAWL_DIAGNOSTIC_FIELDS = (
+    "municipality_id",
+    "batch_id",
+    "seed_url_attempted",
+    "final_url_fetched",
+    "fallback_used",
+    "http_status",
+    "redirect_count",
+    "content_type",
+    "page_title",
+    "response_text_length",
+    "extracted_link_count",
+    "candidate_service_link_count",
+    "candidate_directory_link_count",
+    "contact_rows_extracted",
+    "detected_block_signal",
+    "detected_js_shell_signal",
+    "diagnostic_class",
+)
+
+CRAWL_FAILURE_DIAGNOSTIC_CLASSES = {
+    "blocked_or_forbidden",
+    "probable_js_shell",
+    "discovery_failure",
+    "low_extraction",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -286,6 +314,103 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def _default_crawl_diagnostic_row(municipality_id: str, batch_id: str) -> dict[str, str | int]:
+    return {
+        "municipality_id": municipality_id,
+        "batch_id": batch_id,
+        "seed_url_attempted": "",
+        "final_url_fetched": "",
+        "fallback_used": 0,
+        "http_status": "",
+        "redirect_count": 0,
+        "content_type": "",
+        "page_title": "",
+        "response_text_length": 0,
+        "extracted_link_count": 0,
+        "candidate_service_link_count": 0,
+        "candidate_directory_link_count": 0,
+        "contact_rows_extracted": 0,
+        "detected_block_signal": 0,
+        "detected_js_shell_signal": 0,
+        "diagnostic_class": "ok",
+    }
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return default
+    try:
+        return int(float(text))
+    except ValueError:
+        return default
+
+
+def fetch_crawl_diagnostics(
+    conn,
+    municipality_ids: list[str],
+    batch_id: str,
+) -> list[dict[str, str | int]]:
+    rows_by_id = {
+        municipality_id: _default_crawl_diagnostic_row(municipality_id, batch_id)
+        for municipality_id in municipality_ids
+    }
+    if not municipality_ids or not object_exists(conn, "signals", "table"):
+        return list(rows_by_id.values())
+
+    sql = f"""
+        SELECT municipality_id, value
+        FROM signals
+        WHERE signal_type = 'crawl_diagnostics'
+          AND municipality_id IN ({placeholders(len(municipality_ids))})
+        ORDER BY rowid DESC
+    """
+    records = conn.execute(sql, tuple(municipality_ids)).fetchall()
+    parsed_once: set[str] = set()
+    for record in records:
+        municipality_id = str(record["municipality_id"] or "")
+        if not municipality_id or municipality_id in parsed_once:
+            continue
+        parsed_once.add(municipality_id)
+        raw_value = str(record["value"] or "")
+        if not raw_value.strip():
+            continue
+        try:
+            payload = json.loads(raw_value)
+        except json.JSONDecodeError:
+            continue
+
+        current = rows_by_id.get(municipality_id)
+        if current is None:
+            continue
+        current["seed_url_attempted"] = str(payload.get("seed_url_attempted") or "")
+        current["final_url_fetched"] = str(payload.get("final_url_fetched") or "")
+        current["fallback_used"] = 1 if _coerce_int(payload.get("fallback_used")) > 0 else 0
+        status_value = payload.get("http_status")
+        current["http_status"] = _coerce_int(status_value) if status_value not in (None, "") else ""
+        current["redirect_count"] = _coerce_int(payload.get("redirect_count"))
+        current["content_type"] = str(payload.get("content_type") or "")
+        current["page_title"] = str(payload.get("page_title") or "")
+        current["response_text_length"] = _coerce_int(payload.get("response_text_length"))
+        current["extracted_link_count"] = _coerce_int(payload.get("extracted_link_count"))
+        current["candidate_service_link_count"] = _coerce_int(payload.get("candidate_service_link_count"))
+        current["candidate_directory_link_count"] = _coerce_int(payload.get("candidate_directory_link_count"))
+        current["contact_rows_extracted"] = _coerce_int(payload.get("contact_rows_extracted"))
+        current["detected_block_signal"] = 1 if _coerce_int(payload.get("detected_block_signal")) > 0 else 0
+        current["detected_js_shell_signal"] = 1 if _coerce_int(payload.get("detected_js_shell_signal")) > 0 else 0
+        current["diagnostic_class"] = str(payload.get("diagnostic_class") or "ok")
+
+    return [rows_by_id[municipality_id] for municipality_id in municipality_ids]
+
+
 def build_missing_key_roles(
     municipalities: list[dict[str, str]],
     winners: list[dict],
@@ -331,9 +456,18 @@ def build_manual_review_rows(
     municipalities: list[dict[str, str]],
     suspicious_rows: list[dict],
     missing_role_rows: list[dict[str, str | int]],
+    raw_counts: dict[str, int],
+    clean_counts: dict[str, int],
+    winner_counts: dict[str, int],
+    crawl_diagnostics: list[dict[str, str | int]],
 ) -> list[dict[str, str | int]]:
     town_name_by_id = {row["municipality_id"]: row["town_name"] for row in municipalities}
+    crawl_diag_by_id = {
+        str(row.get("municipality_id") or ""): row
+        for row in crawl_diagnostics
+    }
     out: list[dict[str, str | int]] = []
+    zero_yield_diag_municipalities: set[str] = set()
 
     for row in suspicious_rows:
         municipality_id = str(row.get("municipality_id") or "")
@@ -355,13 +489,49 @@ def build_manual_review_rows(
             }
         )
 
+    for municipality in municipalities:
+        municipality_id = municipality["municipality_id"]
+        if raw_counts.get(municipality_id, 0) != 0:
+            continue
+        if clean_counts.get(municipality_id, 0) != 0:
+            continue
+        if winner_counts.get(municipality_id, 0) != 0:
+            continue
+
+        diagnostic = crawl_diag_by_id.get(municipality_id, {})
+        diagnostic_class = str(diagnostic.get("diagnostic_class") or "")
+        if diagnostic_class not in CRAWL_FAILURE_DIAGNOSTIC_CLASSES:
+            continue
+
+        zero_yield_diag_municipalities.add(municipality_id)
+        out.append(
+            {
+                "municipality_id": municipality_id,
+                "town_name": town_name_by_id.get(municipality_id, ""),
+                "review_type": "crawl_diagnostic_zero_yield",
+                "role_normalized": "",
+                "name": "",
+                "email": "",
+                "phone": "",
+                "department": "",
+                "page_type": "",
+                "source_url": str(diagnostic.get("final_url_fetched") or diagnostic.get("seed_url_attempted") or ""),
+                "missing_role_groups": "",
+                "missing_group_count": "",
+                "suspicious_reason": f"crawl_diagnostic:{diagnostic_class}",
+            }
+        )
+
     for row in missing_role_rows:
         missing_group_count = int(row.get("missing_group_count") or 0)
         if missing_group_count < 2:
             continue
+        municipality_id = str(row.get("municipality_id") or "")
+        if municipality_id in zero_yield_diag_municipalities:
+            continue
         out.append(
             {
-                "municipality_id": row["municipality_id"],
+                "municipality_id": municipality_id,
                 "town_name": row["town_name"],
                 "review_type": "missing_role_groups_2plus",
                 "role_normalized": "",
@@ -435,8 +605,17 @@ def main() -> None:
 
         role_winners = fetch_role_winners(conn, municipality_ids)
         suspicious_winners = fetch_suspicious_winners(conn, municipality_ids)
+        crawl_diagnostics = fetch_crawl_diagnostics(conn, municipality_ids, args.batch_id)
         missing_key_roles = build_missing_key_roles(municipalities, role_winners)
-        manual_review_rows = build_manual_review_rows(municipalities, suspicious_winners, missing_key_roles)
+        manual_review_rows = build_manual_review_rows(
+            municipalities=municipalities,
+            suspicious_rows=suspicious_winners,
+            missing_role_rows=missing_key_roles,
+            raw_counts=raw_counts,
+            clean_counts=clean_counts,
+            winner_counts=winner_counts,
+            crawl_diagnostics=crawl_diagnostics,
+        )
     finally:
         conn.close()
 
@@ -480,6 +659,11 @@ def main() -> None:
             batch_dir / "qa_manual_review.csv",
             manual_review_rows,
             MANUAL_REVIEW_FIELDS,
+        ),
+        "qa_crawl_diagnostics.csv": write_csv(
+            batch_dir / "qa_crawl_diagnostics.csv",
+            crawl_diagnostics,
+            CRAWL_DIAGNOSTIC_FIELDS,
         ),
     }
 

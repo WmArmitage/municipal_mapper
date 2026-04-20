@@ -19,6 +19,7 @@ QA_PLACEHOLDER_FILENAMES = (
     "qa_suspicious_winners.csv",
     "qa_missing_key_roles.csv",
     "qa_manual_review.csv",
+    "qa_crawl_diagnostics.csv",
 )
 
 

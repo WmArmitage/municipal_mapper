@@ -58,6 +58,29 @@ SEED_TYPE_CONFIG: dict[str, dict[str, str]] = {
 CONTACT_SECOND_HOP_LINKS_PER_PAGE = 10
 MAX_CONTACT_SECOND_HOP_PAGES = 40
 MAX_CONTACT_DISCOVERY_DEPTH = 2
+CRAWL_BLOCK_INDICATORS = (
+    "cloudflare",
+    "access denied",
+    "forbidden",
+    "attention required",
+    "request blocked",
+    "bot verification",
+)
+JS_SHELL_INDICATORS = (
+    "javascript required",
+    "enable javascript",
+    "please enable javascript",
+    "requires javascript",
+)
+JS_SHELL_TEXT_LENGTH_THRESHOLD = 1200
+JS_SHELL_LINK_NEAR_ZERO_THRESHOLD = 1
+DIRECTORY_CANDIDATE_PAGE_TYPES = {
+    "directory_page",
+    "directory_category_page",
+    "contact_page",
+    "department_page",
+    "official_page",
+}
 
 
 def extract_title(html: str) -> str | None:
@@ -146,6 +169,92 @@ def upsert_crawl_error_signal(
             "source_url": normalized_source,
         },
     )
+
+
+def upsert_crawl_diagnostics_signal(
+    conn,
+    municipality_id: str,
+    diagnostics: dict[str, object],
+    confidence: float = 1.0,
+) -> None:
+    source_url = str(
+        diagnostics.get("final_url_fetched")
+        or diagnostics.get("seed_url_attempted")
+        or ""
+    )
+    signal_id = make_id("sig", municipality_id, "crawl_diagnostics")
+    db.upsert_signal(
+        conn,
+        {
+            "signal_id": signal_id,
+            "municipality_id": municipality_id,
+            "signal_type": "crawl_diagnostics",
+            "value": json.dumps(diagnostics, sort_keys=True),
+            "confidence": round(confidence, 3),
+            "source_url": source_url,
+        },
+    )
+
+
+def detect_block_signal(
+    page_title: str | None,
+    response_text: str | None,
+) -> int:
+    blob = f"{page_title or ''}\n{response_text or ''}".lower()
+    return 1 if any(token in blob for token in CRAWL_BLOCK_INDICATORS) else 0
+
+
+def detect_js_shell_signal(
+    status_code: int | None,
+    page_title: str | None,
+    response_text: str | None,
+    response_text_length: int,
+    extracted_link_count: int,
+) -> int:
+    if status_code != 200:
+        return 0
+    blob = f"{page_title or ''}\n{response_text or ''}".lower()
+    if any(token in blob for token in JS_SHELL_INDICATORS):
+        return 1
+    if response_text_length <= JS_SHELL_TEXT_LENGTH_THRESHOLD:
+        return 1
+    if response_text_length > 0 and extracted_link_count <= JS_SHELL_LINK_NEAR_ZERO_THRESHOLD:
+        return 1
+    return 0
+
+
+def count_directory_candidates(candidates: list[dict[str, str | float]]) -> int:
+    count = 0
+    for candidate in candidates:
+        page_type = str(candidate.get("page_type") or "").strip().lower()
+        if page_type in DIRECTORY_CANDIDATE_PAGE_TYPES:
+            count += 1
+    return count
+
+
+def classify_crawl_diagnostic(
+    diagnostics: dict[str, object],
+) -> str:
+    raw_status_code = diagnostics.get("http_status")
+    status_code = None if raw_status_code in (None, "") else _coerce_int(raw_status_code)
+    extracted_link_count = _coerce_int(diagnostics.get("extracted_link_count"))
+    candidate_service_link_count = _coerce_int(diagnostics.get("candidate_service_link_count"))
+    contact_rows_extracted = _coerce_int(diagnostics.get("contact_rows_extracted"))
+    response_text_length = _coerce_int(diagnostics.get("response_text_length"))
+    detected_block_signal = _coerce_int(diagnostics.get("detected_block_signal"))
+    detected_js_shell_signal = _coerce_int(diagnostics.get("detected_js_shell_signal"))
+
+    if status_code in {401, 403, 429, 503} or detected_block_signal == 1:
+        return "blocked_or_forbidden"
+    if status_code == 200 and (response_text_length <= JS_SHELL_TEXT_LENGTH_THRESHOLD or detected_js_shell_signal == 1):
+        return "probable_js_shell"
+    if status_code == 200 and extracted_link_count > 0 and candidate_service_link_count == 0 and contact_rows_extracted == 0:
+        return "discovery_failure"
+    if status_code == 200 and candidate_service_link_count > 0 and contact_rows_extracted == 0:
+        return "low_extraction"
+    if status_code is None and extracted_link_count == 0 and candidate_service_link_count == 0 and contact_rows_extracted == 0:
+        return "discovery_failure"
+    return "ok"
 
 
 def process_text_extractions(
@@ -258,12 +367,6 @@ def crawl_single_municipality(
     municipality_id = municipality["municipality_id"]
     website_url = municipality.get("website_url")
     municipality_domain = (municipality.get("domain") or get_domain(website_url) or "").lower()
-    if not website_url:
-        print(f"Fallback triggered for {municipality_id}")
-        upsert_signal(conn, municipality_id, "crawl_status", "missing_website_url", 1.0, "")
-        db.commit(conn)
-        return {"municipality_id": municipality_id, "fetched_pages": 0, "service_links": 0, "contacts": 0, "locations": 0}
-
     stats = {
         "municipality_id": municipality_id,
         "fetched_pages": 0,
@@ -271,6 +374,35 @@ def crawl_single_municipality(
         "contacts": 0,
         "locations": 0,
     }
+    diagnostics: dict[str, object] = {
+        "municipality_id": municipality_id,
+        "seed_url_attempted": normalize_url(str(website_url or "")) or str(website_url or ""),
+        "final_url_fetched": "",
+        "fallback_used": 0,
+        "http_status": None,
+        "redirect_count": 0,
+        "content_type": "",
+        "page_title": "",
+        "response_text_length": 0,
+        "extracted_link_count": 0,
+        "candidate_service_link_count": 0,
+        "candidate_directory_link_count": 0,
+        "contact_rows_extracted": 0,
+        "detected_block_signal": 0,
+        "detected_js_shell_signal": 0,
+        "diagnostic_class": "ok",
+    }
+
+    if not website_url:
+        print(f"Fallback triggered for {municipality_id}")
+        upsert_signal(conn, municipality_id, "crawl_status", "missing_website_url", 1.0, "")
+        diagnostics["fallback_used"] = 1
+        diagnostics["diagnostic_class"] = "discovery_failure"
+        upsert_crawl_diagnostics_signal(conn, municipality_id, diagnostics, confidence=1.0)
+        stats["diagnostic_class"] = str(diagnostics["diagnostic_class"])
+        db.commit(conn)
+        return stats
+
     vendor_best: dict[str, tuple[float, str]] = {}
     discovered_links: list[dict[str, str]] = []
     seen_fetched_urls: set[str] = set()
@@ -278,6 +410,66 @@ def crawl_single_municipality(
     processed_seed_urls: set[str] = set()
     external_seed_urls: set[str] = set()
     session = create_session()
+
+    def update_diagnostics_from_seed_fetch(
+        requested_url: str,
+        final_url: str | None,
+        result: FetchResult,
+        response_text: str | None,
+    ) -> None:
+        requested = normalize_url(requested_url) or requested_url
+        final = normalize_url(final_url or requested_url) or (final_url or requested_url)
+        diagnostics["seed_url_attempted"] = requested
+        diagnostics["final_url_fetched"] = final
+        diagnostics["http_status"] = result.status_code
+        diagnostics["redirect_count"] = int(result.redirect_count or 0)
+        diagnostics["content_type"] = result.content_type or ""
+        payload = response_text or ""
+        diagnostics["response_text_length"] = len(payload)
+        if payload and not is_xml_content(result.content_type, final):
+            title = extract_title(payload) or ""
+            diagnostics["page_title"] = title
+            if detect_block_signal(title, payload):
+                diagnostics["detected_block_signal"] = 1
+            if detect_js_shell_signal(
+                status_code=result.status_code,
+                page_title=title,
+                response_text=payload,
+                response_text_length=len(payload),
+                extracted_link_count=0,
+            ):
+                diagnostics["detected_js_shell_signal"] = 1
+
+    def finalize_and_store_diagnostics(source_url: str) -> None:
+        diagnostics["contact_rows_extracted"] = int(stats["contacts"])
+        diagnostics["extracted_link_count"] = int(diagnostics.get("extracted_link_count") or 0)
+        diagnostics["candidate_service_link_count"] = int(diagnostics.get("candidate_service_link_count") or 0)
+        diagnostics["candidate_directory_link_count"] = int(diagnostics.get("candidate_directory_link_count") or 0)
+        diagnostics["fallback_used"] = 1 if _coerce_int(diagnostics.get("fallback_used")) > 0 else 0
+        diagnostics["final_url_fetched"] = str(
+            diagnostics.get("final_url_fetched")
+            or normalize_url(source_url)
+            or source_url
+            or ""
+        )
+        diagnostics["seed_url_attempted"] = str(
+            diagnostics.get("seed_url_attempted")
+            or normalize_url(str(website_url or ""))
+            or str(website_url or "")
+        )
+        diagnostics["detected_js_shell_signal"] = max(
+            _coerce_int(diagnostics.get("detected_js_shell_signal")),
+            detect_js_shell_signal(
+                status_code=_coerce_int(diagnostics.get("http_status")) or None,
+                page_title=str(diagnostics.get("page_title") or ""),
+                response_text="",
+                response_text_length=_coerce_int(diagnostics.get("response_text_length")),
+                extracted_link_count=_coerce_int(diagnostics.get("extracted_link_count")),
+            ),
+        )
+        diagnostics["diagnostic_class"] = classify_crawl_diagnostic(diagnostics)
+        upsert_crawl_diagnostics_signal(conn, municipality_id, diagnostics, confidence=1.0)
+        stats["diagnostic_class"] = str(diagnostics["diagnostic_class"])
 
     def register_vendor_signal(vendor: str, confidence: float, url: str) -> None:
         prior = vendor_best.get(vendor)
@@ -340,6 +532,7 @@ def crawl_single_municipality(
     homepage_failed = False
     alternate_seed_attempted = False
     home_ok, home_url, home_text, _, home_result = fetch_and_record(website_url, "homepage", "seed", referer=None)
+    update_diagnostics_from_seed_fetch(website_url, home_url, home_result, home_text)
     entry_url = normalize_url(home_url or website_url) or (home_url or website_url)
     primary_seed_url = home_url
     if entry_url:
@@ -347,6 +540,7 @@ def crawl_single_municipality(
 
     if not home_ok or not home_url:
         homepage_failed = True
+        diagnostics["fallback_used"] = 1
         upsert_signal(conn, municipality_id, "crawl_status", "homepage_fetch_failed", 1.0, website_url)
         blocked_value = classify_blocked_homepage(home_result)
         if blocked_value:
@@ -419,7 +613,7 @@ def crawl_single_municipality(
                     continue
 
                 internal_seed_page_type = classify_page_type(seed_url, seed_label)
-                ok, final_seed_url, seed_text, _, _ = fetch_and_record(
+                ok, final_seed_url, seed_text, _, seed_result = fetch_and_record(
                     seed_url,
                     internal_seed_page_type,
                     f"seed_fallback:{seed_key}",
@@ -427,6 +621,7 @@ def crawl_single_municipality(
                 )
                 if not ok or not final_seed_url:
                     continue
+                update_diagnostics_from_seed_fetch(seed_url, final_seed_url, seed_result, seed_text)
                 alternate_successes.append(final_seed_url)
                 processed_seed_urls.add(normalize_url(final_seed_url) or final_seed_url)
                 if seed_text:
@@ -455,6 +650,7 @@ def crawl_single_municipality(
             if alternate_seed_attempted:
                 upsert_signal(conn, municipality_id, "alternate_seed_recovered", "false", 0.95, website_url)
             print(f"Fallback triggered for {municipality_id}")
+            finalize_and_store_diagnostics(entry_url or website_url)
             db.commit(conn)
             return stats
     elif home_text:
@@ -520,6 +716,9 @@ def crawl_single_municipality(
         max_links=max(max_candidate_pages * 2, 30),
         broad_mode=False,
     )
+    diagnostics["extracted_link_count"] = len(discovered_links)
+    diagnostics["candidate_service_link_count"] = len(service_links)
+    diagnostics["candidate_directory_link_count"] = count_directory_candidates(knowledge_links)
     high_value_links = compose_candidate_links(
         knowledge_links=knowledge_links,
         service_links=service_links,
@@ -713,6 +912,7 @@ def crawl_single_municipality(
     upsert_signal(conn, municipality_id, "crawl_status", "completed", 1.0, entry_url)
     upsert_signal(conn, municipality_id, "fetched_pages_count", str(stats["fetched_pages"]), 1.0, entry_url)
     upsert_signal(conn, municipality_id, "high_value_links_count", str(len(high_value_links)), 0.95, entry_url)
+    finalize_and_store_diagnostics(entry_url)
     if (stats["fetched_pages"] == 0 or stats["contacts"] == 0 or stats["service_links"] == 0) and not fallback_logged:
         print(f"Fallback triggered for {municipality_id}")
     db.commit(conn)
@@ -916,6 +1116,24 @@ def normalize_contact_token(value: str | float | None) -> str:
     lowered = str(value or "").strip().lower()
     lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
     return re.sub(r"\s+", " ", lowered).strip()
+
+
+def _coerce_int(value: object) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return 0
+    try:
+        return int(float(text))
+    except ValueError:
+        return 0
 
 
 def classify_service_page_type(url: str, municipality_domain: str) -> str:

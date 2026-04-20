@@ -57,6 +57,7 @@ class FetchResult:
     request_url: str
     final_url: str | None
     status_code: int | None
+    redirect_count: int
     content_type: str | None
     text: str | None
     error: str | None
@@ -94,7 +95,7 @@ def fetch_url(
 ) -> FetchResult:
     target = normalize_url(ensure_url_has_scheme(url))
     if not target:
-        return FetchResult(url, None, None, None, None, "invalid_url", 0, {})
+        return FetchResult(url, None, None, 0, None, None, "invalid_url", 0, {})
 
     client = session or create_session()
     headers = _build_headers(referer=referer)
@@ -118,6 +119,7 @@ def fetch_url(
                 request_url=target,
                 final_url=None,
                 status_code=None,
+                redirect_count=0,
                 content_type=None,
                 text=None,
                 error=f"request_error:{exc}",
@@ -132,6 +134,7 @@ def fetch_url(
         content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower() or None
         final_url = normalize_url(response.url) or response.url
         diagnostic_headers = _select_response_headers(response.headers)
+        redirect_count = len(response.history or [])
         elapsed_ms = int((perf_counter() - start_total) * 1000)
 
         if response.status_code >= 400:
@@ -139,6 +142,7 @@ def fetch_url(
                 request_url=target,
                 final_url=final_url,
                 status_code=response.status_code,
+                redirect_count=redirect_count,
                 content_type=content_type,
                 text=None,
                 error="http_error",
@@ -155,6 +159,7 @@ def fetch_url(
                 request_url=target,
                 final_url=final_url,
                 status_code=response.status_code,
+                redirect_count=redirect_count,
                 content_type=content_type,
                 text=None,
                 error="unsupported_content_type",
@@ -166,6 +171,7 @@ def fetch_url(
             request_url=target,
             final_url=final_url,
             status_code=response.status_code,
+            redirect_count=redirect_count,
             content_type=content_type,
             text=response.text,
             error=None,
@@ -176,7 +182,7 @@ def fetch_url(
     # Defensive fallback (should not be reached).
     if last_result:
         return last_result
-    return FetchResult(target, None, None, None, None, "unknown_error", int((perf_counter() - start_total) * 1000), {})
+    return FetchResult(target, None, None, 0, None, None, "unknown_error", int((perf_counter() - start_total) * 1000), {})
 
 
 def same_registered_domain(url_a: str, url_b: str) -> bool:
@@ -204,4 +210,3 @@ def _select_response_headers(headers: requests.structures.CaseInsensitiveDict[st
         if value:
             out[key.lower()] = value
     return out
-

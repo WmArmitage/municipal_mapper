@@ -1,5 +1,5 @@
 municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
-ct_danbury,Danbury,building,1,executive; assessment; tax; clerk; planning; finance,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner; finance: Treasurer
+ct_danbury,Danbury,building,1,executive; assessment; tax; clerk; planning; finance,"executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner; finance: Finance Director, Treasurer"
 ct_newtown,Newtown,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_south_windsor,South Windsor,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_goshen,Goshen,executive; assessment; tax; clerk; building; planning; finance,7,,
