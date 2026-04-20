@@ -1,0 +1,4 @@
+municipality_id,role_normalized,name,email,phone,department,page_type,source_url,suspicious_reason
+ct_bozrah,Assessor,Loreta Zdanys,taxassessor@bozrahct.org,8608892689,Loreta Zdanys Tax Assessor Phone: Additional Phone: Fax: More Information,department_page,https://www.townofbozrah.org/258/Tax-Assessor,assessor_tax_mismatch
+ct_columbia,Assessor,,taxcollector@columbiact.gov,8602289555,Tax Collector,department_page,https://www.columbiact.gov/tax-collector,assessor_tax_mismatch
+ct_old_lyme,First Selectman,,amancini@oldlyme-ct.gov,8604341605,,board_page,https://www.oldlyme-ct.gov/325/Board-of-Finance,first_selectman_role_page_mismatch

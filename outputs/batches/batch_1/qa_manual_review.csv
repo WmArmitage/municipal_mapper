@@ -1,20 +1,7 @@
-municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_roles,missing_count,suspicious_reason
-ct_brookfield,Brookfield,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
+municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason
 ct_brookfield,Brookfield,suspicious_winner,Assessor,,,8607249100,Assessor,department_page,https://www.brookfieldct.gov/217/Tax-Collector,,,assessor_tax_mismatch
 ct_brookfield,Brookfield,suspicious_winner,First Selectman,Executive Assistant,,2037757301,,other,https://www.brookfieldct.gov/228/First-Selectmans-Office,,,chief_role_assistant_contamination
-ct_brooklyn,Brooklyn,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_chester,Chester,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_east_haven,East Haven,missing_key_roles_2plus,,,,,,,,First Selectman; Town Manager,2,
-ct_essex,Essex,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
 ct_essex,Essex,suspicious_winner,Assessor,,assessor@essexct.gov,8607674340,assessor,department_page,https://www.essexct.gov/261/Tax-Collector,,,assessor_tax_mismatch
-ct_granby,Granby,missing_key_roles_2plus,,,,,,,,Mayor; Tax Collector,2,
-ct_haddam,Haddam,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_middletown,Middletown,missing_key_roles_2plus,,,,,,,,First Selectman; Town Manager,2,
-ct_old_saybrook,Old Saybrook,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
+ct_granby,Granby,missing_role_groups_2plus,,,,,,,,tax; finance,2,
 ct_old_saybrook,Old Saybrook,suspicious_winner,First Selectman,,building.department@oldsaybrookct.gov,8606613300,,department_page,https://www.oldsaybrookct.gov/179/Building,,,first_selectman_role_page_mismatch
-ct_orange,Orange,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_preston,Preston,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_sharon,Sharon,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_waterford,Waterford,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
-ct_wethersfield,Wethersfield,missing_key_roles_2plus,,,,,,,,First Selectman; Mayor,2,
-ct_willington,Willington,missing_key_roles_2plus,,,,,,,,Mayor; Town Manager,2,
+ct_wethersfield,Wethersfield,missing_role_groups_2plus,,,,,,,,building; finance,2,

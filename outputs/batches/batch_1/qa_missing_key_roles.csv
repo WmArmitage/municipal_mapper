@@ -1,16 +1,8 @@
-municipality_id,town_name,missing_roles,missing_count,present_key_roles
-ct_chester,Chester,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_essex,Essex,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_haddam,Haddam,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_middletown,Middletown,First Selectman; Town Manager,2,Mayor; Assessor; Tax Collector; Town Clerk
-ct_old_saybrook,Old Saybrook,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_brookfield,Brookfield,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_granby,Granby,Mayor; Tax Collector,2,First Selectman; Town Manager; Assessor; Town Clerk
-ct_wethersfield,Wethersfield,First Selectman; Mayor,2,Town Manager; Assessor; Tax Collector; Town Clerk
-ct_sharon,Sharon,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_east_haven,East Haven,First Selectman; Town Manager,2,Mayor; Assessor; Tax Collector; Town Clerk
-ct_orange,Orange,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_waterford,Waterford,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_preston,Preston,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_willington,Willington,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
-ct_brooklyn,Brooklyn,Mayor; Town Manager,2,First Selectman; Assessor; Tax Collector; Town Clerk
+municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
+ct_essex,Essex,building,1,executive; assessment; tax; clerk; planning; finance,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner, Land Use; finance: Finance Director, Treasurer"
+ct_middletown,Middletown,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Land Use
+ct_brookfield,Brookfield,finance,1,executive; assessment; tax; clerk; building; planning,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner, Land Use"
+ct_granby,Granby,tax; finance,2,executive; assessment; clerk; building; planning,"executive: First Selectman, Town Manager; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner"
+ct_wethersfield,Wethersfield,building; finance,2,executive; assessment; tax; clerk; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner
+ct_willington,Willington,finance,1,executive; assessment; tax; clerk; building; planning,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner, Land Use"
+ct_brooklyn,Brooklyn,finance,1,executive; assessment; tax; clerk; building; planning,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner, Land Use"

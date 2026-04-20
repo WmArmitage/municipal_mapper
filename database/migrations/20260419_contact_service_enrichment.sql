@@ -242,16 +242,29 @@ SET
         THEN 'Building Official'
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%land use%'
         THEN 'Land Use'
-        WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%planner%'
-             OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%planning%'
-             OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%zoning%'
-        THEN 'Planner'
-        WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
-        THEN 'Finance Director'
-        WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
-        THEN 'Treasurer'
-        ELSE NULL
-    END,
+    WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%planner%'
+         OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%planning%'
+         OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%zoning%'
+    THEN 'Planner'
+    WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+        'director of finance',
+        'title: director of finance',
+        'assistant director of finance',
+        'director of finance and revenue',
+        'director of finance and administration'
+    )
+         OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
+    THEN 'Finance Director'
+    WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+        'treasurer',
+        'town treasurer',
+        'city treasurer',
+        'borough treasurer'
+    )
+         OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
+    THEN 'Treasurer'
+    ELSE NULL
+END,
     role_family = CASE
         WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%first selectman%'
              OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%selectman%'
@@ -278,6 +291,38 @@ SET
         THEN 'finance'
         ELSE NULL
     END;
+
+-- F2) Conservative finance fallback from title only when family already resolved to finance
+UPDATE contacts
+SET role_normalized = CASE
+    WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+        'director of finance',
+        'title: director of finance',
+        'assistant director of finance',
+        'director of finance and revenue',
+        'director of finance and administration'
+    ) THEN 'Finance Director'
+    WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+        'treasurer',
+        'town treasurer',
+        'city treasurer',
+        'borough treasurer'
+    ) THEN 'Treasurer'
+    ELSE role_normalized
+END
+WHERE NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NULL
+  AND role_family = 'finance'
+  AND LOWER(TRIM(COALESCE(title, ''))) IN (
+      'director of finance',
+      'title: director of finance',
+      'assistant director of finance',
+      'director of finance and revenue',
+      'director of finance and administration',
+      'treasurer',
+      'town treasurer',
+      'city treasurer',
+      'borough treasurer'
+  );
 
 -- G) department_normalized (department first, title fallback)
 UPDATE contacts

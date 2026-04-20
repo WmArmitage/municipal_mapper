@@ -1,0 +1,8 @@
+municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason
+ct_bozrah,Bozrah,suspicious_winner,Assessor,Loreta Zdanys,taxassessor@bozrahct.org,8608892689,Loreta Zdanys Tax Assessor Phone: Additional Phone: Fax: More Information,department_page,https://www.townofbozrah.org/258/Tax-Assessor,,,assessor_tax_mismatch
+ct_columbia,Columbia,suspicious_winner,Assessor,,taxcollector@columbiact.gov,8602289555,Tax Collector,department_page,https://www.columbiact.gov/tax-collector,,,assessor_tax_mismatch
+ct_goshen,Goshen,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,
+ct_middlebury,Middlebury,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,
+ct_newtown,Newtown,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,
+ct_old_lyme,Old Lyme,suspicious_winner,First Selectman,,amancini@oldlyme-ct.gov,8604341605,,board_page,https://www.oldlyme-ct.gov/325/Board-of-Finance,,,first_selectman_role_page_mismatch
+ct_south_windsor,South Windsor,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,

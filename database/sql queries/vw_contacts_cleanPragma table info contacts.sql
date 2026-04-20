@@ -1,0 +1,1 @@
+PRAGMA table_info(vw_contacts_clean);

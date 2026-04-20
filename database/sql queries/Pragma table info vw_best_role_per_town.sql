@@ -1,0 +1,1 @@
+PRAGMA table_info(vw_best_role_per_town);

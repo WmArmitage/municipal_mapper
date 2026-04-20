@@ -1,0 +1,8 @@
+municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
+ct_danbury,Danbury,building,1,executive; assessment; tax; clerk; planning; finance,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner; finance: Treasurer
+ct_newtown,Newtown,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_south_windsor,South Windsor,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_goshen,Goshen,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_middlebury,Middlebury,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_west_haven,West Haven,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_sterling,Sterling,planning,1,executive; assessment; tax; clerk; building; finance,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; finance: Treasurer

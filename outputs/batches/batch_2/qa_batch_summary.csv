@@ -1,0 +1,19 @@
+municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
+ct_danbury,Danbury,Fairfield County,188,71,6,3
+ct_newtown,Newtown,Fairfield County,0,0,0,0
+ct_bristol,Bristol,Hartford County,184,83,7,2
+ct_enfield,Enfield,Hartford County,187,100,8,2
+ct_south_windsor,South Windsor,Hartford County,0,0,0,0
+ct_goshen,Goshen,Litchfield County,0,0,0,0
+ct_roxbury,Roxbury,Litchfield County,148,50,9,3
+ct_clinton,Clinton,Middlesex County,151,69,10,4
+ct_middlefield,Middlefield,Middlesex County,116,39,7,19
+ct_beacon_falls,Beacon Falls,New Haven County,225,62,8,5
+ct_middlebury,Middlebury,New Haven County,0,0,0,0
+ct_west_haven,West Haven,New Haven County,169,76,6,6
+ct_bozrah,Bozrah,New London County,131,28,7,4
+ct_ledyard,Ledyard,New London County,243,73,8,7
+ct_old_lyme,Old Lyme,New London County,244,42,8,5
+ct_columbia,Columbia,Tolland County,440,57,8,25
+ct_ashford,Ashford,Windham County,109,40,8,15
+ct_sterling,Sterling,Windham County,25,20,6,2

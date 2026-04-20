@@ -488,9 +488,22 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                      OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%planning%'
                      OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%zoning%'
                 THEN 'Planner'
-                WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
+                WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                    'director of finance',
+                    'title: director of finance',
+                    'assistant director of finance',
+                    'director of finance and revenue',
+                    'director of finance and administration'
+                )
+                     OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%finance director%'
                 THEN 'Finance Director'
-                WHEN LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
+                WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                    'treasurer',
+                    'town treasurer',
+                    'city treasurer',
+                    'borough treasurer'
+                )
+                     OR LOWER(COALESCE(NULLIF(TRIM(title), ''), NULLIF(TRIM(department), ''), '')) LIKE '%treasurer%'
                 THEN 'Treasurer'
                 ELSE NULL
             END,
@@ -521,6 +534,43 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                 ELSE NULL
             END
         WHERE {where_contacts}
+        """,
+        params,
+    )
+
+    conn.execute(
+        f"""
+        UPDATE contacts
+        SET role_normalized = CASE
+            WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                'director of finance',
+                'title: director of finance',
+                'assistant director of finance',
+                'director of finance and revenue',
+                'director of finance and administration'
+            ) THEN 'Finance Director'
+            WHEN LOWER(TRIM(COALESCE(title, ''))) IN (
+                'treasurer',
+                'town treasurer',
+                'city treasurer',
+                'borough treasurer'
+            ) THEN 'Treasurer'
+            ELSE role_normalized
+        END
+        WHERE {where_contacts}
+          AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NULL
+          AND role_family = 'finance'
+          AND LOWER(TRIM(COALESCE(title, ''))) IN (
+                'director of finance',
+                'title: director of finance',
+                'assistant director of finance',
+                'director of finance and revenue',
+                'director of finance and administration',
+                'treasurer',
+                'town treasurer',
+                'city treasurer',
+                'borough treasurer'
+          )
         """,
         params,
     )
