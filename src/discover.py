@@ -155,7 +155,10 @@ NON_HTML_LINK_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".svg", ".css", ".js"
 def extract_links_from_html(html: str, base_url: str) -> list[dict[str, str]]:
     if BeautifulSoup is None:
         return _extract_links_html_fallback(html or "", base_url)
-    soup = BeautifulSoup(html or "", "html.parser")
+    try:
+        soup = BeautifulSoup(html or "", "html.parser")
+    except Exception:
+        return _extract_links_html_fallback(html or "", base_url)
     links: list[dict[str, str]] = []
     for anchor in soup.find_all("a", href=True):
         href = anchor.get("href", "").strip()
@@ -170,7 +173,10 @@ def extract_links_from_html(html: str, base_url: str) -> list[dict[str, str]]:
 def extract_links_from_sitemap_xml(xml_text: str) -> list[dict[str, str]]:
     if BeautifulSoup is None:
         return _extract_links_xml_fallback(xml_text or "")
-    soup = BeautifulSoup(xml_text or "", "xml")
+    try:
+        soup = BeautifulSoup(xml_text or "", "xml")
+    except Exception:
+        return _extract_links_xml_fallback(xml_text or "")
     links: list[dict[str, str]] = []
     for loc in soup.find_all("loc"):
         url = normalize_url(loc.get_text(" ", strip=True))

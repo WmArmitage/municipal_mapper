@@ -863,7 +863,10 @@ def extract_table_contact_rows(text: str, source_url: str) -> list[dict[str, str
     if "<" not in raw or ">" not in raw or BeautifulSoup is None:
         return []
 
-    soup = BeautifulSoup(raw, "html.parser")
+    try:
+        soup = BeautifulSoup(raw, "html.parser")
+    except Exception:
+        return []
     out: list[dict[str, str | float | None]] = []
     seen_keys: set[tuple[str, str, str, str, str]] = set()
 
@@ -966,7 +969,10 @@ def extract_structured_contact_blocks(text: str, source_url: str) -> list[dict[s
     if "<" not in raw or ">" not in raw or BeautifulSoup is None:
         return []
 
-    soup = BeautifulSoup(raw, "html.parser")
+    try:
+        soup = BeautifulSoup(raw, "html.parser")
+    except Exception:
+        return []
     blocks = soup.find_all(["tr", "li", "article", "section", "div", "p"])
     out: list[dict[str, str | float | None]] = []
     seen_block_keys: set[tuple[str, str, str, str, str]] = set()
@@ -1201,22 +1207,12 @@ def _prepare_text_for_extraction(text: str) -> str:
         return raw
 
     if BeautifulSoup is None:
-        def mailto_replacer(match: re.Match[str]) -> str:
-            email = (match.group("email") or "").strip().lower()
-            anchor_text = normalize_whitespace(match.group("label") or "") or ""
-            if not EMAIL_RE.fullmatch(email):
-                return anchor_text
-            return f"{anchor_text} {email}".strip()
+        return _prepare_text_with_regex_fallback(raw)
 
-        raw_with_mailto = re.sub(
-            r"(?is)<a\b[^>]*href=[\"']mailto:(?P<email>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})(?:\?[^\"'>]*)?[\"'][^>]*>(?P<label>.*?)</a>",
-            mailto_replacer,
-            raw,
-        )
-        without_assets = re.sub(r"(?is)<(script|style|noscript)\b[^>]*>.*?</\1>", " ", raw_with_mailto)
-        return re.sub(r"(?s)<[^>]+>", "\n", without_assets)
-
-    soup = BeautifulSoup(raw, "html.parser")
+    try:
+        soup = BeautifulSoup(raw, "html.parser")
+    except Exception:
+        return _prepare_text_with_regex_fallback(raw)
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     for anchor in soup.find_all("a", href=True):
@@ -1227,6 +1223,23 @@ def _prepare_text_for_extraction(text: str) -> str:
         if EMAIL_RE.fullmatch(email):
             anchor.append(f" {email}")
     return soup.get_text("\n")
+
+
+def _prepare_text_with_regex_fallback(raw: str) -> str:
+    def mailto_replacer(match: re.Match[str]) -> str:
+        email = (match.group("email") or "").strip().lower()
+        anchor_text = normalize_whitespace(match.group("label") or "") or ""
+        if not EMAIL_RE.fullmatch(email):
+            return anchor_text
+        return f"{anchor_text} {email}".strip()
+
+    raw_with_mailto = re.sub(
+        r"(?is)<a\b[^>]*href=[\"']mailto:(?P<email>[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})(?:\?[^\"'>]*)?[\"'][^>]*>(?P<label>.*?)</a>",
+        mailto_replacer,
+        raw,
+    )
+    without_assets = re.sub(r"(?is)<(script|style|noscript)\b[^>]*>.*?</\1>", " ", raw_with_mailto)
+    return re.sub(r"(?s)<[^>]+>", "\n", without_assets)
 
 
 def _neighboring_lines(lines: list[str], idx: int, radius: int = 1) -> list[str]:

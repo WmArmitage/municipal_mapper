@@ -61,14 +61,21 @@ MAX_CONTACT_DISCOVERY_DEPTH = 2
 
 
 def extract_title(html: str) -> str | None:
+    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html or "")
     if BeautifulSoup is None:
-        match = re.search(r"(?is)<title[^>]*>(.*?)</title>", html or "")
         if match:
             return normalize_whitespace(match.group(1))
         return None
-    soup = BeautifulSoup(html or "", "html.parser")
+    try:
+        soup = BeautifulSoup(html or "", "html.parser")
+    except Exception:
+        if match:
+            return normalize_whitespace(match.group(1))
+        return None
     if soup.title and soup.title.string:
         return normalize_whitespace(soup.title.string)
+    if match:
+        return normalize_whitespace(match.group(1))
     return None
 
 
