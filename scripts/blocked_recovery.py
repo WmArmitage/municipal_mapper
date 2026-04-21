@@ -30,6 +30,10 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "sitemap_status",
     "robots_status",
     "known_path_hits",
+    "directory_hit",
+    "directory_fallback_attempted",
+    "directory_fallback_contacts",
+    "directory_source",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "notes",
@@ -61,6 +65,9 @@ RECOVERY_RESULT_VALUES = {
     "recovered_manual_seed_needed",
     "partial_recovery",
     "discovery_failure",
+    "recovered_directory_hit",
+    "directory_present_no_extract",
+    "partial_directory_recovery",
 }
 
 BLOCK_HTTP_STATUS_CODES = {403, 429}
@@ -149,6 +156,10 @@ def _run_recovery_for_municipality(
         "sitemap_status": "",
         "robots_status": "",
         "known_path_hits": 0,
+        "directory_hit": 0,
+        "directory_fallback_attempted": 0,
+        "directory_fallback_contacts": 0,
+        "directory_source": "",
         "recovered_contact_count": 0,
         "recovered_role_winner_count": 0,
         "notes": "",
@@ -172,6 +183,9 @@ def _run_recovery_for_municipality(
     known_path_hits = 0
     discovered_path_hits = 0
     known_path_results: list[dict[str, object]] = []
+    first_directory_hit_url = ""
+    first_directory_hit_path = ""
+    first_directory_hit_html = ""
     recovered_from_known = False
     recovered_from_sitemap = False
     latest_source_url = home_target
@@ -298,6 +312,14 @@ def _run_recovery_for_municipality(
                     "hit": 1 if result.status_code == 200 else 0,
                 }
             )
+            if (
+                not first_directory_hit_html
+                and is_directory_hit(path_value, result.status_code)
+                and bool(result.text)
+            ):
+                first_directory_hit_path = path_value
+                first_directory_hit_url = normalize_url(result.final_url or target_url) or (result.final_url or target_url)
+                first_directory_hit_html = result.text or ""
 
         if not result.ok or not result.text:
             continue
@@ -318,13 +340,15 @@ def _run_recovery_for_municipality(
                 "discovered_from": f"blocked_recovery:{source_kind}",
             },
         )
-        extracted_contacts, _ = process_text_extractions(
-            conn,
-            municipality_id,
-            active_url,
-            result.text,
-            page_type=page_type,
-        )
+        extracted_contacts = 0
+        if not (source_kind == "known" and is_directory_hit(known_probe_path_by_url.get(target_url, ""), result.status_code)):
+            extracted_contacts, _ = process_text_extractions(
+                conn,
+                municipality_id,
+                active_url,
+                result.text,
+                page_type=page_type,
+            )
 
         if target_url in known_probe_set:
             if extracted_contacts > 0:
@@ -337,12 +361,9 @@ def _run_recovery_for_municipality(
     if stopped_early:
         notes.append("stopped_after_repeated_403_or_429")
 
-    after_contact_count = _count_contacts(conn, municipality_id)
-    recovered_contact_count = max(0, after_contact_count - before_contact_count)
     known_path_hits = sum(_coerce_int(result.get("hit")) for result in known_path_results)
     directory_hit = any(
-        _coerce_int(result.get("hit")) == 1
-        and "directory" in str(result.get("path") or "").lower()
+        is_directory_hit(str(result.get("path") or ""), _coerce_int(result.get("status"), default=-1))
         for result in known_path_results
     )
     hit_paths = [
@@ -355,9 +376,31 @@ def _run_recovery_for_municipality(
         notes_parts.append(f"known_paths_hit={','.join(hit_paths)}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
+    status_row["directory_hit"] = 1 if directory_hit else 0
+
+    directory_fallback_attempted = 0
+    directory_fallback_contacts = 0
+    directory_fallback_note = ""
+    if directory_hit and first_directory_hit_html and first_directory_hit_url:
+        directory_fallback_attempted = 1
+        directory_fallback_contacts, _, directory_fallback_note = run_directory_hit_fallback(
+            conn=conn,
+            municipality_id=municipality_id,
+            source_url=first_directory_hit_url,
+            html_text=first_directory_hit_html,
+        )
+    status_row["directory_fallback_attempted"] = directory_fallback_attempted
+    status_row["directory_fallback_contacts"] = directory_fallback_contacts
+    status_row["directory_source"] = first_directory_hit_path or ""
+    if directory_fallback_attempted:
+        notes_parts.append("directory_fallback_attempted=1")
+        notes_parts.append(f"directory_fallback_contacts={directory_fallback_contacts}")
+        if first_directory_hit_path:
+            notes_parts.append(f"directory_source={first_directory_hit_path}")
+        if directory_fallback_note:
+            notes_parts.append(directory_fallback_note)
 
     status_row["known_path_hits"] = known_path_hits
-    status_row["recovered_contact_count"] = recovered_contact_count
 
     if winners_view_exists:
         after_winner_count = _count_role_winners(conn, municipality_id)
@@ -371,7 +414,18 @@ def _run_recovery_for_municipality(
         or any(_coerce_int(result.get("status"), default=-1) == 200 for result in known_path_results)
     )
 
-    if recovered_contact_count > 0:
+    status_row["recovered_contact_count"] = max(0, _count_contacts(conn, municipality_id) - before_contact_count)
+    recovered_contact_count = _coerce_int(status_row["recovered_contact_count"])
+    recovered_role_winner_count = _coerce_int(status_row.get("recovered_role_winner_count"))
+
+    if directory_hit:
+        if recovered_contact_count > 0 and recovered_role_winner_count == 0:
+            status_row["recovery_result"] = "partial_directory_recovery"
+        elif recovered_contact_count > 0:
+            status_row["recovery_result"] = "recovered_directory_hit"
+        else:
+            status_row["recovery_result"] = "directory_present_no_extract"
+    elif recovered_contact_count > 0:
         if recovered_from_sitemap:
             status_row["recovery_result"] = "recovered_sitemap_path"
         elif recovered_from_known:
@@ -431,6 +485,45 @@ def _derive_blocked_reason(diagnostics: dict[str, object]) -> str:
     if _coerce_int(diagnostics.get("detected_block_signal")) > 0:
         return "block_signal_detected"
     return "blocked_or_forbidden"
+
+
+def is_directory_hit(path: str, status_code: int | None) -> bool:
+    return status_code == 200 and "directory" in str(path or "").lower()
+
+
+def run_directory_hit_fallback(
+    conn,
+    municipality_id: str,
+    source_url: str,
+    html_text: str,
+) -> tuple[int, int, str]:
+    """
+    Returns:
+      recovered_contact_count,
+      recovered_role_winner_count,
+      fallback_note
+    """
+    before_contacts = _count_contacts(conn, municipality_id)
+    winners_view_exists = _view_exists(conn, "vw_best_role_per_town")
+    before_winners = _count_role_winners(conn, municipality_id) if winners_view_exists else 0
+
+    process_text_extractions(
+        conn,
+        municipality_id,
+        source_url,
+        html_text,
+        page_type="staff_directory",
+    )
+
+    after_contacts = _count_contacts(conn, municipality_id)
+    recovered_contacts = max(0, after_contacts - before_contacts)
+    recovered_winners = 0
+    fallback_note = ""
+    if winners_view_exists:
+        recovered_winners = max(0, _count_role_winners(conn, municipality_id) - before_winners)
+    else:
+        fallback_note = "directory_fallback_winners_unavailable=1"
+    return recovered_contacts, recovered_winners, fallback_note
 
 
 def _build_known_probe_urls(seed_url: str) -> list[dict[str, str]]:

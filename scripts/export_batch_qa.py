@@ -166,6 +166,9 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "robots_status",
     "known_path_hits",
     "directory_hit",
+    "directory_fallback_attempted",
+    "directory_fallback_contacts",
+    "directory_source",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "notes",
@@ -195,6 +198,9 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "recovered_manual_seed_needed",
     "partial_recovery",
     "discovery_failure",
+    "recovered_directory_hit",
+    "directory_present_no_extract",
+    "partial_directory_recovery",
 }
 
 
@@ -462,11 +468,23 @@ def _coerce_int(value: object, default: int = 0) -> int:
 
 
 def _extract_directory_hit_from_notes(notes: str) -> int:
+    return _extract_note_int_value(notes, "directory_hit", default=0)
+
+
+def _extract_note_value(notes: str, key: str) -> str:
+    target = f"{key.strip().lower()}="
     for part in str(notes or "").split(";"):
-        clean = part.strip().lower()
-        if clean == "directory_hit=1":
-            return 1
-    return 0
+        clean = part.strip()
+        if clean.lower().startswith(target):
+            return clean.split("=", 1)[1].strip()
+    return ""
+
+
+def _extract_note_int_value(notes: str, key: str, default: int = 0) -> int:
+    value = _extract_note_value(notes, key)
+    if value == "":
+        return default
+    return _coerce_int(value, default=default)
 
 
 def fetch_crawl_diagnostics(
@@ -626,6 +644,9 @@ def build_blocked_recovery_status_rows(
             "robots_status": "",
             "known_path_hits": 0,
             "directory_hit": 0,
+            "directory_fallback_attempted": 0,
+            "directory_fallback_contacts": 0,
+            "directory_source": "",
             "recovered_contact_count": 0,
             "recovered_role_winner_count": 0,
             "notes": "recovery_not_attempted",
@@ -675,7 +696,17 @@ def build_blocked_recovery_status_rows(
         row["recovered_contact_count"] = _coerce_int(payload.get("recovered_contact_count"))
         row["recovered_role_winner_count"] = _coerce_int(payload.get("recovered_role_winner_count"))
         row["notes"] = str(payload.get("notes") or "")
-        row["directory_hit"] = _extract_directory_hit_from_notes(str(row["notes"]))
+        notes = str(row["notes"])
+        row["directory_hit"] = _coerce_int(payload.get("directory_hit"), default=_extract_directory_hit_from_notes(notes))
+        row["directory_fallback_attempted"] = _coerce_int(
+            payload.get("directory_fallback_attempted"),
+            default=_extract_note_int_value(notes, "directory_fallback_attempted", default=0),
+        )
+        row["directory_fallback_contacts"] = _coerce_int(
+            payload.get("directory_fallback_contacts"),
+            default=_extract_note_int_value(notes, "directory_fallback_contacts", default=0),
+        )
+        row["directory_source"] = str(payload.get("directory_source") or _extract_note_value(notes, "directory_source") or "")
 
     return [rows_by_id[municipality_id] for municipality_id in sorted(rows_by_id)]
 
