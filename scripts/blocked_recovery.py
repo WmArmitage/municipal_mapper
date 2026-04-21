@@ -394,7 +394,7 @@ def _run_recovery_for_municipality(
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
-    playwright_attempted = 0
+    playwright_attempted = False
     playwright_success = 0
     playwright_path = ""
     playwright_directory_hit = False
@@ -423,7 +423,7 @@ def _run_recovery_for_municipality(
         if not site_root:
             return
 
-        playwright_attempted = 1
+        playwright_attempted = True
         playwright_timeout_ms = max(5000, _coerce_int(timeout, default=20) * 1000)
         for path in PLAYWRIGHT_FALLBACK_PATHS:
             target_url = normalize_url(path, base_url=site_root) or f"{site_root}{path}"
@@ -465,11 +465,11 @@ def _run_recovery_for_municipality(
     status_row["homepage_status"] = _status_label(home_result)
     followup_referer = normalize_url(home_result.final_url or home_target) or (home_result.final_url or home_target)
     latest_source_url = followup_referer or latest_source_url
-    block_streak, blocked_responses = _update_block_tracking(home_result, block_streak, blocked_responses)
     site_root = _site_root(followup_referer or home_target) or site_root
-    _attempt_playwright_once(
-        block_detected=diagnostic_is_blocked or _coerce_int(home_result.status_code, default=-1) == 403
-    )
+    home_status_code = _coerce_int(home_result.status_code, default=-1)
+    if home_status_code == 403 or diagnostic_is_blocked:
+        _attempt_playwright_once(block_detected=True)
+    block_streak, blocked_responses = _update_block_tracking(home_result, block_streak, blocked_responses)
 
     fallback_url = _build_fallback_url(followup_referer or home_target)
     if fallback_url:
@@ -485,15 +485,11 @@ def _run_recovery_for_municipality(
         fallback_final = normalize_url(fallback_result.final_url or fallback_url) or (fallback_result.final_url or fallback_url)
         followup_referer = fallback_final or followup_referer
         latest_source_url = fallback_final or latest_source_url
-        block_streak, blocked_responses = _update_block_tracking(fallback_result, block_streak, blocked_responses)
         site_root = _site_root(followup_referer or home_target) or site_root
-        _attempt_playwright_once(
-            block_detected=(
-                diagnostic_is_blocked
-                or _coerce_int(home_result.status_code, default=-1) == 403
-                or _coerce_int(fallback_result.status_code, default=-1) == 403
-            )
-        )
+        fallback_status_code = _coerce_int(fallback_result.status_code, default=-1)
+        if fallback_status_code == 403 or diagnostic_is_blocked:
+            _attempt_playwright_once(block_detected=True)
+        block_streak, blocked_responses = _update_block_tracking(fallback_result, block_streak, blocked_responses)
     else:
         status_row["fallback_status"] = "not_attempted"
 
