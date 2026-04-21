@@ -154,6 +154,22 @@ BLOCKED_TOWN_FIELDS = (
     "blocked_reason",
 )
 
+BLOCKED_RECOVERY_STATUS_FIELDS = (
+    "municipality_id",
+    "batch_id",
+    "blocked_reason",
+    "recovery_mode_attempted",
+    "recovery_result",
+    "homepage_status",
+    "fallback_status",
+    "sitemap_status",
+    "robots_status",
+    "known_path_hits",
+    "recovered_contact_count",
+    "recovered_role_winner_count",
+    "notes",
+)
+
 COVERAGE_SUMMARY_FIELDS = (
     "batch_id",
     "municipalities_total",
@@ -171,6 +187,13 @@ CRAWL_FAILURE_DIAGNOSTIC_CLASSES = {
     "low_extraction",
 }
 JS_SHELL_LINK_NEAR_ZERO_THRESHOLD = 1
+BLOCKED_RECOVERY_RESULT_VALUES = {
+    "unrecovered_http_block",
+    "recovered_known_path",
+    "recovered_sitemap_path",
+    "recovered_manual_seed_needed",
+    "partial_recovery",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -572,6 +595,79 @@ def build_blocked_towns_rows(
     return out
 
 
+def build_blocked_recovery_status_rows(
+    conn,
+    blocked_towns: list[dict[str, str | int]],
+) -> list[dict[str, str | int]]:
+    rows_by_id: dict[str, dict[str, str | int]] = {}
+    for blocked in blocked_towns:
+        municipality_id = str(blocked.get("municipality_id") or "")
+        if not municipality_id:
+            continue
+        rows_by_id[municipality_id] = {
+            "municipality_id": municipality_id,
+            "batch_id": str(blocked.get("batch_id") or ""),
+            "blocked_reason": str(blocked.get("blocked_reason") or ""),
+            "recovery_mode_attempted": "false",
+            "recovery_result": "",
+            "homepage_status": "",
+            "fallback_status": "",
+            "sitemap_status": "",
+            "robots_status": "",
+            "known_path_hits": 0,
+            "recovered_contact_count": 0,
+            "recovered_role_winner_count": 0,
+            "notes": "recovery_not_attempted",
+        }
+
+    if not rows_by_id or not object_exists(conn, "signals", "table"):
+        return [rows_by_id[municipality_id] for municipality_id in sorted(rows_by_id)]
+
+    municipality_ids = sorted(rows_by_id)
+    sql = f"""
+        SELECT municipality_id, value
+        FROM signals
+        WHERE signal_type = 'blocked_recovery_status'
+          AND municipality_id IN ({placeholders(len(municipality_ids))})
+        ORDER BY rowid DESC
+    """
+    records = conn.execute(sql, tuple(municipality_ids)).fetchall()
+    parsed_once: set[str] = set()
+    for record in records:
+        municipality_id = str(record["municipality_id"] or "")
+        if not municipality_id or municipality_id in parsed_once:
+            continue
+        parsed_once.add(municipality_id)
+        row = rows_by_id.get(municipality_id)
+        if row is None:
+            continue
+
+        raw_value = str(record["value"] or "")
+        if not raw_value.strip():
+            continue
+        try:
+            payload = json.loads(raw_value)
+        except json.JSONDecodeError:
+            continue
+
+        row["batch_id"] = str(payload.get("batch_id") or row.get("batch_id") or "")
+        row["blocked_reason"] = str(payload.get("blocked_reason") or row.get("blocked_reason") or "")
+        attempted = str(payload.get("recovery_mode_attempted") or "").strip().lower()
+        row["recovery_mode_attempted"] = "true" if attempted in {"1", "true", "yes"} else "false"
+        recovery_result = str(payload.get("recovery_result") or "").strip()
+        row["recovery_result"] = recovery_result if recovery_result in BLOCKED_RECOVERY_RESULT_VALUES else ""
+        row["homepage_status"] = str(payload.get("homepage_status") or "")
+        row["fallback_status"] = str(payload.get("fallback_status") or "")
+        row["sitemap_status"] = str(payload.get("sitemap_status") or "")
+        row["robots_status"] = str(payload.get("robots_status") or "")
+        row["known_path_hits"] = _coerce_int(payload.get("known_path_hits"))
+        row["recovered_contact_count"] = _coerce_int(payload.get("recovered_contact_count"))
+        row["recovered_role_winner_count"] = _coerce_int(payload.get("recovered_role_winner_count"))
+        row["notes"] = str(payload.get("notes") or "")
+
+    return [rows_by_id[municipality_id] for municipality_id in sorted(rows_by_id)]
+
+
 def build_coverage_summary_row(
     batch_id: str,
     municipalities: list[dict[str, str]],
@@ -824,6 +920,7 @@ def main() -> None:
         crawl_diagnostics = fetch_crawl_diagnostics(conn, municipality_ids, args.batch_id)
         missing_key_roles = build_missing_key_roles(municipalities, role_winners)
         blocked_towns = build_blocked_towns_rows(municipalities, crawl_diagnostics)
+        blocked_recovery_status_rows = build_blocked_recovery_status_rows(conn, blocked_towns)
         coverage_summary_rows = [
             build_coverage_summary_row(
                 batch_id=args.batch_id,
@@ -897,6 +994,11 @@ def main() -> None:
             batch_dir / "qa_blocked_towns.csv",
             blocked_towns,
             BLOCKED_TOWN_FIELDS,
+        ),
+        "qa_blocked_recovery_status.csv": write_csv(
+            batch_dir / "qa_blocked_recovery_status.csv",
+            blocked_recovery_status_rows,
+            BLOCKED_RECOVERY_STATUS_FIELDS,
         ),
         "qa_coverage_summary.csv": write_csv(
             batch_dir / "qa_coverage_summary.csv",

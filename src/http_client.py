@@ -92,13 +92,14 @@ def fetch_url(
     session: requests.Session | None = None,
     referer: str | None = None,
     retries: int = DEFAULT_RETRIES,
+    request_headers: dict[str, str] | None = None,
 ) -> FetchResult:
     target = normalize_url(ensure_url_has_scheme(url))
     if not target:
         return FetchResult(url, None, None, 0, None, None, "invalid_url", 0, {})
 
     client = session or create_session()
-    headers = _build_headers(referer=referer)
+    headers = _build_headers(referer=referer, request_headers=request_headers)
 
     attempts = max(0, retries) + 1
     start_total = perf_counter()
@@ -191,8 +192,11 @@ def same_registered_domain(url_a: str, url_b: str) -> bool:
     return bool(a and b and a == b)
 
 
-def _build_headers(referer: str | None) -> dict[str, str]:
-    headers = dict(DEFAULT_HEADERS)
+def _build_headers(
+    referer: str | None,
+    request_headers: dict[str, str] | None = None,
+) -> dict[str, str]:
+    headers = dict(request_headers or DEFAULT_HEADERS)
     if referer:
         headers["Referer"] = referer
     return headers

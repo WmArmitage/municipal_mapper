@@ -1,0 +1,625 @@
+from __future__ import annotations
+
+import json
+from urllib.parse import urlparse
+
+from src import db
+from src.discover import classify_page_type, extract_links_from_sitemap_xml, is_contact_oriented_page_type
+from src.http_client import FetchResult, create_session, fetch_url
+from src.normalize import ensure_url_has_scheme, get_domain, make_id, normalize_url
+from scripts.run_town import process_text_extractions
+
+BLOCKED_RECOVERY_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+BLOCKED_RECOVERY_STATUS_FIELDS = (
+    "municipality_id",
+    "batch_id",
+    "blocked_reason",
+    "recovery_mode_attempted",
+    "recovery_result",
+    "homepage_status",
+    "fallback_status",
+    "sitemap_status",
+    "robots_status",
+    "known_path_hits",
+    "recovered_contact_count",
+    "recovered_role_winner_count",
+    "notes",
+)
+
+KNOWN_PATH_ALLOWLIST = (
+    "/Directory.aspx",
+    "/directory.aspx",
+    "/StaffDirectory.aspx",
+    "/staffdirectory.aspx",
+    "/departments",
+    "/government",
+    "/town-clerk",
+    "/tax-collector",
+    "/assessor",
+    "/building-department",
+    "/planning-zoning",
+    "/finance-department",
+)
+
+KNOWN_PATH_PROBE_GROUPS = (
+    ("/Directory.aspx", "/directory.aspx"),
+    ("/StaffDirectory.aspx", "/staffdirectory.aspx"),
+    ("/departments",),
+    ("/government",),
+    ("/town-clerk",),
+    ("/tax-collector",),
+    ("/assessor",),
+    ("/building-department",),
+    ("/planning-zoning",),
+    ("/finance-department",),
+)
+
+RECOVERY_RESULT_VALUES = {
+    "unrecovered_http_block",
+    "recovered_known_path",
+    "recovered_sitemap_path",
+    "recovered_manual_seed_needed",
+    "partial_recovery",
+}
+
+BLOCK_HTTP_STATUS_CODES = {403, 429}
+BLOCK_STREAK_STOP_THRESHOLD = 3
+DISCOVERED_PROBE_LIMIT = 4
+DISCOVERED_HIGH_VALUE_HINTS = (
+    "directory",
+    "staff",
+    "department",
+    "government",
+    "town-clerk",
+    "tax",
+    "assessor",
+    "building",
+    "planning",
+    "zoning",
+    "finance",
+    "contact",
+)
+
+
+def run_blocked_recovery_pass(
+    conn,
+    municipalities: list[dict],
+    batch_id: str = "",
+    timeout: int = 20,
+    probe_budget: int = 10,
+) -> list[dict[str, object]]:
+    if not municipalities:
+        return []
+
+    municipality_ids = [str(row.get("municipality_id") or "") for row in municipalities]
+    diagnostics_by_id = _fetch_latest_crawl_diagnostics(conn, municipality_ids)
+    winners_view_exists = _view_exists(conn, "vw_best_role_per_town")
+
+    out: list[dict[str, object]] = []
+    for municipality in municipalities:
+        municipality_id = str(municipality.get("municipality_id") or "")
+        if not municipality_id:
+            continue
+        diagnostics = diagnostics_by_id.get(municipality_id) or {}
+        if str(diagnostics.get("diagnostic_class") or "").strip().lower() != "blocked_or_forbidden":
+            continue
+
+        status_row, signal_source_url = _run_recovery_for_municipality(
+            conn=conn,
+            municipality=municipality,
+            diagnostics=diagnostics,
+            batch_id=batch_id,
+            timeout=timeout,
+            probe_budget=max(0, probe_budget),
+            winners_view_exists=winners_view_exists,
+        )
+        _upsert_blocked_recovery_signal(
+            conn=conn,
+            municipality_id=municipality_id,
+            status_row=status_row,
+            source_url=signal_source_url,
+        )
+        out.append(status_row)
+        db.commit(conn)
+
+    return out
+
+
+def _run_recovery_for_municipality(
+    conn,
+    municipality: dict,
+    diagnostics: dict[str, object],
+    batch_id: str,
+    timeout: int,
+    probe_budget: int,
+    winners_view_exists: bool,
+) -> tuple[dict[str, object], str]:
+    municipality_id = str(municipality.get("municipality_id") or "")
+    website_url = str(municipality.get("website_url") or "").strip()
+    blocked_reason = _derive_blocked_reason(diagnostics)
+    status_row: dict[str, object] = {
+        "municipality_id": municipality_id,
+        "batch_id": batch_id,
+        "blocked_reason": blocked_reason,
+        "recovery_mode_attempted": "true",
+        "recovery_result": "recovered_manual_seed_needed",
+        "homepage_status": "",
+        "fallback_status": "",
+        "sitemap_status": "",
+        "robots_status": "",
+        "known_path_hits": 0,
+        "recovered_contact_count": 0,
+        "recovered_role_winner_count": 0,
+        "notes": "",
+    }
+    notes: list[str] = []
+
+    if not website_url:
+        status_row["notes"] = "missing_website_url"
+        return status_row, ""
+
+    home_target = normalize_url(ensure_url_has_scheme(website_url)) or ensure_url_has_scheme(website_url)
+    municipality_domain = str(municipality.get("domain") or get_domain(home_target) or "").strip().lower()
+
+    before_contact_count = _count_contacts(conn, municipality_id)
+    before_winner_count = _count_role_winners(conn, municipality_id) if winners_view_exists else 0
+
+    session = create_session()
+    block_streak = 0
+    blocked_responses = 0
+    stopped_early = False
+    known_path_hits = 0
+    discovered_path_hits = 0
+    recovered_from_known = False
+    recovered_from_sitemap = False
+    latest_source_url = home_target
+    followup_referer: str | None = None
+
+    home_result = fetch_url(
+        home_target,
+        timeout=timeout,
+        session=session,
+        referer=None,
+        retries=0,
+        request_headers=BLOCKED_RECOVERY_HEADERS,
+    )
+    status_row["homepage_status"] = _status_label(home_result)
+    followup_referer = normalize_url(home_result.final_url or home_target) or (home_result.final_url or home_target)
+    latest_source_url = followup_referer or latest_source_url
+    block_streak, blocked_responses = _update_block_tracking(home_result, block_streak, blocked_responses)
+
+    fallback_url = _build_fallback_url(followup_referer or home_target)
+    if fallback_url:
+        fallback_result = fetch_url(
+            fallback_url,
+            timeout=timeout,
+            session=session,
+            referer=followup_referer,
+            retries=0,
+            request_headers=BLOCKED_RECOVERY_HEADERS,
+        )
+        status_row["fallback_status"] = _status_label(fallback_result)
+        fallback_final = normalize_url(fallback_result.final_url or fallback_url) or (fallback_result.final_url or fallback_url)
+        followup_referer = fallback_final or followup_referer
+        latest_source_url = fallback_final or latest_source_url
+        block_streak, blocked_responses = _update_block_tracking(fallback_result, block_streak, blocked_responses)
+    else:
+        status_row["fallback_status"] = "not_attempted"
+
+    site_root = _site_root(followup_referer or home_target)
+    discovered_candidates: list[tuple[str, str]] = []
+
+    sitemap_status = "not_attempted"
+    if site_root and block_streak < BLOCK_STREAK_STOP_THRESHOLD:
+        sitemap_url = normalize_url("/sitemap.xml", base_url=site_root) or f"{site_root}/sitemap.xml"
+        sitemap_result = fetch_url(
+            sitemap_url,
+            timeout=timeout,
+            session=session,
+            referer=followup_referer,
+            retries=0,
+            request_headers=BLOCKED_RECOVERY_HEADERS,
+        )
+        sitemap_status = _status_label(sitemap_result)
+        block_streak, blocked_responses = _update_block_tracking(sitemap_result, block_streak, blocked_responses)
+        if sitemap_result.ok and sitemap_result.text:
+            sitemap_links = [str(link.get("url") or "") for link in extract_links_from_sitemap_xml(sitemap_result.text)]
+            discovered_candidates.extend((url, "sitemap") for url in sitemap_links)
+    status_row["sitemap_status"] = sitemap_status
+
+    robots_status = "not_attempted"
+    if site_root and block_streak < BLOCK_STREAK_STOP_THRESHOLD:
+        robots_url = normalize_url("/robots.txt", base_url=site_root) or f"{site_root}/robots.txt"
+        robots_result = fetch_url(
+            robots_url,
+            timeout=timeout,
+            session=session,
+            referer=followup_referer,
+            retries=0,
+            request_headers=BLOCKED_RECOVERY_HEADERS,
+        )
+        robots_status = _status_label(robots_result)
+        block_streak, blocked_responses = _update_block_tracking(robots_result, block_streak, blocked_responses)
+        if robots_result.ok and robots_result.text:
+            robots_links = _extract_urls_from_robots(robots_result.text, site_root)
+            discovered_candidates.extend((url, "robots") for url in robots_links)
+    status_row["robots_status"] = robots_status
+
+    discovered_probe_urls = _select_discovered_probe_urls(
+        candidates=discovered_candidates,
+        municipality_domain=municipality_domain,
+        limit=DISCOVERED_PROBE_LIMIT,
+    )
+    known_probe_urls = _build_known_probe_urls(site_root or home_target)
+    known_probe_set = set(known_probe_urls)
+
+    probe_queue: list[tuple[str, str]] = []
+    seen_probe_urls: set[str] = set()
+    for url in discovered_probe_urls:
+        if url in seen_probe_urls:
+            continue
+        seen_probe_urls.add(url)
+        probe_queue.append(("sitemap", url))
+    for url in known_probe_urls:
+        if url in seen_probe_urls:
+            continue
+        seen_probe_urls.add(url)
+        probe_queue.append(("known", url))
+
+    probes_used = 0
+    for source_kind, target_url in probe_queue:
+        if probes_used >= probe_budget:
+            break
+        if block_streak >= BLOCK_STREAK_STOP_THRESHOLD:
+            stopped_early = True
+            break
+
+        probe_referer = followup_referer or site_root or home_target
+        result = fetch_url(
+            target_url,
+            timeout=timeout,
+            session=session,
+            referer=probe_referer,
+            retries=0,
+            request_headers=BLOCKED_RECOVERY_HEADERS,
+        )
+        probes_used += 1
+        block_streak, blocked_responses = _update_block_tracking(result, block_streak, blocked_responses)
+
+        if not result.ok or not result.text:
+            continue
+
+        active_url = normalize_url(result.final_url or target_url) or (result.final_url or target_url)
+        followup_referer = active_url
+        latest_source_url = active_url
+        page_type = classify_page_type(active_url, active_url.rsplit("/", 1)[-1])
+        page_id = make_id("page", municipality_id, active_url)
+        db.upsert_page(
+            conn,
+            {
+                "page_id": page_id,
+                "municipality_id": municipality_id,
+                "url": active_url,
+                "page_type": page_type,
+                "title": None,
+                "discovered_from": f"blocked_recovery:{source_kind}",
+            },
+        )
+        extracted_contacts, _ = process_text_extractions(
+            conn,
+            municipality_id,
+            active_url,
+            result.text,
+            page_type=page_type,
+        )
+
+        if target_url in known_probe_set:
+            known_path_hits += 1
+            if extracted_contacts > 0:
+                recovered_from_known = True
+        else:
+            discovered_path_hits += 1
+            if extracted_contacts > 0:
+                recovered_from_sitemap = True
+
+    if stopped_early:
+        notes.append("stopped_after_repeated_403_or_429")
+
+    after_contact_count = _count_contacts(conn, municipality_id)
+    recovered_contact_count = max(0, after_contact_count - before_contact_count)
+    status_row["known_path_hits"] = known_path_hits
+    status_row["recovered_contact_count"] = recovered_contact_count
+
+    if winners_view_exists:
+        after_winner_count = _count_role_winners(conn, municipality_id)
+        status_row["recovered_role_winner_count"] = max(0, after_winner_count - before_winner_count)
+    else:
+        notes.append("vw_best_role_per_town_missing")
+
+    if recovered_contact_count > 0:
+        if recovered_from_sitemap:
+            status_row["recovery_result"] = "recovered_sitemap_path"
+        elif recovered_from_known:
+            status_row["recovery_result"] = "recovered_known_path"
+        else:
+            status_row["recovery_result"] = "partial_recovery"
+    elif known_path_hits > 0 or discovered_path_hits > 0:
+        status_row["recovery_result"] = "partial_recovery"
+    elif blocked_responses >= BLOCK_STREAK_STOP_THRESHOLD:
+        status_row["recovery_result"] = "unrecovered_http_block"
+    else:
+        status_row["recovery_result"] = "recovered_manual_seed_needed"
+
+    if status_row["recovery_result"] not in RECOVERY_RESULT_VALUES:
+        status_row["recovery_result"] = "partial_recovery"
+    if notes:
+        status_row["notes"] = "; ".join(sorted(set(notes)))
+    return status_row, latest_source_url
+
+
+def _fetch_latest_crawl_diagnostics(conn, municipality_ids: list[str]) -> dict[str, dict[str, object]]:
+    if not municipality_ids or not _table_exists(conn, "signals"):
+        return {}
+    sql = f"""
+        SELECT municipality_id, value
+        FROM signals
+        WHERE signal_type = 'crawl_diagnostics'
+          AND municipality_id IN ({_placeholders(len(municipality_ids))})
+        ORDER BY rowid DESC
+    """
+    rows = conn.execute(sql, tuple(municipality_ids)).fetchall()
+    out: dict[str, dict[str, object]] = {}
+    for row in rows:
+        municipality_id = str(row["municipality_id"] or "")
+        if not municipality_id or municipality_id in out:
+            continue
+        payload = _parse_json_dict(row["value"])
+        if payload:
+            out[municipality_id] = payload
+    return out
+
+
+def _derive_blocked_reason(diagnostics: dict[str, object]) -> str:
+    status_code = _coerce_int(diagnostics.get("http_status"), default=-1)
+    if status_code in {401, 403}:
+        return "http_forbidden"
+    if status_code == 429:
+        return "rate_limited"
+    if status_code == 503:
+        return "service_unavailable_or_protected"
+    if _coerce_int(diagnostics.get("detected_block_signal")) > 0:
+        return "block_signal_detected"
+    return "blocked_or_forbidden"
+
+
+def _build_known_probe_urls(seed_url: str) -> list[str]:
+    site_root = _site_root(seed_url)
+    if not site_root:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for group in KNOWN_PATH_PROBE_GROUPS:
+        canonical_path = group[0]
+        url = normalize_url(canonical_path, base_url=site_root)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append(url)
+    return out
+
+
+def _select_discovered_probe_urls(
+    candidates: list[tuple[str, str]],
+    municipality_domain: str,
+    limit: int,
+) -> list[str]:
+    scored: list[tuple[float, str]] = []
+    seen: set[str] = set()
+    for raw_url, source_kind in candidates:
+        candidate = normalize_url(raw_url)
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        if not _is_internal_link(candidate, municipality_domain):
+            continue
+        if not _is_high_value_discovered_url(candidate):
+            continue
+        score = _score_discovered_url(candidate)
+        if source_kind == "sitemap":
+            score += 0.15
+        scored.append((score, candidate))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [url for _, url in scored[: max(0, limit)]]
+
+
+def _score_discovered_url(url: str) -> float:
+    lowered = url.lower()
+    score = 0.0
+    for hint in DISCOVERED_HIGH_VALUE_HINTS:
+        if hint in lowered:
+            score += 1.0
+    page_type = classify_page_type(url, "")
+    if is_contact_oriented_page_type(page_type):
+        score += 1.5
+    return score
+
+
+def _is_high_value_discovered_url(url: str) -> bool:
+    lowered = url.lower()
+    if lowered.endswith((".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png", ".gif", ".zip")):
+        return False
+    page_type = classify_page_type(url, "")
+    if is_contact_oriented_page_type(page_type):
+        return True
+    return any(hint in lowered for hint in DISCOVERED_HIGH_VALUE_HINTS)
+
+
+def _extract_urls_from_robots(robots_text: str, site_root: str) -> list[str]:
+    out: list[str] = []
+    for line in (robots_text or "").splitlines():
+        clean = line.split("#", 1)[0].strip()
+        if not clean or ":" not in clean:
+            continue
+        key, raw_value = clean.split(":", 1)
+        directive = key.strip().lower()
+        value = raw_value.strip()
+        if not value:
+            continue
+        if directive in {"allow", "disallow"}:
+            if not value.startswith("/"):
+                continue
+            if "*" in value or "$" in value:
+                continue
+            resolved = normalize_url(value, base_url=site_root)
+            if resolved:
+                out.append(resolved)
+    return out
+
+
+def _upsert_blocked_recovery_signal(
+    conn,
+    municipality_id: str,
+    status_row: dict[str, object],
+    source_url: str,
+) -> None:
+    payload = {field: status_row.get(field) for field in BLOCKED_RECOVERY_STATUS_FIELDS}
+    signal_id = make_id("sig", municipality_id, "blocked_recovery_status")
+    db.upsert_signal(
+        conn,
+        {
+            "signal_id": signal_id,
+            "municipality_id": municipality_id,
+            "signal_type": "blocked_recovery_status",
+            "value": json.dumps(payload, sort_keys=True),
+            "confidence": 1.0,
+            "source_url": source_url,
+        },
+    )
+
+
+def _count_contacts(conn, municipality_id: str) -> int:
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM contacts WHERE municipality_id = ?",
+        (municipality_id,),
+    ).fetchone()
+    return int(row["cnt"] if row else 0)
+
+
+def _count_role_winners(conn, municipality_id: str) -> int:
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM vw_best_role_per_town WHERE municipality_id = ?",
+        (municipality_id,),
+    ).fetchone()
+    return int(row["cnt"] if row else 0)
+
+
+def _view_exists(conn, view_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = ? LIMIT 1",
+        (view_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _table_exists(conn, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def _site_root(url: str) -> str:
+    normalized = normalize_url(ensure_url_has_scheme(url or ""))
+    if not normalized:
+        return ""
+    parsed = urlparse(normalized)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _build_fallback_url(url: str) -> str | None:
+    normalized = normalize_url(ensure_url_has_scheme(url or ""))
+    if not normalized:
+        return None
+    parsed = urlparse(normalized)
+    if not parsed.netloc:
+        return None
+    fallback_scheme = "http" if parsed.scheme == "https" else "https"
+    fallback = normalize_url(f"{fallback_scheme}://{parsed.netloc}/")
+    if not fallback or fallback == normalized:
+        return None
+    return fallback
+
+
+def _update_block_tracking(
+    result: FetchResult,
+    block_streak: int,
+    blocked_responses: int,
+) -> tuple[int, int]:
+    if _is_block_status(result):
+        return block_streak + 1, blocked_responses + 1
+    return 0, blocked_responses
+
+
+def _is_block_status(result: FetchResult) -> bool:
+    return result.status_code in BLOCK_HTTP_STATUS_CODES
+
+
+def _status_label(result: FetchResult) -> str:
+    if result.status_code is None:
+        return str(result.error or "request_error")
+    if result.error and result.error != "http_error":
+        return f"{result.status_code}:{result.error}"
+    return str(result.status_code)
+
+
+def _is_internal_link(url: str, municipality_domain: str) -> bool:
+    candidate_domain = (get_domain(url) or "").lower()
+    target_domain = (municipality_domain or "").lower()
+    if not candidate_domain or not target_domain:
+        return False
+    return candidate_domain == target_domain or candidate_domain.endswith(f".{target_domain}")
+
+
+def _coerce_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return default
+    try:
+        return int(float(text))
+    except ValueError:
+        return default
+
+
+def _parse_json_dict(value: object) -> dict[str, object]:
+    text = str(value or "").strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _placeholders(size: int) -> str:
+    return ",".join("?" for _ in range(size))

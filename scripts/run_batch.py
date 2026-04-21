@@ -16,6 +16,7 @@ from src.batch_manifest import (
     load_seed_platform_map,
     load_selected_manifest_rows,
 )
+from scripts.blocked_recovery import run_blocked_recovery_pass
 from scripts.run_town import crawl_single_municipality
 
 
@@ -47,6 +48,11 @@ def parse_args() -> argparse.Namespace:
         help="Base folder for batch QA outputs.",
     )
     parser.add_argument("--db", default=str(ROOT / "database" / "master.sqlite"))
+    parser.add_argument(
+        "--blocked-recovery",
+        action="store_true",
+        help="Run a conservative blocked-town recovery pass after normal crawling.",
+    )
     return parser.parse_args()
 
 
@@ -109,9 +115,12 @@ def main() -> None:
         processed = 0
         skipped = 0
         summaries: list[dict] = []
+        in_scope_municipalities: list[dict] = []
+        blocked_recovery_rows: list[dict[str, object]] = []
 
         for municipality in municipalities:
             municipality_id = municipality["municipality_id"]
+            in_scope_municipalities.append(municipality)
             if not args.force and db.municipality_has_pages(conn, municipality_id):
                 skipped += 1
                 continue
@@ -128,11 +137,31 @@ def main() -> None:
 
             if args.limit is not None and processed >= args.limit:
                 break
+
+        if args.blocked_recovery and in_scope_municipalities:
+            blocked_recovery_rows = run_blocked_recovery_pass(
+                conn=conn,
+                municipalities=in_scope_municipalities,
+                batch_id=args.batch_id or "",
+            )
+            print(
+                "Blocked recovery attempted for "
+                f"{len(blocked_recovery_rows)} blocked municipalities"
+            )
     finally:
         conn.close()
 
     print("Batch crawl complete")
-    print(json.dumps({"processed": processed, "skipped": skipped}, indent=2))
+    print(
+        json.dumps(
+            {
+                "processed": processed,
+                "skipped": skipped,
+                "blocked_recovery_attempted": len(blocked_recovery_rows),
+            },
+            indent=2,
+        )
+    )
     if summaries:
         print("Sample summary:")
         print(json.dumps(summaries[0], indent=2))
