@@ -1,0 +1,14 @@
+{
+  "directory": [
+    "/directory.aspx"
+  ],
+  "finance": [],
+  "clerk": [
+    "/town-clerk"
+  ],
+  "assessor": [],
+  "tax": [],
+  "building": [],
+  "planning": [],
+  "departments_root": []
+}
