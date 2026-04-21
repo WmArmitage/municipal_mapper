@@ -58,6 +58,17 @@ KNOWN_PATHS = [
     "/finance-department",
 ]
 
+API_PROBE_PATHS = [
+    "/api",
+    "/api/",
+    "/api/help",
+    "/api/help/",
+    "/api/help/index",
+    "/api/docs",
+    "/swagger",
+    "/swagger/index.html",
+]
+
 RECOVERY_RESULT_VALUES = {
     "unrecovered_http_block",
     "recovered_known_path",
@@ -68,6 +79,7 @@ RECOVERY_RESULT_VALUES = {
     "recovered_directory_hit",
     "directory_present_no_extract",
     "partial_directory_recovery",
+    "api_available_no_scrape",
 }
 
 BLOCK_HTTP_STATUS_CODES = {403, 429}
@@ -183,6 +195,9 @@ def _run_recovery_for_municipality(
     known_path_hits = 0
     discovered_path_hits = 0
     known_path_results: list[dict[str, object]] = []
+    api_probe_results: list[dict[str, object]] = []
+    api_hit = 0
+    api_type = "none"
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
@@ -223,6 +238,20 @@ def _run_recovery_for_municipality(
         status_row["fallback_status"] = "not_attempted"
 
     site_root = _site_root(followup_referer or home_target)
+    if site_root:
+        api_probe_results = probe_api_endpoints(
+            base_url=site_root,
+            fetch_fn=lambda target_url: fetch_url(
+                target_url,
+                timeout=timeout,
+                session=session,
+                referer=followup_referer,
+                retries=0,
+                request_headers=BLOCKED_RECOVERY_HEADERS,
+            ),
+        )
+        api_hit, api_type = classify_api_presence(api_probe_results)
+
     discovered_candidates: list[tuple[str, str]] = []
 
     sitemap_status = "not_attempted"
@@ -374,6 +403,17 @@ def _run_recovery_for_municipality(
     notes_parts: list[str] = []
     if hit_paths:
         notes_parts.append(f"known_paths_hit={','.join(hit_paths)}")
+    api_paths_hit = [
+        str(result.get("path") or "")
+        for result in api_probe_results
+        if _coerce_int(result.get("status"), default=-1) == 200 and str(result.get("path") or "").strip()
+    ]
+    if api_paths_hit:
+        notes_parts.append(f"api_paths_hit={','.join(api_paths_hit)}")
+    if api_hit:
+        notes_parts.append("api_hit=1")
+    if api_type != "none":
+        notes_parts.append(f"api_type={api_type}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
     status_row["directory_hit"] = 1 if directory_hit else 0
@@ -440,6 +480,8 @@ def _run_recovery_for_municipality(
         status_row["recovery_result"] = "unrecovered_http_block"
     else:
         status_row["recovery_result"] = "recovered_manual_seed_needed"
+    if api_hit == 1 and recovered_contact_count == 0 and not directory_hit:
+        status_row["recovery_result"] = "api_available_no_scrape"
 
     if status_row["recovery_result"] not in RECOVERY_RESULT_VALUES:
         status_row["recovery_result"] = "partial_recovery"
@@ -539,6 +581,44 @@ def _build_known_probe_urls(seed_url: str) -> list[dict[str, str]]:
         seen.add(url)
         out.append({"path": path, "url": url})
     return out
+
+
+def probe_api_endpoints(base_url: str, fetch_fn) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    root = str(base_url or "").rstrip("/")
+    if not root:
+        return results
+
+    for path in API_PROBE_PATHS:
+        url = f"{root}{path}"
+        resp = fetch_fn(url)
+        text_value = str(resp.text or "")
+        results.append(
+            {
+                "path": path,
+                "status": resp.status_code if resp.status_code is not None else "",
+                "content_type": str(resp.content_type or resp.response_headers.get("content-type") or ""),
+                "length": len(text_value),
+                "text": text_value[:500],
+            }
+        )
+    return results
+
+
+def classify_api_presence(results: list[dict[str, object]]) -> tuple[int, str]:
+    api_hit = 0
+    api_type = "none"
+
+    for row in results:
+        if _coerce_int(row.get("status"), default=-1) != 200:
+            continue
+        text_sample = str(row.get("text") or "")[:500].lower()
+        if "swagger" in text_sample or "openapi" in text_sample:
+            return 1, "swagger"
+        if "api" in str(row.get("path") or "").lower():
+            api_hit = 1
+            api_type = "rest_root"
+    return api_hit, api_type
 
 
 def _select_discovered_probe_urls(

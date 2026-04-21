@@ -171,6 +171,9 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "directory_source",
     "recovered_contact_count",
     "recovered_role_winner_count",
+    "api_hit",
+    "api_type",
+    "api_paths_hit",
     "notes",
 )
 
@@ -201,6 +204,7 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "recovered_directory_hit",
     "directory_present_no_extract",
     "partial_directory_recovery",
+    "api_available_no_scrape",
 }
 
 
@@ -487,6 +491,17 @@ def _extract_note_int_value(notes: str, key: str, default: int = 0) -> int:
     return _coerce_int(value, default=default)
 
 
+def _extract_api_type_from_notes(notes: str) -> str:
+    value = str(_extract_note_value(notes, "api_type") or "").strip().lower()
+    if value in {"swagger", "rest_root"}:
+        return value
+    return "none"
+
+
+def _extract_api_paths_hit_from_notes(notes: str) -> str:
+    return str(_extract_note_value(notes, "api_paths_hit") or "").strip()
+
+
 def fetch_crawl_diagnostics(
     conn,
     municipality_ids: list[str],
@@ -649,6 +664,9 @@ def build_blocked_recovery_status_rows(
             "directory_source": "",
             "recovered_contact_count": 0,
             "recovered_role_winner_count": 0,
+            "api_hit": 0,
+            "api_type": "none",
+            "api_paths_hit": "",
             "notes": "recovery_not_attempted",
         }
 
@@ -697,6 +715,18 @@ def build_blocked_recovery_status_rows(
         row["recovered_role_winner_count"] = _coerce_int(payload.get("recovered_role_winner_count"))
         row["notes"] = str(payload.get("notes") or "")
         notes = str(row["notes"])
+        api_paths_hit = str(payload.get("api_paths_hit") or _extract_api_paths_hit_from_notes(notes) or "")
+        api_type = str(payload.get("api_type") or _extract_api_type_from_notes(notes) or "none")
+        if api_type not in {"swagger", "rest_root"}:
+            api_type = "none"
+        row["api_paths_hit"] = api_paths_hit
+        row["api_type"] = api_type
+        row["api_hit"] = _coerce_int(
+            payload.get("api_hit"),
+            default=_extract_note_int_value(notes, "api_hit", default=1 if api_paths_hit else 0),
+        )
+        if row["api_hit"] <= 0 and api_type != "none":
+            row["api_hit"] = 1
         row["directory_hit"] = _coerce_int(payload.get("directory_hit"), default=_extract_directory_hit_from_notes(notes))
         row["directory_fallback_attempted"] = _coerce_int(
             payload.get("directory_fallback_attempted"),
