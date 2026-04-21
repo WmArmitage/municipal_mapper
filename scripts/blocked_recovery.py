@@ -398,10 +398,61 @@ def _run_recovery_for_municipality(
     playwright_success = 0
     playwright_path = ""
     playwright_directory_hit = False
+    diagnostic_class = str(diagnostics.get("diagnostic_class") or "").strip().lower()
+    diagnostic_is_blocked = diagnostic_class == "blocked_or_forbidden"
     recovered_from_known = False
     recovered_from_sitemap = False
     latest_source_url = home_target
     followup_referer: str | None = None
+    site_root = _site_root(home_target)
+
+    def _attempt_playwright_once(block_detected: bool) -> None:
+        nonlocal playwright_attempted
+        nonlocal playwright_success
+        nonlocal playwright_path
+        nonlocal playwright_directory_hit
+        nonlocal followup_referer
+        nonlocal latest_source_url
+        nonlocal recovered_from_known
+        nonlocal site_root
+
+        if not block_detected:
+            return
+        if playwright_attempted:
+            return
+        if not site_root:
+            return
+
+        playwright_attempted = 1
+        playwright_timeout_ms = max(5000, _coerce_int(timeout, default=20) * 1000)
+        for path in PLAYWRIGHT_FALLBACK_PATHS:
+            target_url = normalize_url(path, base_url=site_root) or f"{site_root}{path}"
+            if not target_url:
+                continue
+            html = fetch_with_playwright(target_url, timeout=playwright_timeout_ms)
+            if not html or len(html) <= 500:
+                continue
+
+            playwright_success = 1
+            playwright_path = path
+            if "directory" in path.lower():
+                playwright_directory_hit = True
+
+            active_url = normalize_url(target_url) or target_url
+            followup_referer = active_url
+            latest_source_url = active_url
+            extracted_contacts, _ = process_text_extractions(
+                conn,
+                municipality_id,
+                active_url,
+                html,
+                page_type="playwright_fallback",
+            )
+            if extracted_contacts > 0:
+                recovered_from_known = True
+            break
+        if not playwright_path:
+            playwright_path = PLAYWRIGHT_FALLBACK_PATHS[0]
 
     home_result = fetch_url(
         home_target,
@@ -415,6 +466,10 @@ def _run_recovery_for_municipality(
     followup_referer = normalize_url(home_result.final_url or home_target) or (home_result.final_url or home_target)
     latest_source_url = followup_referer or latest_source_url
     block_streak, blocked_responses = _update_block_tracking(home_result, block_streak, blocked_responses)
+    site_root = _site_root(followup_referer or home_target) or site_root
+    _attempt_playwright_once(
+        block_detected=diagnostic_is_blocked or _coerce_int(home_result.status_code, default=-1) == 403
+    )
 
     fallback_url = _build_fallback_url(followup_referer or home_target)
     if fallback_url:
@@ -431,44 +486,16 @@ def _run_recovery_for_municipality(
         followup_referer = fallback_final or followup_referer
         latest_source_url = fallback_final or latest_source_url
         block_streak, blocked_responses = _update_block_tracking(fallback_result, block_streak, blocked_responses)
+        site_root = _site_root(followup_referer or home_target) or site_root
+        _attempt_playwright_once(
+            block_detected=(
+                diagnostic_is_blocked
+                or _coerce_int(home_result.status_code, default=-1) == 403
+                or _coerce_int(fallback_result.status_code, default=-1) == 403
+            )
+        )
     else:
         status_row["fallback_status"] = "not_attempted"
-
-    site_root = _site_root(followup_referer or home_target)
-    should_try_playwright = (
-        str(diagnostics.get("diagnostic_class") or "").strip().lower() == "blocked_or_forbidden"
-        or _coerce_int(home_result.status_code, default=-1) == 403
-    )
-    if site_root and should_try_playwright:
-        playwright_attempted = 1
-        playwright_timeout_ms = max(5000, _coerce_int(timeout, default=20) * 1000)
-        for path in PLAYWRIGHT_FALLBACK_PATHS:
-            target_url = normalize_url(path, base_url=site_root) or f"{site_root}{path}"
-            if not target_url:
-                continue
-            html = fetch_with_playwright(target_url, timeout=playwright_timeout_ms)
-            if not html or len(html) <= 500:
-                continue
-
-            playwright_success = 1
-            playwright_path = path
-            if "directory" in path.lower():
-                playwright_directory_hit = True
-            active_url = normalize_url(target_url) or target_url
-            followup_referer = active_url
-            latest_source_url = active_url
-            extracted_contacts, _ = process_text_extractions(
-                conn,
-                municipality_id,
-                active_url,
-                html,
-                page_type="playwright_fallback",
-            )
-            if extracted_contacts > 0:
-                recovered_from_known = True
-            break
-    if playwright_attempted and not playwright_path:
-        playwright_path = PLAYWRIGHT_FALLBACK_PATHS[0]
 
     if site_root:
         api_probe_results = probe_api_endpoints(
