@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import urlparse
 
 from src import db
@@ -48,6 +49,8 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "first_deep_extraction_category",
     "first_deep_extraction_path",
     "deep_extraction_paths",
+    "deep_path_trust",
+    "deep_path_legacy_suspected",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "notes",
@@ -104,6 +107,7 @@ DEEP_PATH_PROBES = {
         "/Departments/Town-Clerk",
         "/departments/town-clerk",
         "/town-clerk",
+        "/town-clerks-office",
         "/city-clerk",
         "/clerk",
     ],
@@ -255,6 +259,24 @@ DISCOVERED_HIGH_VALUE_HINTS = (
     "contact",
 )
 
+DEEP_PATH_TRUST_HINTS: dict[str, tuple[str, ...]] = {
+    "directory": ("directory", "staff", "contact"),
+    "finance": ("finance", "treasurer", "comptroller"),
+    "clerk": ("clerk", "town clerk", "city clerk"),
+    "assessor": ("assessor", "assessment"),
+    "tax": ("tax", "collector"),
+    "building": ("building", "inspection", "code enforcement"),
+    "planning": ("planning", "zoning", "land use"),
+}
+
+DEEP_PATH_LEGACY_HINTS = (
+    "archive",
+    "archived",
+    "old version",
+    "previous version",
+    "legacy",
+)
+
 
 def run_blocked_recovery_pass(
     conn,
@@ -343,6 +365,8 @@ def _run_recovery_for_municipality(
         "first_deep_extraction_category": "",
         "first_deep_extraction_path": "",
         "deep_extraction_paths": "",
+        "deep_path_trust": "none",
+        "deep_path_legacy_suspected": 0,
         "recovered_contact_count": 0,
         "recovered_role_winner_count": 0,
         "notes": "",
@@ -854,6 +878,10 @@ def _run_recovery_for_municipality(
         is_directory_hit(str(result.get("path") or ""), _coerce_int(result.get("status"), default=-1))
         for result in known_path_results
     )
+    deep_path_trust, deep_path_legacy_suspected = assess_deep_path_recovery_trust(
+        deep_path_results=deep_path_results,
+        extracted_paths=deep_extraction_paths,
+    )
     hit_paths = [
         str(result.get("path") or "")
         for result in known_path_results
@@ -896,6 +924,8 @@ def _run_recovery_for_municipality(
             notes_parts.append(f"best_api_endpoint_class={best_api_endpoint_class}")
     if deep_path_hits > 0:
         notes_parts.append(f"deep_path_hits={deep_path_hits}")
+        notes_parts.append(f"deep_path_trust={deep_path_trust}")
+        notes_parts.append(f"deep_path_legacy_suspected={deep_path_legacy_suspected}")
     for category, hits in deep_path_hits_by_type.items():
         if _coerce_int(hits, default=0) > 0:
             notes_parts.append(f"deep_hit_{category}={hits}")
@@ -929,6 +959,8 @@ def _run_recovery_for_municipality(
     status_row["first_deep_extraction_category"] = first_deep_extraction_category
     status_row["first_deep_extraction_path"] = first_deep_extraction_path
     status_row["deep_extraction_paths"] = ",".join(deep_extraction_paths)
+    status_row["deep_path_trust"] = deep_path_trust
+    status_row["deep_path_legacy_suspected"] = deep_path_legacy_suspected
     for category in DEEP_PATH_EXPORT_CATEGORIES:
         status_row[f"deep_hit_{category}"] = _coerce_int(deep_path_hits_by_type.get(category), default=0)
 
@@ -1061,6 +1093,73 @@ def _derive_blocked_reason(diagnostics: dict[str, object]) -> str:
 
 def is_directory_hit(path: str, status_code: int | None) -> bool:
     return status_code == 200 and "directory" in str(path or "").lower()
+
+
+def assess_deep_path_recovery_trust(
+    deep_path_results: list[dict[str, object]],
+    extracted_paths: list[str],
+) -> tuple[str, int]:
+    hit_rows = [
+        row
+        for row in deep_path_results
+        if _coerce_int(row.get("hit"), default=0) == 1
+    ]
+    if not hit_rows:
+        return "none", 0
+
+    extracted_any = bool([path for path in extracted_paths if str(path or "").strip()])
+    aligned_any = any(_is_deep_path_row_aligned(row) for row in hit_rows)
+    clean_non_numeric_any = any(_is_clean_non_numeric_path(str(row.get("path") or "")) for row in hit_rows)
+    legacy_suspected = any(_is_deep_path_row_legacy_suspected(row) for row in hit_rows)
+
+    trust = "low"
+    if extracted_any and aligned_any and clean_non_numeric_any and not legacy_suspected:
+        trust = "high"
+    elif extracted_any and (aligned_any or clean_non_numeric_any):
+        trust = "medium"
+    elif extracted_any:
+        trust = "medium"
+
+    if legacy_suspected and trust == "high":
+        trust = "medium"
+    if legacy_suspected and not extracted_any:
+        trust = "low"
+
+    return trust, (1 if legacy_suspected else 0)
+
+
+def _is_deep_path_row_aligned(row: dict[str, object]) -> bool:
+    category = str(row.get("category") or "").strip().lower()
+    hints = DEEP_PATH_TRUST_HINTS.get(category) or ()
+    if not hints:
+        return False
+    path_text = str(row.get("path") or "").lower()
+    body_text = str(row.get("text") or "").lower()[:4000]
+    haystack = f"{path_text} {body_text}"
+    return any(hint in haystack for hint in hints)
+
+
+def _is_clean_non_numeric_path(path: str) -> bool:
+    canonical = _canonical_probe_path(path)
+    if not canonical or canonical == "/":
+        return False
+    if "?" in canonical or "=" in canonical:
+        return False
+    if re.search(r"/\d+(?:/|$)", canonical):
+        return False
+    return True
+
+
+def _is_deep_path_row_legacy_suspected(row: dict[str, object]) -> bool:
+    path_text = str(row.get("path") or "").lower()
+    body_text = str(row.get("text") or "").lower()[:4000]
+    if re.search(r"/\d{2,}(?:/|$)", path_text):
+        return True
+    if any(hint in path_text for hint in DEEP_PATH_LEGACY_HINTS):
+        return True
+    if any(hint in body_text for hint in DEEP_PATH_LEGACY_HINTS):
+        return True
+    return False
 
 
 def fetch_with_playwright(url: str, timeout: int = 15000) -> str | None:

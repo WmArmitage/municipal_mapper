@@ -183,6 +183,8 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "first_deep_extraction_category",
     "first_deep_extraction_path",
     "deep_extraction_paths",
+    "deep_path_trust",
+    "deep_path_legacy_suspected",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "api_hit",
@@ -726,6 +728,8 @@ def build_blocked_recovery_status_rows(
             "first_deep_extraction_category": "",
             "first_deep_extraction_path": "",
             "deep_extraction_paths": "",
+            "deep_path_trust": "none",
+            "deep_path_legacy_suspected": 0,
             "recovered_contact_count": 0,
             "recovered_role_winner_count": 0,
             "api_hit": 0,
@@ -825,6 +829,14 @@ def build_blocked_recovery_status_rows(
             payload.get("first_deep_extraction_path")
             or _extract_note_value(notes, "first_deep_extraction_path")
             or ""
+        )
+        deep_path_trust = str(payload.get("deep_path_trust") or _extract_note_value(notes, "deep_path_trust") or "none").strip().lower()
+        if deep_path_trust not in {"none", "low", "medium", "high"}:
+            deep_path_trust = "none"
+        row["deep_path_trust"] = deep_path_trust
+        row["deep_path_legacy_suspected"] = _coerce_int(
+            payload.get("deep_path_legacy_suspected"),
+            default=_extract_note_int_value(notes, "deep_path_legacy_suspected", default=0),
         )
         api_paths_hit = str(payload.get("api_paths_hit") or _extract_api_paths_hit_from_notes(notes) or "")
         api_type = str(payload.get("api_type") or _extract_api_type_from_notes(notes) or "none")

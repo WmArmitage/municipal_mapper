@@ -73,6 +73,16 @@ USEFUL_OTHER_URL_TOKENS = (
     "staff",
 )
 
+PATH_HINTS_BY_CATEGORY: dict[str, tuple[str, ...]] = {
+    "directory": ("directory", "staff-directory", "staffdirectory"),
+    "finance": ("finance", "treasurer", "comptroller", "board-of-finance"),
+    "clerk": ("town-clerk", "city-clerk", "town-clerks-office", "clerk"),
+    "assessor": ("assessor", "assessment"),
+    "tax": ("tax-collector", "tax-office", "tax"),
+    "building": ("building", "inspectional", "code-enforcement"),
+    "planning": ("planning", "zoning", "land-use"),
+}
+
 INVENTORY_FIELDS: tuple[str, ...] = (
     "municipality_id",
     "source_url",
@@ -415,43 +425,59 @@ def infer_path_category(
     department = normalize_key(department_normalized)
     title_norm = normalize_key(title)
     path_norm = canonicalize_path_for_grouping(path)
-    blob = " ".join(part for part in (role, family, department, title_norm, path_norm) if part)
+    metadata_blob = " ".join(part for part in (role, family, department, title_norm) if part)
 
-    if "directory" in path_norm:
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["directory"]):
         return "directory"
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["finance"]):
+        return "finance"
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["clerk"]):
+        return "clerk"
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["assessor"]):
+        return "assessor"
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["tax"]):
+        return "tax"
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["building"]):
+        return "building"
+    if any(token in path_norm for token in PATH_HINTS_BY_CATEGORY["planning"]):
+        return "planning"
+    if any(token in path_norm for token in ("/departments", "/government")):
+        return "departments_root"
 
     if (
         role in {"finance director", "treasurer"}
         or family == "finance"
-        or any(token in blob for token in ("finance", "treasurer", "comptroller"))
+        or any(token in metadata_blob for token in ("finance", "treasurer", "comptroller"))
     ):
         return "finance"
 
-    if role in {"town clerk", "city clerk"} or family == "town_clerk" or "clerk" in blob:
+    if role in {"town clerk", "city clerk"} or family == "town_clerk" or "clerk" in metadata_blob:
         return "clerk"
 
-    if role == "assessor" or family == "assessor" or "assessor" in blob:
+    if role == "assessor" or family == "assessor" or "assessor" in metadata_blob:
         return "assessor"
 
-    if role == "tax collector" or family == "tax_collector" or "tax-collector" in blob or " tax " in f" {blob} ":
+    if (
+        role == "tax collector"
+        or family == "tax_collector"
+        or "tax-collector" in metadata_blob
+        or " tax " in f" {metadata_blob} "
+    ):
         return "tax"
 
     if (
         role == "building official"
         or family == "building"
-        or any(token in blob for token in ("building", "inspectional", "inspection", "code enforcement"))
+        or any(token in metadata_blob for token in ("building", "inspectional", "inspection", "code enforcement"))
     ):
         return "building"
 
     if (
         role == "planner"
         or family == "planning_zoning"
-        or any(token in blob for token in ("planning", "zoning", "land-use", "land use"))
+        or any(token in metadata_blob for token in ("planning", "zoning", "land-use", "land use"))
     ):
         return "planning"
-
-    if any(token in path_norm for token in ("/departments", "/government")):
-        return "departments_root"
 
     return "other"
 

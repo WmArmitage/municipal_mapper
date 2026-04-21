@@ -382,6 +382,8 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                 "first_deep_extraction_category": "directory",
                 "first_deep_extraction_path": "/Directory.aspx",
                 "deep_extraction_paths": "/Directory.aspx",
+                "deep_path_trust": "high",
+                "deep_path_legacy_suspected": 0,
                 "notes": (
                     "deep_path_hits=2;"
                     "deep_hit_directory=1;"
@@ -391,7 +393,9 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                     "deep_extraction_path_count=1;"
                     "first_deep_extraction_category=directory;"
                     "first_deep_extraction_path=/Directory.aspx;"
-                    "deep_extraction_paths=/Directory.aspx"
+                    "deep_extraction_paths=/Directory.aspx;"
+                    "deep_path_trust=high;"
+                    "deep_path_legacy_suspected=0"
                 ),
             }
             conn.execute(
@@ -423,6 +427,8 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["first_deep_extraction_category"], "directory")
         self.assertEqual(row["first_deep_extraction_path"], "/Directory.aspx")
         self.assertEqual(row["deep_extraction_paths"], "/Directory.aspx")
+        self.assertEqual(row["deep_path_trust"], "high")
+        self.assertEqual(row["deep_path_legacy_suspected"], 0)
         self.assertEqual(row["recovery_result"], "deep_path_present_no_extract")
 
     def test_export_parses_playwright_fields_from_notes(self) -> None:
