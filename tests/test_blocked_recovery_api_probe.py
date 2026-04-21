@@ -32,10 +32,15 @@ if "requests" not in sys.modules:
 from scripts.blocked_recovery import (
     API_INVENTORY_PATHS,
     API_PROBE_PATHS,
+    extract_get_endpoints_from_swagger,
+    fetch_swagger_json,
     classify_api_inventory,
     classify_api_presence,
     probe_api_endpoints,
+    probe_swagger_get_endpoint,
     run_api_inventory,
+    score_swagger_endpoint,
+    select_api_probe_endpoints,
 )
 from scripts.export_batch_qa import build_blocked_recovery_status_rows
 
@@ -129,6 +134,68 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(inventory_type, "swagger_json")
         self.assertEqual(endpoint_count, 2)
 
+    def test_fetch_swagger_json_parses_known_json_path(self) -> None:
+        def fake_fetch(url: str) -> _FakeFetchResult:
+            if url.endswith("/swagger/v1/swagger.json"):
+                return _FakeFetchResult(
+                    200,
+                    "application/json",
+                    '{"openapi":"3.0.1","paths":{"/api/directory":{"get":{"summary":"Directory"}}}}',
+                )
+            return _FakeFetchResult(404, "text/html", "")
+
+        doc = fetch_swagger_json("https://example.gov", ["/swagger/v1/swagger.json"], fake_fetch)
+        self.assertIsInstance(doc, dict)
+        self.assertIn("paths", doc or {})
+
+    def test_extract_score_select_and_probe_swagger_endpoints(self) -> None:
+        swagger_doc = {
+            "paths": {
+                "/api/directory": {
+                    "get": {
+                        "summary": "Staff directory",
+                        "operationId": "getDirectory",
+                        "tags": ["Directory"],
+                    }
+                },
+                "/api/auth/login": {
+                    "get": {
+                        "summary": "Auth endpoint",
+                        "operationId": "login",
+                        "tags": ["Auth"],
+                    }
+                },
+                "/api/contact/{id}": {
+                    "get": {
+                        "summary": "Contact by id",
+                        "operationId": "getContactById",
+                        "tags": ["Contact"],
+                    }
+                },
+            }
+        }
+        endpoints = extract_get_endpoints_from_swagger(swagger_doc)
+        self.assertEqual(len(endpoints), 3)
+        scored = []
+        for endpoint in endpoints:
+            score, endpoint_class = score_swagger_endpoint(endpoint)
+            scored.append({**endpoint, "score": score, "endpoint_class": endpoint_class})
+        selected = select_api_probe_endpoints(scored, max_count=3)
+        selected_paths = [str(row.get("path") or "") for row in selected]
+        self.assertIn("/api/directory", selected_paths)
+        self.assertNotIn("/api/auth/login", selected_paths)
+        self.assertNotIn("/api/contact/{id}", selected_paths)
+
+        def fake_fetch(url: str) -> _FakeFetchResult:
+            if url.endswith("/api/directory"):
+                return _FakeFetchResult(200, "application/json", '[{"name":"Clerk"},{"name":"Assessor"}]')
+            return _FakeFetchResult(404, "text/html", "")
+
+        probe = probe_swagger_get_endpoint("https://example.gov", "/api/directory", fake_fetch)
+        self.assertEqual(probe["status"], 200)
+        self.assertEqual(probe["json_root_type"], "list")
+        self.assertEqual(probe["likely_structured_data"], 1)
+
     def test_export_parses_api_fields_from_notes(self) -> None:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -147,19 +214,41 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                 "batch_id": "batch_1",
                 "blocked_reason": "http_forbidden",
                 "recovery_mode_attempted": "true",
-                "recovery_result": "api_inventory_viable",
+                "recovery_result": "api_structured_data_found",
                 "notes": (
                     "api_paths_hit=/api,/api/help/index;"
                     "api_hit=1;"
                     "api_type=swagger;"
                     "api_inventory_paths=/api/help/index,/swagger/v1/swagger.json;"
                     "api_inventory_type=swagger_json;"
-                    "api_endpoint_count=2"
+                    "api_endpoint_count=2;"
+                    "swagger_json_path=/swagger/v1/swagger.json;"
+                    "documented_get_count=18;"
+                    "selected_api_probe_count=3;"
+                    "successful_api_probe_count=2;"
+                    "likely_structured_endpoint_count=1;"
+                    "best_api_endpoint=/api/directory;"
+                    "best_api_endpoint_class=contact_like"
                 ),
+            }
+            api_inventory_payload = {
+                "municipality_id": "town-1",
+                "swagger_json_path": "/swagger/v1/swagger.json",
+                "documented_get_count": 22,
+                "selected_probe_count": 3,
+                "probed_endpoints": [{"path": "/api/directory", "status": 200}],
+                "successful_probe_count": 2,
+                "likely_structured_endpoint_count": 1,
+                "best_endpoint_path": "/api/departments",
+                "best_endpoint_class": "department_like",
             }
             conn.execute(
                 "INSERT INTO signals (municipality_id, signal_type, value) VALUES (?, ?, ?)",
                 ("town-1", "blocked_recovery_status", json.dumps(payload)),
+            )
+            conn.execute(
+                "INSERT INTO signals (municipality_id, signal_type, value) VALUES (?, ?, ?)",
+                ("town-1", "api_ingestion_inventory", json.dumps(api_inventory_payload)),
             )
 
             rows = build_blocked_recovery_status_rows(
@@ -183,7 +272,14 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["api_inventory_type"], "swagger_json")
         self.assertEqual(row["api_endpoint_count"], 2)
         self.assertEqual(row["api_inventory_paths"], "/api/help/index,/swagger/v1/swagger.json")
-        self.assertEqual(row["recovery_result"], "api_inventory_viable")
+        self.assertEqual(row["swagger_json_path"], "/swagger/v1/swagger.json")
+        self.assertEqual(row["documented_get_count"], 22)
+        self.assertEqual(row["selected_api_probe_count"], 3)
+        self.assertEqual(row["successful_api_probe_count"], 2)
+        self.assertEqual(row["likely_structured_endpoint_count"], 1)
+        self.assertEqual(row["best_api_endpoint"], "/api/departments")
+        self.assertEqual(row["best_api_endpoint_class"], "department_like")
+        self.assertEqual(row["recovery_result"], "api_structured_data_found")
 
 
 if __name__ == "__main__":

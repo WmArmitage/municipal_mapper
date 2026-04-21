@@ -177,6 +177,13 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "api_inventory_type",
     "api_endpoint_count",
     "api_inventory_paths",
+    "swagger_json_path",
+    "documented_get_count",
+    "selected_api_probe_count",
+    "successful_api_probe_count",
+    "likely_structured_endpoint_count",
+    "best_api_endpoint",
+    "best_api_endpoint_class",
     "notes",
 )
 
@@ -209,6 +216,7 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "partial_directory_recovery",
     "api_available_no_scrape",
     "api_inventory_viable",
+    "api_structured_data_found",
 }
 
 
@@ -517,6 +525,13 @@ def _extract_api_inventory_paths_from_notes(notes: str) -> str:
     return str(_extract_note_value(notes, "api_inventory_paths") or "").strip()
 
 
+def _extract_api_endpoint_class_from_notes(notes: str) -> str:
+    value = str(_extract_note_value(notes, "best_api_endpoint_class") or "").strip().lower()
+    if value in {"contact_like", "department_like", "meeting_like", "records_like", "other"}:
+        return value
+    return ""
+
+
 def fetch_crawl_diagnostics(
     conn,
     municipality_ids: list[str],
@@ -685,6 +700,13 @@ def build_blocked_recovery_status_rows(
             "api_inventory_type": "none",
             "api_endpoint_count": 0,
             "api_inventory_paths": "",
+            "swagger_json_path": "",
+            "documented_get_count": 0,
+            "selected_api_probe_count": 0,
+            "successful_api_probe_count": 0,
+            "likely_structured_endpoint_count": 0,
+            "best_api_endpoint": "",
+            "best_api_endpoint_class": "",
             "notes": "recovery_not_attempted",
         }
 
@@ -757,6 +779,29 @@ def build_blocked_recovery_status_rows(
         )
         if row["api_endpoint_count"] <= 0 and api_inventory_paths:
             row["api_endpoint_count"] = len([part for part in api_inventory_paths.split(",") if part.strip()])
+        row["swagger_json_path"] = str(payload.get("swagger_json_path") or _extract_note_value(notes, "swagger_json_path") or "")
+        row["documented_get_count"] = _coerce_int(
+            payload.get("documented_get_count"),
+            default=_extract_note_int_value(notes, "documented_get_count", default=0),
+        )
+        row["selected_api_probe_count"] = _coerce_int(
+            payload.get("selected_api_probe_count"),
+            default=_extract_note_int_value(notes, "selected_api_probe_count", default=0),
+        )
+        row["successful_api_probe_count"] = _coerce_int(
+            payload.get("successful_api_probe_count"),
+            default=_extract_note_int_value(notes, "successful_api_probe_count", default=0),
+        )
+        row["likely_structured_endpoint_count"] = _coerce_int(
+            payload.get("likely_structured_endpoint_count"),
+            default=_extract_note_int_value(notes, "likely_structured_endpoint_count", default=0),
+        )
+        row["best_api_endpoint"] = str(payload.get("best_api_endpoint") or _extract_note_value(notes, "best_api_endpoint") or "")
+        row["best_api_endpoint_class"] = str(
+            payload.get("best_api_endpoint_class")
+            or _extract_api_endpoint_class_from_notes(notes)
+            or ""
+        )
         row["directory_hit"] = _coerce_int(payload.get("directory_hit"), default=_extract_directory_hit_from_notes(notes))
         row["directory_fallback_attempted"] = _coerce_int(
             payload.get("directory_fallback_attempted"),
@@ -767,6 +812,73 @@ def build_blocked_recovery_status_rows(
             default=_extract_note_int_value(notes, "directory_fallback_contacts", default=0),
         )
         row["directory_source"] = str(payload.get("directory_source") or _extract_note_value(notes, "directory_source") or "")
+
+    sql_api_inventory = f"""
+        SELECT municipality_id, value
+        FROM signals
+        WHERE signal_type = 'api_ingestion_inventory'
+          AND municipality_id IN ({placeholders(len(municipality_ids))})
+        ORDER BY rowid DESC
+    """
+    inventory_records = conn.execute(sql_api_inventory, tuple(municipality_ids)).fetchall()
+    inventory_once: set[str] = set()
+    for record in inventory_records:
+        municipality_id = str(record["municipality_id"] or "")
+        if not municipality_id or municipality_id in inventory_once:
+            continue
+        inventory_once.add(municipality_id)
+        row = rows_by_id.get(municipality_id)
+        if row is None:
+            continue
+
+        raw_value = str(record["value"] or "")
+        if not raw_value.strip():
+            continue
+        try:
+            payload = json.loads(raw_value)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        notes = str(row.get("notes") or "")
+        row["swagger_json_path"] = str(
+            payload.get("swagger_json_path")
+            or row.get("swagger_json_path")
+            or _extract_note_value(notes, "swagger_json_path")
+            or ""
+        )
+        row["documented_get_count"] = _coerce_int(
+            payload.get("documented_get_count"),
+            default=_coerce_int(row.get("documented_get_count"), default=_extract_note_int_value(notes, "documented_get_count", default=0)),
+        )
+        row["selected_api_probe_count"] = _coerce_int(
+            payload.get("selected_probe_count"),
+            default=_coerce_int(row.get("selected_api_probe_count"), default=_extract_note_int_value(notes, "selected_api_probe_count", default=0)),
+        )
+        row["successful_api_probe_count"] = _coerce_int(
+            payload.get("successful_probe_count"),
+            default=_coerce_int(row.get("successful_api_probe_count"), default=_extract_note_int_value(notes, "successful_api_probe_count", default=0)),
+        )
+        row["likely_structured_endpoint_count"] = _coerce_int(
+            payload.get("likely_structured_endpoint_count"),
+            default=_coerce_int(
+                row.get("likely_structured_endpoint_count"),
+                default=_extract_note_int_value(notes, "likely_structured_endpoint_count", default=0),
+            ),
+        )
+        row["best_api_endpoint"] = str(
+            payload.get("best_endpoint_path")
+            or row.get("best_api_endpoint")
+            or _extract_note_value(notes, "best_api_endpoint")
+            or ""
+        )
+        row["best_api_endpoint_class"] = str(
+            payload.get("best_endpoint_class")
+            or row.get("best_api_endpoint_class")
+            or _extract_api_endpoint_class_from_notes(notes)
+            or ""
+        )
 
     return [rows_by_id[municipality_id] for municipality_id in sorted(rows_by_id)]
 

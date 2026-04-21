@@ -80,6 +80,22 @@ API_INVENTORY_PATHS = [
     "/api/swagger.json",
 ]
 
+SWAGGER_JSON_PATH_SUFFIXES = (
+    "/swagger/v1/swagger.json",
+    "/api/swagger.json",
+)
+
+API_ENDPOINT_EXCLUDE_KEYWORDS = (
+    "auth",
+    "login",
+    "account",
+    "token",
+    "admin",
+    "health",
+    "ping",
+    "telemetry",
+)
+
 RECOVERY_RESULT_VALUES = {
     "unrecovered_http_block",
     "recovered_known_path",
@@ -92,6 +108,7 @@ RECOVERY_RESULT_VALUES = {
     "partial_directory_recovery",
     "api_available_no_scrape",
     "api_inventory_viable",
+    "api_structured_data_found",
 }
 
 BLOCK_HTTP_STATUS_CODES = {403, 429}
@@ -213,6 +230,14 @@ def _run_recovery_for_municipality(
     api_inventory_results: list[dict[str, object]] = []
     api_inventory_type = "none"
     api_endpoint_count = 0
+    swagger_json_path = ""
+    documented_get_count = 0
+    selected_api_probe_count = 0
+    successful_api_probe_count = 0
+    likely_structured_endpoint_count = 0
+    best_api_endpoint = ""
+    best_api_endpoint_class = ""
+    api_probe_details: list[dict[str, object]] = []
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
@@ -279,6 +304,101 @@ def _run_recovery_for_municipality(
                 ),
             )
             api_inventory_type, api_endpoint_count = classify_api_inventory(api_inventory_results)
+            if api_inventory_type == "swagger_json":
+                api_inventory_paths = [
+                    str(result.get("path") or "")
+                    for result in api_inventory_results
+                    if _coerce_int(result.get("status"), default=-1) == 200 and str(result.get("path") or "").strip()
+                ]
+                swagger_doc, swagger_json_path = _fetch_swagger_json_with_path(
+                    base_url=site_root,
+                    inventory_paths=api_inventory_paths,
+                    fetch_fn=lambda target_url: fetch_url(
+                        target_url,
+                        timeout=timeout,
+                        session=session,
+                        referer=followup_referer,
+                        retries=0,
+                        request_headers=BLOCKED_RECOVERY_HEADERS,
+                    ),
+                )
+                if swagger_doc:
+                    documented_endpoints = extract_get_endpoints_from_swagger(swagger_doc)
+                    scored_endpoints: list[dict[str, object]] = []
+                    for endpoint in documented_endpoints:
+                        score, endpoint_class = score_swagger_endpoint(endpoint)
+                        scored_endpoints.append(
+                            {
+                                **endpoint,
+                                "score": score,
+                                "endpoint_class": endpoint_class,
+                            }
+                        )
+                    documented_get_count = len(scored_endpoints)
+                    selected_endpoints = select_api_probe_endpoints(scored_endpoints, max_count=3)
+                    selected_api_probe_count = len(selected_endpoints)
+                    for endpoint in selected_endpoints:
+                        endpoint_path = str(endpoint.get("path") or "")
+                        probe_result = probe_swagger_get_endpoint(
+                            base_url=site_root,
+                            endpoint_path=endpoint_path,
+                            fetch_fn=lambda target_url: fetch_url(
+                                target_url,
+                                timeout=timeout,
+                                session=session,
+                                referer=followup_referer,
+                                retries=0,
+                                request_headers=BLOCKED_RECOVERY_HEADERS,
+                            ),
+                        )
+                        if _coerce_int(probe_result.get("status"), default=-1) == 200:
+                            successful_api_probe_count += 1
+                        if _coerce_int(probe_result.get("likely_structured_data"), default=0) == 1:
+                            likely_structured_endpoint_count += 1
+                        api_probe_details.append(
+                            {
+                                "path": endpoint_path,
+                                "endpoint_class": str(endpoint.get("endpoint_class") or "other"),
+                                "score": _coerce_int(endpoint.get("score"), default=0),
+                                "status": probe_result.get("status", ""),
+                                "content_type": str(probe_result.get("content_type") or ""),
+                                "json_root_type": str(probe_result.get("json_root_type") or "other"),
+                                "item_count_estimate": _coerce_int(probe_result.get("item_count_estimate"), default=0),
+                                "likely_structured_data": _coerce_int(probe_result.get("likely_structured_data"), default=0),
+                            }
+                        )
+                    preferred_probes = [
+                        row
+                        for row in api_probe_details
+                        if _coerce_int(row.get("likely_structured_data"), default=0) == 1
+                    ]
+                    ranked_probes = preferred_probes or api_probe_details
+                    if ranked_probes:
+                        ranked_probes.sort(
+                            key=lambda row: (
+                                _coerce_int(row.get("likely_structured_data"), default=0),
+                                _coerce_int(row.get("score"), default=0),
+                            ),
+                            reverse=True,
+                        )
+                        best_api_endpoint = str(ranked_probes[0].get("path") or "")
+                        best_api_endpoint_class = str(ranked_probes[0].get("endpoint_class") or "other")
+                _upsert_api_ingestion_inventory_signal(
+                    conn=conn,
+                    municipality_id=municipality_id,
+                    source_url=(normalize_url(swagger_json_path, base_url=site_root) or site_root),
+                    payload={
+                        "municipality_id": municipality_id,
+                        "swagger_json_path": swagger_json_path,
+                        "documented_get_count": documented_get_count,
+                        "selected_probe_count": selected_api_probe_count,
+                        "probed_endpoints": api_probe_details,
+                        "successful_probe_count": successful_api_probe_count,
+                        "likely_structured_endpoint_count": likely_structured_endpoint_count,
+                        "best_endpoint_path": best_api_endpoint,
+                        "best_endpoint_class": best_api_endpoint_class,
+                    },
+                )
 
     discovered_candidates: list[tuple[str, str]] = []
 
@@ -452,6 +572,17 @@ def _run_recovery_for_municipality(
             notes_parts.append(f"api_inventory_paths={','.join(api_inventory_paths)}")
         notes_parts.append(f"api_inventory_type={api_inventory_type}")
         notes_parts.append(f"api_endpoint_count={api_endpoint_count}")
+    if swagger_json_path:
+        notes_parts.append(f"swagger_json_path={swagger_json_path}")
+    if api_hit == 1 and api_inventory_type == "swagger_json":
+        notes_parts.append(f"documented_get_count={documented_get_count}")
+        notes_parts.append(f"selected_api_probe_count={selected_api_probe_count}")
+        notes_parts.append(f"successful_api_probe_count={successful_api_probe_count}")
+        notes_parts.append(f"likely_structured_endpoint_count={likely_structured_endpoint_count}")
+        if best_api_endpoint:
+            notes_parts.append(f"best_api_endpoint={best_api_endpoint}")
+        if best_api_endpoint_class:
+            notes_parts.append(f"best_api_endpoint_class={best_api_endpoint_class}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
     status_row["directory_hit"] = 1 if directory_hit else 0
@@ -521,11 +652,13 @@ def _run_recovery_for_municipality(
 
     if (
         recovered_contact_count == 0
-        and not directory_hit
-        and api_inventory_type in {"swagger_json", "swagger_ui", "rest_json"}
+        and successful_api_probe_count > 0
+        and likely_structured_endpoint_count > 0
     ):
+        status_row["recovery_result"] = "api_structured_data_found"
+    elif recovered_contact_count == 0 and swagger_json_path and documented_get_count > 0:
         status_row["recovery_result"] = "api_inventory_viable"
-    elif api_hit == 1 and recovered_contact_count == 0 and not directory_hit:
+    elif api_hit == 1 and recovered_contact_count == 0:
         status_row["recovery_result"] = "api_available_no_scrape"
 
     if status_row["recovery_result"] not in RECOVERY_RESULT_VALUES:
@@ -714,6 +847,212 @@ def classify_api_inventory(results: list[dict[str, object]]) -> tuple[str, int]:
     return "none", 0
 
 
+def fetch_swagger_json(base_url: str, inventory_paths: list[str], fetch_fn) -> dict | None:
+    swagger_doc, _ = _fetch_swagger_json_with_path(base_url, inventory_paths, fetch_fn)
+    return swagger_doc
+
+
+def _fetch_swagger_json_with_path(
+    base_url: str,
+    inventory_paths: list[str],
+    fetch_fn,
+) -> tuple[dict | None, str]:
+    normalized_inventory_paths = [
+        str(path or "").strip()
+        for path in inventory_paths
+        if str(path or "").strip()
+    ]
+    candidates: list[str] = []
+    for path in normalized_inventory_paths:
+        lowered = path.lower()
+        if lowered.endswith(".json") and path not in candidates:
+            candidates.append(path)
+    for suffix in SWAGGER_JSON_PATH_SUFFIXES:
+        if suffix not in candidates:
+            candidates.append(suffix)
+
+    root = str(base_url or "").rstrip("/")
+    if not root:
+        return None, ""
+
+    for path in candidates:
+        url = normalize_url(path, base_url=root) or f"{root}{path}"
+        if not url:
+            continue
+        resp = fetch_fn(url)
+        if _coerce_int(resp.status_code, default=-1) != 200:
+            continue
+        text_value = str(resp.text or "")
+        content_type = str(resp.content_type or resp.response_headers.get("content-type") or "").lower()
+        if "json" not in content_type and not text_value.lstrip().startswith("{"):
+            continue
+        try:
+            parsed = json.loads(text_value)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed, path
+    return None, ""
+
+
+def extract_get_endpoints_from_swagger(swagger_doc: dict) -> list[dict]:
+    paths_block = swagger_doc.get("paths")
+    if not isinstance(paths_block, dict):
+        return []
+
+    out: list[dict] = []
+    for path, operations in paths_block.items():
+        if not isinstance(operations, dict):
+            continue
+        get_operation = operations.get("get")
+        if not isinstance(get_operation, dict):
+            continue
+        summary = str(get_operation.get("summary") or "").strip()
+        description = str(get_operation.get("description") or "").strip()
+        if len(description) > 240:
+            description = f"{description[:240].rstrip()}..."
+        operation_id = str(get_operation.get("operationId") or "").strip()
+        raw_tags = get_operation.get("tags")
+        tag_names = [str(tag).strip() for tag in raw_tags] if isinstance(raw_tags, list) else []
+        tag_names = [tag for tag in tag_names if tag]
+        out.append(
+            {
+                "path": str(path or "").strip(),
+                "summary": summary,
+                "description": description,
+                "operation_id": operation_id,
+                "tag_names": tag_names,
+            }
+        )
+    return out
+
+
+def score_swagger_endpoint(endpoint: dict) -> tuple[int, str]:
+    path_value = str(endpoint.get("path") or "").lower()
+    summary = str(endpoint.get("summary") or "").lower()
+    operation_id = str(endpoint.get("operation_id") or "").lower()
+    tags = " ".join(str(tag).lower() for tag in endpoint.get("tag_names") or [])
+    haystack = " ".join([path_value, summary, operation_id, tags])
+
+    score = 0
+    if any(keyword in haystack for keyword in ("directory", "staff", "contact", "contacts")):
+        score += 3
+    if any(keyword in haystack for keyword in ("department", "departments")):
+        score += 2
+    if any(keyword in haystack for keyword in ("tax", "assessor", "clerk", "building", "planning", "finance")):
+        score += 2
+    if any(keyword in haystack for keyword in ("agenda", "meeting", "minutes", "publicrecords")):
+        score += 1
+    if any(keyword in haystack for keyword in ("auth", "login", "account", "token", "admin")):
+        score -= 5
+    if any(keyword in haystack for keyword in ("health", "ping", "telemetry")):
+        score -= 3
+
+    endpoint_class = "other"
+    if any(keyword in haystack for keyword in ("directory", "staff", "contact", "contacts", "official", "clerk")):
+        endpoint_class = "contact_like"
+    elif any(keyword in haystack for keyword in ("department", "departments", "tax", "assessor", "building", "planning", "finance")):
+        endpoint_class = "department_like"
+    elif any(keyword in haystack for keyword in ("agenda", "meeting", "minutes")):
+        endpoint_class = "meeting_like"
+    elif any(keyword in haystack for keyword in ("publicrecords", "records")):
+        endpoint_class = "records_like"
+    return score, endpoint_class
+
+
+def select_api_probe_endpoints(endpoints: list[dict], max_count: int = 3) -> list[dict]:
+    class_priority = {
+        "contact_like": 3,
+        "department_like": 2,
+        "meeting_like": 1,
+        "records_like": 1,
+        "other": 0,
+    }
+    filtered: list[dict] = []
+    for endpoint in endpoints:
+        score = _coerce_int(endpoint.get("score"), default=0)
+        if score <= 0:
+            continue
+        path_value = str(endpoint.get("path") or "").strip()
+        lowered_path = path_value.lower()
+        if not path_value:
+            continue
+        if "{" in path_value or "}" in path_value:
+            continue
+        if any(keyword in lowered_path for keyword in API_ENDPOINT_EXCLUDE_KEYWORDS):
+            continue
+        if lowered_path.endswith("/id") or lowered_path.endswith("/ids"):
+            continue
+        filtered.append(endpoint)
+
+    filtered.sort(
+        key=lambda endpoint: (
+            class_priority.get(str(endpoint.get("endpoint_class") or "other"), 0),
+            _coerce_int(endpoint.get("score"), default=0),
+            -len(str(endpoint.get("path") or "")),
+        ),
+        reverse=True,
+    )
+    return filtered[: max(0, max_count)]
+
+
+def probe_swagger_get_endpoint(base_url: str, endpoint_path: str, fetch_fn) -> dict:
+    path_value = str(endpoint_path or "").strip()
+    if not path_value:
+        return {
+            "status": "",
+            "content_type": "",
+            "json_root_type": "other",
+            "item_count_estimate": 0,
+            "likely_structured_data": 0,
+        }
+    if "{" in path_value or "}" in path_value:
+        return {
+            "status": "",
+            "content_type": "",
+            "json_root_type": "other",
+            "item_count_estimate": 0,
+            "likely_structured_data": 0,
+        }
+
+    root = str(base_url or "").rstrip("/")
+    target_url = normalize_url(path_value, base_url=root) or f"{root}{path_value}"
+    resp = fetch_fn(target_url)
+    content_type = str(resp.content_type or resp.response_headers.get("content-type") or "").lower()
+    status = resp.status_code if resp.status_code is not None else ""
+    out = {
+        "status": status,
+        "content_type": content_type,
+        "json_root_type": "other",
+        "item_count_estimate": 0,
+        "likely_structured_data": 0,
+    }
+    if _coerce_int(status, default=-1) != 200:
+        return out
+
+    text_value = str(resp.text or "")
+    if "json" not in content_type and not text_value.lstrip().startswith(("{", "[")):
+        return out
+    try:
+        parsed = json.loads(text_value)
+    except json.JSONDecodeError:
+        return out
+
+    if isinstance(parsed, list):
+        out["json_root_type"] = "list"
+        out["item_count_estimate"] = len(parsed)
+        if parsed:
+            first_item = parsed[0]
+            if isinstance(first_item, dict) or isinstance(first_item, (str, int, float, bool)):
+                out["likely_structured_data"] = 1
+    elif isinstance(parsed, dict):
+        out["json_root_type"] = "object"
+        out["item_count_estimate"] = len(parsed.keys())
+        if len(parsed.keys()) >= 2:
+            out["likely_structured_data"] = 1
+    return out
+
+
 def _select_discovered_probe_urls(
     candidates: list[tuple[str, str]],
     municipality_domain: str,
@@ -796,6 +1135,26 @@ def _upsert_blocked_recovery_signal(
             "signal_id": signal_id,
             "municipality_id": municipality_id,
             "signal_type": "blocked_recovery_status",
+            "value": json.dumps(payload, sort_keys=True),
+            "confidence": 1.0,
+            "source_url": source_url,
+        },
+    )
+
+
+def _upsert_api_ingestion_inventory_signal(
+    conn,
+    municipality_id: str,
+    source_url: str,
+    payload: dict[str, object],
+) -> None:
+    signal_id = make_id("sig", municipality_id, "api_ingestion_inventory")
+    db.upsert_signal(
+        conn,
+        {
+            "signal_id": signal_id,
+            "municipality_id": municipality_id,
+            "signal_type": "api_ingestion_inventory",
             "value": json.dumps(payload, sort_keys=True),
             "confidence": 1.0,
             "source_url": source_url,
