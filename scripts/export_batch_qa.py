@@ -198,6 +198,9 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "likely_structured_endpoint_count",
     "best_api_endpoint",
     "best_api_endpoint_class",
+    "playwright_attempted",
+    "playwright_success",
+    "playwright_path",
     "notes",
 )
 
@@ -738,6 +741,9 @@ def build_blocked_recovery_status_rows(
             "likely_structured_endpoint_count": 0,
             "best_api_endpoint": "",
             "best_api_endpoint_class": "",
+            "playwright_attempted": 0,
+            "playwright_success": 0,
+            "playwright_path": "",
             "notes": "recovery_not_attempted",
         }
 
@@ -865,6 +871,23 @@ def build_blocked_recovery_status_rows(
         row["best_api_endpoint_class"] = str(
             payload.get("best_api_endpoint_class")
             or _extract_api_endpoint_class_from_notes(notes)
+            or ""
+        )
+        row["playwright_attempted"] = _coerce_int(
+            payload.get("playwright_attempted"),
+            default=_extract_note_int_value(notes, "playwright_attempted", default=0),
+        )
+        row["playwright_success"] = _coerce_int(
+            payload.get("playwright_success"),
+            default=_extract_note_int_value(notes, "playwright_success", default=0),
+        )
+        if _coerce_int(row.get("playwright_attempted"), default=0) <= 0 and _coerce_int(
+            row.get("playwright_success"), default=0
+        ) > 0:
+            row["playwright_attempted"] = 1
+        row["playwright_path"] = str(
+            payload.get("playwright_path")
+            or _extract_note_value(notes, "playwright_path")
             or ""
         )
         row["directory_hit"] = _coerce_int(payload.get("directory_hit"), default=_extract_directory_hit_from_notes(notes))

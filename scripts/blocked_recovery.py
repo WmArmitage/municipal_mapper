@@ -72,6 +72,11 @@ KNOWN_PATHS = [
     "/finance-department",
 ]
 
+PLAYWRIGHT_FALLBACK_PATHS = [
+    "/Directory.aspx",
+    "/directory.aspx",
+]
+
 DEEP_PATH_PROBES = {
     "directory": [
         "/Directory",
@@ -271,7 +276,9 @@ def run_blocked_recovery_pass(
         if not municipality_id:
             continue
         diagnostics = diagnostics_by_id.get(municipality_id) or {}
-        if str(diagnostics.get("diagnostic_class") or "").strip().lower() != "blocked_or_forbidden":
+        diagnostic_class = str(diagnostics.get("diagnostic_class") or "").strip().lower()
+        homepage_status = _coerce_int(diagnostics.get("http_status"), default=-1)
+        if diagnostic_class != "blocked_or_forbidden" and homepage_status != 403:
             continue
 
         status_row, signal_source_url = _run_recovery_for_municipality(
@@ -387,6 +394,10 @@ def _run_recovery_for_municipality(
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
+    playwright_attempted = 0
+    playwright_success = 0
+    playwright_path = ""
+    playwright_directory_hit = False
     recovered_from_known = False
     recovered_from_sitemap = False
     latest_source_url = home_target
@@ -424,6 +435,41 @@ def _run_recovery_for_municipality(
         status_row["fallback_status"] = "not_attempted"
 
     site_root = _site_root(followup_referer or home_target)
+    should_try_playwright = (
+        str(diagnostics.get("diagnostic_class") or "").strip().lower() == "blocked_or_forbidden"
+        or _coerce_int(home_result.status_code, default=-1) == 403
+    )
+    if site_root and should_try_playwright:
+        playwright_attempted = 1
+        playwright_timeout_ms = max(5000, _coerce_int(timeout, default=20) * 1000)
+        for path in PLAYWRIGHT_FALLBACK_PATHS:
+            target_url = normalize_url(path, base_url=site_root) or f"{site_root}{path}"
+            if not target_url:
+                continue
+            html = fetch_with_playwright(target_url, timeout=playwright_timeout_ms)
+            if not html or len(html) <= 500:
+                continue
+
+            playwright_success = 1
+            playwright_path = path
+            if "directory" in path.lower():
+                playwright_directory_hit = True
+            active_url = normalize_url(target_url) or target_url
+            followup_referer = active_url
+            latest_source_url = active_url
+            extracted_contacts, _ = process_text_extractions(
+                conn,
+                municipality_id,
+                active_url,
+                html,
+                page_type="playwright_fallback",
+            )
+            if extracted_contacts > 0:
+                recovered_from_known = True
+            break
+    if playwright_attempted and not playwright_path:
+        playwright_path = PLAYWRIGHT_FALLBACK_PATHS[0]
+
     if site_root:
         api_probe_results = probe_api_endpoints(
             base_url=site_root,
@@ -781,7 +827,7 @@ def _run_recovery_for_municipality(
         notes.append("stopped_after_repeated_403_or_429")
 
     known_path_hits = sum(_coerce_int(result.get("hit")) for result in known_path_results)
-    directory_hit = any(
+    directory_hit = playwright_directory_hit or any(
         is_directory_hit(str(result.get("path") or ""), _coerce_int(result.get("status"), default=-1))
         for result in known_path_results
     )
@@ -847,6 +893,11 @@ def _run_recovery_for_municipality(
         notes_parts.append(f"first_deep_extraction_category={first_deep_extraction_category}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
+    if playwright_attempted:
+        notes_parts.append("playwright_attempted=1")
+        notes_parts.append(f"playwright_success={playwright_success}")
+        if playwright_path:
+            notes_parts.append(f"playwright_path={playwright_path}")
     status_row["directory_hit"] = 1 if directory_hit else 0
     status_row["deep_path_hits"] = deep_path_hits
     status_row["first_deep_category"] = first_successful_deep_category
@@ -987,6 +1038,32 @@ def _derive_blocked_reason(diagnostics: dict[str, object]) -> str:
 
 def is_directory_hit(path: str, status_code: int | None) -> bool:
     return status_code == 200 and "directory" in str(path or "").lower()
+
+
+def fetch_with_playwright(url: str, timeout: int = 15000) -> str | None:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                context = browser.new_context(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    )
+                )
+                page = context.new_page()
+                page.goto(url, timeout=timeout)
+                return page.content()
+            finally:
+                browser.close()
+    except Exception:
+        return None
 
 
 def run_directory_hit_fallback(

@@ -425,6 +425,54 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["deep_extraction_paths"], "/Directory.aspx")
         self.assertEqual(row["recovery_result"], "deep_path_present_no_extract")
 
+    def test_export_parses_playwright_fields_from_notes(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute(
+                """
+                CREATE TABLE signals (
+                    municipality_id TEXT,
+                    signal_type TEXT,
+                    value TEXT
+                )
+                """
+            )
+            payload = {
+                "municipality_id": "town-3",
+                "batch_id": "batch_1",
+                "blocked_reason": "http_forbidden",
+                "recovery_mode_attempted": "true",
+                "recovery_result": "partial_recovery",
+                "notes": (
+                    "playwright_attempted=1;"
+                    "playwright_success=1;"
+                    "playwright_path=/Directory.aspx"
+                ),
+            }
+            conn.execute(
+                "INSERT INTO signals (municipality_id, signal_type, value) VALUES (?, ?, ?)",
+                ("town-3", "blocked_recovery_status", json.dumps(payload)),
+            )
+            rows = build_blocked_recovery_status_rows(
+                conn,
+                blocked_towns=[
+                    {
+                        "municipality_id": "town-3",
+                        "batch_id": "batch_1",
+                        "blocked_reason": "http_forbidden",
+                    }
+                ],
+            )
+        finally:
+            conn.close()
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["playwright_attempted"], 1)
+        self.assertEqual(row["playwright_success"], 1)
+        self.assertEqual(row["playwright_path"], "/Directory.aspx")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ Lightweight Python pipeline for crawling Connecticut municipal websites, extract
 - Python 3.13+
 - `requests`
 - `beautifulsoup4`
+- `playwright` (optional, used only for blocked-site fallback recovery)
 - `sqlite3` (stdlib)
 
 ## Repo Layout
@@ -46,6 +47,13 @@ src/
 
 ```powershell
 python -m pip install requests beautifulsoup4
+```
+
+Optional blocked-site fallback support:
+
+```powershell
+python -m pip install playwright
+python -m playwright install chromium
 ```
 
 ## CLI Workflow (MVP)
