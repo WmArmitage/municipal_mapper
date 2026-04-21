@@ -44,6 +44,10 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "deep_hit_tax",
     "deep_hit_building",
     "deep_hit_planning",
+    "deep_extraction_path_count",
+    "first_deep_extraction_category",
+    "first_deep_extraction_path",
+    "deep_extraction_paths",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "notes",
@@ -219,6 +223,17 @@ RECOVERY_RESULT_VALUES = {
 BLOCK_HTTP_STATUS_CODES = {403, 429}
 BLOCK_STREAK_STOP_THRESHOLD = 3
 DEEP_PATH_PROBE_BUDGET = 20
+DEEP_PATH_PRIORITY_ORDER = (
+    "directory",
+    "finance",
+    "clerk",
+    "assessor",
+    "tax",
+    "building",
+    "planning",
+    "departments_root",
+)
+DEEP_PATH_MIN_CONTACT_THRESHOLD = 10
 DISCOVERED_PROBE_LIMIT = 4
 DISCOVERED_HIGH_VALUE_HINTS = (
     "directory",
@@ -317,6 +332,10 @@ def _run_recovery_for_municipality(
         "deep_hit_tax": 0,
         "deep_hit_building": 0,
         "deep_hit_planning": 0,
+        "deep_extraction_path_count": 0,
+        "first_deep_extraction_category": "",
+        "first_deep_extraction_path": "",
+        "deep_extraction_paths": "",
         "recovered_contact_count": 0,
         "recovered_role_winner_count": 0,
         "notes": "",
@@ -360,6 +379,11 @@ def _run_recovery_for_municipality(
     hit_paths_by_type = {category: [] for category in DEEP_PATH_PROBES}
     first_successful_deep_path = ""
     first_successful_deep_category = ""
+    deep_extraction_contact_total = 0
+    deep_extraction_path_set: set[str] = set()
+    deep_extraction_paths: list[str] = []
+    first_deep_extraction_path = ""
+    first_deep_extraction_category = ""
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
@@ -523,6 +547,61 @@ def _run_recovery_for_municipality(
                 )
 
     if site_root and block_streak < BLOCK_STREAK_STOP_THRESHOLD:
+        def _handle_deep_probe_result(row: dict[str, object]) -> bool:
+            nonlocal followup_referer
+            nonlocal latest_source_url
+            nonlocal deep_extraction_contact_total
+            nonlocal first_deep_extraction_path
+            nonlocal first_deep_extraction_category
+
+            if _coerce_int(row.get("hit"), default=0) != 1:
+                return False
+
+            active_url = normalize_url(str(row.get("url") or "")) or str(row.get("url") or "")
+            if active_url:
+                followup_referer = active_url
+                latest_source_url = active_url
+
+            category = str(row.get("category") or "")
+            if category not in DEEP_PATH_EXTRACTION_CATEGORIES:
+                return False
+
+            content_type = str(row.get("content_type") or "").lower()
+            if "html" not in content_type:
+                return False
+
+            html_text = str(row.get("text") or "")
+            if len(html_text) < 500:
+                return False
+
+            source_url = str(row.get("url") or "")
+            if not source_url:
+                return False
+
+            deep_page_type = DEEP_PATH_PAGE_TYPE_BY_CATEGORY.get(category, "department_page")
+            extracted_contacts, _ = process_text_extractions(
+                conn,
+                municipality_id,
+                source_url,
+                html_text,
+                page_type=deep_page_type,
+            )
+            if extracted_contacts <= 0:
+                return False
+
+            deep_extraction_contact_total += extracted_contacts
+            extraction_marker = str(row.get("path") or source_url)
+            if extraction_marker and extraction_marker not in deep_extraction_path_set:
+                deep_extraction_path_set.add(extraction_marker)
+                deep_extraction_paths.append(extraction_marker)
+            if not first_deep_extraction_path:
+                first_deep_extraction_path = extraction_marker
+                first_deep_extraction_category = category
+
+            if deep_extraction_contact_total >= DEEP_PATH_MIN_CONTACT_THRESHOLD:
+                return True
+            return False
+
         deep_path_results = probe_deep_paths(
             base_url=site_root,
             categorized_paths=DEEP_PATH_PROBES,
@@ -535,6 +614,7 @@ def _run_recovery_for_municipality(
                 request_headers=BLOCKED_RECOVERY_HEADERS,
             ),
             probe_budget=DEEP_PATH_PROBE_BUDGET,
+            on_result=_handle_deep_probe_result,
         )
         deep_path_hits = sum(_coerce_int(row.get("hit"), default=0) for row in deep_path_results)
         deep_path_hits_by_type = {
@@ -561,27 +641,6 @@ def _run_recovery_for_municipality(
             first_successful_deep_path = str(row.get("path") or "")
             first_successful_deep_category = str(row.get("category") or "")
             break
-
-        for row in deep_path_results:
-            if _coerce_int(row.get("hit"), default=0) != 1:
-                continue
-            category = str(row.get("category") or "")
-            if category not in DEEP_PATH_EXTRACTION_CATEGORIES:
-                continue
-            html_text = str(row.get("text") or "")
-            if not html_text:
-                continue
-            source_url = str(row.get("url") or "")
-            if not source_url:
-                continue
-            deep_page_type = DEEP_PATH_PAGE_TYPE_BY_CATEGORY.get(category, "department_page")
-            extracted_contacts, _ = process_text_extractions(
-                conn,
-                municipality_id,
-                source_url,
-                html_text,
-                page_type=deep_page_type,
-            )
 
     discovered_candidates: list[tuple[str, str]] = []
 
@@ -779,12 +838,23 @@ def _run_recovery_for_municipality(
         notes_parts.append(f"first_deep_path={first_successful_deep_path}")
     if first_successful_deep_category:
         notes_parts.append(f"first_deep_category={first_successful_deep_category}")
+    if deep_extraction_paths:
+        notes_parts.append(f"deep_extraction_paths={','.join(deep_extraction_paths)}")
+    notes_parts.append(f"deep_extraction_path_count={len(deep_extraction_paths)}")
+    if first_deep_extraction_path:
+        notes_parts.append(f"first_deep_extraction_path={first_deep_extraction_path}")
+    if first_deep_extraction_category:
+        notes_parts.append(f"first_deep_extraction_category={first_deep_extraction_category}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
     status_row["directory_hit"] = 1 if directory_hit else 0
     status_row["deep_path_hits"] = deep_path_hits
     status_row["first_deep_category"] = first_successful_deep_category
     status_row["first_deep_path"] = first_successful_deep_path
+    status_row["deep_extraction_path_count"] = len(deep_extraction_paths)
+    status_row["first_deep_extraction_category"] = first_deep_extraction_category
+    status_row["first_deep_extraction_path"] = first_deep_extraction_path
+    status_row["deep_extraction_paths"] = ",".join(deep_extraction_paths)
     for category in DEEP_PATH_EXPORT_CATEGORIES:
         status_row[f"deep_hit_{category}"] = _coerce_int(deep_path_hits_by_type.get(category), default=0)
 
@@ -974,6 +1044,7 @@ def probe_deep_paths(
     categorized_paths: dict[str, list[str]],
     fetch_fn,
     probe_budget: int = 20,
+    on_result=None,
 ) -> list[dict]:
     results: list[dict] = []
     entries = _build_deep_probe_entries(base_url=base_url, categorized_paths=categorized_paths)
@@ -1014,6 +1085,8 @@ def probe_deep_paths(
                 "text": text_value if hit else "",
             }
         )
+        if on_result and on_result(results[-1]):
+            break
     return results
 
 
@@ -1024,7 +1097,20 @@ def _build_deep_probe_entries(base_url: str, categorized_paths: dict[str, list[s
 
     out: list[dict[str, str]] = []
     seen: set[str] = set()
-    for category, paths in categorized_paths.items():
+    ordered_categories: list[str] = []
+    seen_categories: set[str] = set()
+    for category in DEEP_PATH_PRIORITY_ORDER:
+        if category in categorized_paths and category not in seen_categories:
+            ordered_categories.append(category)
+            seen_categories.add(category)
+    for category in categorized_paths:
+        if category in seen_categories:
+            continue
+        ordered_categories.append(category)
+        seen_categories.add(category)
+
+    for category in ordered_categories:
+        paths = categorized_paths.get(category) or []
         for raw_path in paths:
             path = str(raw_path or "").strip()
             if not path:

@@ -85,6 +85,54 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(by_path["/directory"]["hit"], 1)
         self.assertEqual(by_path["/finance"]["hit"], 0)
 
+    def test_probe_deep_paths_respects_priority_order(self) -> None:
+        categorized = {
+            "planning": ["/planning"],
+            "directory": ["/directory"],
+            "finance": ["/finance"],
+        }
+
+        def fake_fetch(url: str) -> _FakeFetchResult:
+            return _FakeFetchResult(404, "text/html", "")
+
+        rows = probe_deep_paths(
+            base_url="https://example.gov",
+            categorized_paths=categorized,
+            fetch_fn=fake_fetch,
+            probe_budget=3,
+        )
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["category"], "directory")
+        self.assertEqual(rows[1]["category"], "finance")
+        self.assertEqual(rows[2]["category"], "planning")
+
+    def test_probe_deep_paths_supports_early_callback_exit(self) -> None:
+        categorized = {
+            "directory": ["/directory"],
+            "finance": ["/finance"],
+            "clerk": ["/clerk"],
+        }
+        callback_hits: list[str] = []
+
+        def fake_fetch(url: str) -> _FakeFetchResult:
+            if url.lower().endswith("/directory"):
+                return _FakeFetchResult(200, "text/html", "<html>Directory</html>")
+            return _FakeFetchResult(200, "text/html", "<html>Other</html>")
+
+        def on_result(row: dict) -> bool:
+            callback_hits.append(str(row.get("path") or ""))
+            return str(row.get("path") or "").lower() == "/directory"
+
+        rows = probe_deep_paths(
+            base_url="https://example.gov",
+            categorized_paths=categorized,
+            fetch_fn=fake_fetch,
+            probe_budget=10,
+            on_result=on_result,
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(callback_hits, ["/directory"])
+
     def test_probe_api_endpoints_collects_expected_rows(self) -> None:
         def fake_fetch(url: str) -> _FakeFetchResult:
             if url.endswith("/api/help/index"):
@@ -330,12 +378,20 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                 "first_deep_path": "/Directory.aspx",
                 "deep_hit_directory": 1,
                 "deep_hit_finance": 1,
+                "deep_extraction_path_count": 1,
+                "first_deep_extraction_category": "directory",
+                "first_deep_extraction_path": "/Directory.aspx",
+                "deep_extraction_paths": "/Directory.aspx",
                 "notes": (
                     "deep_path_hits=2;"
                     "deep_hit_directory=1;"
                     "deep_hit_finance=1;"
                     "first_deep_path=/Directory.aspx;"
-                    "first_deep_category=directory"
+                    "first_deep_category=directory;"
+                    "deep_extraction_path_count=1;"
+                    "first_deep_extraction_category=directory;"
+                    "first_deep_extraction_path=/Directory.aspx;"
+                    "deep_extraction_paths=/Directory.aspx"
                 ),
             }
             conn.execute(
@@ -363,6 +419,10 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["first_deep_path"], "/Directory.aspx")
         self.assertEqual(row["deep_hit_directory"], 1)
         self.assertEqual(row["deep_hit_finance"], 1)
+        self.assertEqual(row["deep_extraction_path_count"], 1)
+        self.assertEqual(row["first_deep_extraction_category"], "directory")
+        self.assertEqual(row["first_deep_extraction_path"], "/Directory.aspx")
+        self.assertEqual(row["deep_extraction_paths"], "/Directory.aspx")
         self.assertEqual(row["recovery_result"], "deep_path_present_no_extract")
 
 

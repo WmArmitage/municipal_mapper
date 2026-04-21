@@ -179,6 +179,10 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "deep_hit_tax",
     "deep_hit_building",
     "deep_hit_planning",
+    "deep_extraction_path_count",
+    "first_deep_extraction_category",
+    "first_deep_extraction_path",
+    "deep_extraction_paths",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "api_hit",
@@ -715,6 +719,10 @@ def build_blocked_recovery_status_rows(
             "deep_hit_tax": 0,
             "deep_hit_building": 0,
             "deep_hit_planning": 0,
+            "deep_extraction_path_count": 0,
+            "first_deep_extraction_category": "",
+            "first_deep_extraction_path": "",
+            "deep_extraction_paths": "",
             "recovered_contact_count": 0,
             "recovered_role_winner_count": 0,
             "api_hit": 0,
@@ -789,6 +797,29 @@ def build_blocked_recovery_status_rows(
                 payload.get(f"deep_hit_{category}"),
                 default=_extract_note_int_value(notes, f"deep_hit_{category}", default=0),
             )
+        row["deep_extraction_paths"] = str(
+            payload.get("deep_extraction_paths")
+            or _extract_note_value(notes, "deep_extraction_paths")
+            or ""
+        )
+        row["deep_extraction_path_count"] = _coerce_int(
+            payload.get("deep_extraction_path_count"),
+            default=_extract_note_int_value(notes, "deep_extraction_path_count", default=0),
+        )
+        if row["deep_extraction_path_count"] <= 0 and row["deep_extraction_paths"]:
+            row["deep_extraction_path_count"] = len(
+                [part for part in str(row["deep_extraction_paths"]).split(",") if part.strip()]
+            )
+        row["first_deep_extraction_category"] = str(
+            payload.get("first_deep_extraction_category")
+            or _extract_note_value(notes, "first_deep_extraction_category")
+            or ""
+        )
+        row["first_deep_extraction_path"] = str(
+            payload.get("first_deep_extraction_path")
+            or _extract_note_value(notes, "first_deep_extraction_path")
+            or ""
+        )
         api_paths_hit = str(payload.get("api_paths_hit") or _extract_api_paths_hit_from_notes(notes) or "")
         api_type = str(payload.get("api_type") or _extract_api_type_from_notes(notes) or "none")
         if api_type not in {"swagger", "rest_root"}:
