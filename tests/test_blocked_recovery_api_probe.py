@@ -36,6 +36,7 @@ from scripts.blocked_recovery import (
     fetch_swagger_json,
     classify_api_inventory,
     classify_api_presence,
+    probe_deep_paths,
     probe_api_endpoints,
     probe_swagger_get_endpoint,
     run_api_inventory,
@@ -60,6 +61,30 @@ class _FakeFetchResult:
 
 
 class BlockedRecoveryApiProbeTests(unittest.TestCase):
+    def test_probe_deep_paths_budget_and_dedup(self) -> None:
+        categorized = {
+            "directory": ["/Directory", "/directory"],
+            "finance": ["/finance", "/Finance"],
+        }
+
+        def fake_fetch(url: str) -> _FakeFetchResult:
+            if url.lower().endswith("/directory"):
+                return _FakeFetchResult(200, "text/html", "<html>Directory</html>")
+            if url.lower().endswith("/finance"):
+                return _FakeFetchResult(403, "text/html", "")
+            return _FakeFetchResult(404, "text/html", "")
+
+        rows = probe_deep_paths(
+            base_url="https://example.gov",
+            categorized_paths=categorized,
+            fetch_fn=fake_fetch,
+            probe_budget=2,
+        )
+        self.assertEqual(len(rows), 2)
+        by_path = {str(row["path"]).lower(): row for row in rows}
+        self.assertEqual(by_path["/directory"]["hit"], 1)
+        self.assertEqual(by_path["/finance"]["hit"], 0)
+
     def test_probe_api_endpoints_collects_expected_rows(self) -> None:
         def fake_fetch(url: str) -> _FakeFetchResult:
             if url.endswith("/api/help/index"):
@@ -280,6 +305,65 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["best_api_endpoint"], "/api/departments")
         self.assertEqual(row["best_api_endpoint_class"], "department_like")
         self.assertEqual(row["recovery_result"], "api_structured_data_found")
+
+    def test_export_parses_deep_path_fields(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute(
+                """
+                CREATE TABLE signals (
+                    municipality_id TEXT,
+                    signal_type TEXT,
+                    value TEXT
+                )
+                """
+            )
+            payload = {
+                "municipality_id": "town-2",
+                "batch_id": "batch_1",
+                "blocked_reason": "http_forbidden",
+                "recovery_mode_attempted": "true",
+                "recovery_result": "deep_path_present_no_extract",
+                "deep_path_hits": 2,
+                "first_deep_category": "directory",
+                "first_deep_path": "/Directory.aspx",
+                "deep_hit_directory": 1,
+                "deep_hit_finance": 1,
+                "notes": (
+                    "deep_path_hits=2;"
+                    "deep_hit_directory=1;"
+                    "deep_hit_finance=1;"
+                    "first_deep_path=/Directory.aspx;"
+                    "first_deep_category=directory"
+                ),
+            }
+            conn.execute(
+                "INSERT INTO signals (municipality_id, signal_type, value) VALUES (?, ?, ?)",
+                ("town-2", "blocked_recovery_status", json.dumps(payload)),
+            )
+
+            rows = build_blocked_recovery_status_rows(
+                conn,
+                blocked_towns=[
+                    {
+                        "municipality_id": "town-2",
+                        "batch_id": "batch_1",
+                        "blocked_reason": "http_forbidden",
+                    }
+                ],
+            )
+        finally:
+            conn.close()
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["deep_path_hits"], 2)
+        self.assertEqual(row["first_deep_category"], "directory")
+        self.assertEqual(row["first_deep_path"], "/Directory.aspx")
+        self.assertEqual(row["deep_hit_directory"], 1)
+        self.assertEqual(row["deep_hit_finance"], 1)
+        self.assertEqual(row["recovery_result"], "deep_path_present_no_extract")
 
 
 if __name__ == "__main__":

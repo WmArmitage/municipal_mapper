@@ -34,6 +34,16 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "directory_fallback_attempted",
     "directory_fallback_contacts",
     "directory_source",
+    "deep_path_hits",
+    "first_deep_category",
+    "first_deep_path",
+    "deep_hit_directory",
+    "deep_hit_finance",
+    "deep_hit_clerk",
+    "deep_hit_assessor",
+    "deep_hit_tax",
+    "deep_hit_building",
+    "deep_hit_planning",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "notes",
@@ -57,6 +67,98 @@ KNOWN_PATHS = [
     "/planning-zoning",
     "/finance-department",
 ]
+
+DEEP_PATH_PROBES = {
+    "directory": [
+        "/Directory",
+        "/Directory.aspx",
+        "/directory",
+        "/directory.aspx",
+        "/StaffDirectory.aspx",
+        "/staffdirectory.aspx",
+    ],
+    "departments_root": [
+        "/Departments",
+        "/departments",
+        "/government",
+        "/Government",
+    ],
+    "finance": [
+        "/Departments/Finance",
+        "/departments/finance",
+        "/finance",
+        "/finance-department",
+        "/treasurer",
+        "/comptroller",
+    ],
+    "clerk": [
+        "/Departments/Town-Clerk",
+        "/departments/town-clerk",
+        "/town-clerk",
+        "/city-clerk",
+        "/clerk",
+    ],
+    "assessor": [
+        "/Departments/Assessor",
+        "/departments/assessor",
+        "/assessor",
+        "/assessors-office",
+    ],
+    "tax": [
+        "/Departments/Tax-Collector",
+        "/departments/tax-collector",
+        "/tax-collector",
+        "/tax",
+    ],
+    "building": [
+        "/Departments/Building",
+        "/departments/building",
+        "/building-department",
+        "/building",
+        "/inspectional-services",
+    ],
+    "planning": [
+        "/Departments/Planning",
+        "/departments/planning",
+        "/planning-zoning",
+        "/planning",
+        "/land-use",
+        "/zoning",
+    ],
+}
+
+DEEP_PATH_EXPORT_CATEGORIES = (
+    "directory",
+    "finance",
+    "clerk",
+    "assessor",
+    "tax",
+    "building",
+    "planning",
+)
+
+DEEP_PATH_EXTRACTION_CATEGORIES = frozenset(
+    {
+        "directory",
+        "finance",
+        "clerk",
+        "assessor",
+        "tax",
+        "building",
+        "planning",
+    }
+)
+
+DEEP_PATH_PAGE_TYPE_BY_CATEGORY = {
+    "directory": "staff_directory",
+    "departments_root": "department_page",
+    "finance": "department_page",
+    "clerk": "department_page",
+    "assessor": "department_page",
+    "tax": "department_page",
+    "building": "department_page",
+    "planning": "department_page",
+}
 
 API_PROBE_PATHS = [
     "/api",
@@ -109,10 +211,14 @@ RECOVERY_RESULT_VALUES = {
     "api_available_no_scrape",
     "api_inventory_viable",
     "api_structured_data_found",
+    "recovered_deep_path",
+    "partial_deep_path_recovery",
+    "deep_path_present_no_extract",
 }
 
 BLOCK_HTTP_STATUS_CODES = {403, 429}
 BLOCK_STREAK_STOP_THRESHOLD = 3
+DEEP_PATH_PROBE_BUDGET = 20
 DISCOVERED_PROBE_LIMIT = 4
 DISCOVERED_HIGH_VALUE_HINTS = (
     "directory",
@@ -201,6 +307,16 @@ def _run_recovery_for_municipality(
         "directory_fallback_attempted": 0,
         "directory_fallback_contacts": 0,
         "directory_source": "",
+        "deep_path_hits": 0,
+        "first_deep_category": "",
+        "first_deep_path": "",
+        "deep_hit_directory": 0,
+        "deep_hit_finance": 0,
+        "deep_hit_clerk": 0,
+        "deep_hit_assessor": 0,
+        "deep_hit_tax": 0,
+        "deep_hit_building": 0,
+        "deep_hit_planning": 0,
         "recovered_contact_count": 0,
         "recovered_role_winner_count": 0,
         "notes": "",
@@ -238,6 +354,12 @@ def _run_recovery_for_municipality(
     best_api_endpoint = ""
     best_api_endpoint_class = ""
     api_probe_details: list[dict[str, object]] = []
+    deep_path_results: list[dict[str, object]] = []
+    deep_path_hits = 0
+    deep_path_hits_by_type = {category: 0 for category in DEEP_PATH_PROBES}
+    hit_paths_by_type = {category: [] for category in DEEP_PATH_PROBES}
+    first_successful_deep_path = ""
+    first_successful_deep_category = ""
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
@@ -399,6 +521,67 @@ def _run_recovery_for_municipality(
                         "best_endpoint_class": best_api_endpoint_class,
                     },
                 )
+
+    if site_root and block_streak < BLOCK_STREAK_STOP_THRESHOLD:
+        deep_path_results = probe_deep_paths(
+            base_url=site_root,
+            categorized_paths=DEEP_PATH_PROBES,
+            fetch_fn=lambda target_url: fetch_url(
+                target_url,
+                timeout=timeout,
+                session=session,
+                referer=followup_referer,
+                retries=0,
+                request_headers=BLOCKED_RECOVERY_HEADERS,
+            ),
+            probe_budget=DEEP_PATH_PROBE_BUDGET,
+        )
+        deep_path_hits = sum(_coerce_int(row.get("hit"), default=0) for row in deep_path_results)
+        deep_path_hits_by_type = {
+            category: sum(
+                1
+                for row in deep_path_results
+                if str(row.get("category") or "") == category and _coerce_int(row.get("hit"), default=0) == 1
+            )
+            for category in DEEP_PATH_PROBES
+        }
+        hit_paths_by_type = {
+            category: [
+                str(row.get("path") or "")
+                for row in deep_path_results
+                if str(row.get("category") or "") == category
+                and _coerce_int(row.get("hit"), default=0) == 1
+                and str(row.get("path") or "").strip()
+            ]
+            for category in DEEP_PATH_PROBES
+        }
+        for row in deep_path_results:
+            if _coerce_int(row.get("hit"), default=0) != 1:
+                continue
+            first_successful_deep_path = str(row.get("path") or "")
+            first_successful_deep_category = str(row.get("category") or "")
+            break
+
+        for row in deep_path_results:
+            if _coerce_int(row.get("hit"), default=0) != 1:
+                continue
+            category = str(row.get("category") or "")
+            if category not in DEEP_PATH_EXTRACTION_CATEGORIES:
+                continue
+            html_text = str(row.get("text") or "")
+            if not html_text:
+                continue
+            source_url = str(row.get("url") or "")
+            if not source_url:
+                continue
+            deep_page_type = DEEP_PATH_PAGE_TYPE_BY_CATEGORY.get(category, "department_page")
+            extracted_contacts, _ = process_text_extractions(
+                conn,
+                municipality_id,
+                source_url,
+                html_text,
+                page_type=deep_page_type,
+            )
 
     discovered_candidates: list[tuple[str, str]] = []
 
@@ -583,9 +766,27 @@ def _run_recovery_for_municipality(
             notes_parts.append(f"best_api_endpoint={best_api_endpoint}")
         if best_api_endpoint_class:
             notes_parts.append(f"best_api_endpoint_class={best_api_endpoint_class}")
+    if deep_path_hits > 0:
+        notes_parts.append(f"deep_path_hits={deep_path_hits}")
+    for category, hits in deep_path_hits_by_type.items():
+        if _coerce_int(hits, default=0) > 0:
+            notes_parts.append(f"deep_hit_{category}={hits}")
+    for category, paths in hit_paths_by_type.items():
+        clean_paths = [path for path in paths if str(path or "").strip()]
+        if clean_paths:
+            notes_parts.append(f"deep_paths_{category}={','.join(clean_paths)}")
+    if first_successful_deep_path:
+        notes_parts.append(f"first_deep_path={first_successful_deep_path}")
+    if first_successful_deep_category:
+        notes_parts.append(f"first_deep_category={first_successful_deep_category}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
     status_row["directory_hit"] = 1 if directory_hit else 0
+    status_row["deep_path_hits"] = deep_path_hits
+    status_row["first_deep_category"] = first_successful_deep_category
+    status_row["first_deep_path"] = first_successful_deep_path
+    for category in DEEP_PATH_EXPORT_CATEGORIES:
+        status_row[f"deep_hit_{category}"] = _coerce_int(deep_path_hits_by_type.get(category), default=0)
 
     directory_fallback_attempted = 0
     directory_fallback_contacts = 0
@@ -650,7 +851,14 @@ def _run_recovery_for_municipality(
     else:
         status_row["recovery_result"] = "recovered_manual_seed_needed"
 
-    if (
+    if deep_path_hits > 0:
+        if recovered_contact_count > 0 and recovered_role_winner_count > 0:
+            status_row["recovery_result"] = "recovered_deep_path"
+        elif recovered_contact_count > 0 and recovered_role_winner_count == 0:
+            status_row["recovery_result"] = "partial_deep_path_recovery"
+        elif recovered_contact_count == 0:
+            status_row["recovery_result"] = "deep_path_present_no_extract"
+    elif (
         recovered_contact_count == 0
         and successful_api_probe_count > 0
         and likely_structured_endpoint_count > 0
@@ -759,6 +967,93 @@ def _build_known_probe_urls(seed_url: str) -> list[dict[str, str]]:
         seen.add(url)
         out.append({"path": path, "url": url})
     return out
+
+
+def probe_deep_paths(
+    base_url: str,
+    categorized_paths: dict[str, list[str]],
+    fetch_fn,
+    probe_budget: int = 20,
+) -> list[dict]:
+    results: list[dict] = []
+    entries = _build_deep_probe_entries(base_url=base_url, categorized_paths=categorized_paths)
+    if not entries:
+        return results
+
+    block_streak = 0
+    attempts_used = 0
+    for entry in entries:
+        if attempts_used >= max(0, probe_budget):
+            break
+        if block_streak >= BLOCK_STREAK_STOP_THRESHOLD:
+            break
+
+        category = str(entry.get("category") or "")
+        path = str(entry.get("path") or "")
+        url = str(entry.get("url") or "")
+        attempts_used += 1
+        resp = fetch_fn(url)
+        status_code = resp.status_code if resp.status_code is not None else ""
+        status_int = _coerce_int(status_code, default=-1)
+        hit = 1 if status_int == 200 else 0
+        if status_int in BLOCK_HTTP_STATUS_CODES:
+            block_streak += 1
+        else:
+            block_streak = 0
+
+        text_value = str(resp.text or "")
+        results.append(
+            {
+                "category": category,
+                "path": path,
+                "url": url,
+                "status": status_code,
+                "hit": hit,
+                "content_type": str(resp.content_type or resp.response_headers.get("content-type") or ""),
+                "length": len(text_value),
+                "text": text_value if hit else "",
+            }
+        )
+    return results
+
+
+def _build_deep_probe_entries(base_url: str, categorized_paths: dict[str, list[str]]) -> list[dict[str, str]]:
+    root = str(base_url or "").rstrip("/")
+    if not root:
+        return []
+
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for category, paths in categorized_paths.items():
+        for raw_path in paths:
+            path = str(raw_path or "").strip()
+            if not path:
+                continue
+            canonical = _canonical_probe_path(path)
+            if canonical in seen:
+                continue
+            url = normalize_url(path, base_url=root) or f"{root}{path}"
+            if not url:
+                continue
+            seen.add(canonical)
+            out.append(
+                {
+                    "category": str(category),
+                    "path": path,
+                    "url": url,
+                }
+            )
+    return out
+
+
+def _canonical_probe_path(path: str) -> str:
+    text = str(path or "").strip()
+    if not text:
+        return ""
+    normalized = text.lower()
+    if normalized != "/" and normalized.endswith("/"):
+        normalized = normalized.rstrip("/")
+    return normalized
 
 
 def probe_api_endpoints(base_url: str, fetch_fn) -> list[dict[str, object]]:

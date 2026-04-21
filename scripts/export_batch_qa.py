@@ -169,6 +169,16 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "directory_fallback_attempted",
     "directory_fallback_contacts",
     "directory_source",
+    "deep_path_hits",
+    "first_deep_category",
+    "first_deep_path",
+    "deep_hit_directory",
+    "deep_hit_finance",
+    "deep_hit_clerk",
+    "deep_hit_assessor",
+    "deep_hit_tax",
+    "deep_hit_building",
+    "deep_hit_planning",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "api_hit",
@@ -217,6 +227,9 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "api_available_no_scrape",
     "api_inventory_viable",
     "api_structured_data_found",
+    "recovered_deep_path",
+    "partial_deep_path_recovery",
+    "deep_path_present_no_extract",
 }
 
 
@@ -692,6 +705,16 @@ def build_blocked_recovery_status_rows(
             "directory_fallback_attempted": 0,
             "directory_fallback_contacts": 0,
             "directory_source": "",
+            "deep_path_hits": 0,
+            "first_deep_category": "",
+            "first_deep_path": "",
+            "deep_hit_directory": 0,
+            "deep_hit_finance": 0,
+            "deep_hit_clerk": 0,
+            "deep_hit_assessor": 0,
+            "deep_hit_tax": 0,
+            "deep_hit_building": 0,
+            "deep_hit_planning": 0,
             "recovered_contact_count": 0,
             "recovered_role_winner_count": 0,
             "api_hit": 0,
@@ -755,6 +778,17 @@ def build_blocked_recovery_status_rows(
         row["recovered_role_winner_count"] = _coerce_int(payload.get("recovered_role_winner_count"))
         row["notes"] = str(payload.get("notes") or "")
         notes = str(row["notes"])
+        row["deep_path_hits"] = _coerce_int(
+            payload.get("deep_path_hits"),
+            default=_extract_note_int_value(notes, "deep_path_hits", default=0),
+        )
+        row["first_deep_category"] = str(payload.get("first_deep_category") or _extract_note_value(notes, "first_deep_category") or "")
+        row["first_deep_path"] = str(payload.get("first_deep_path") or _extract_note_value(notes, "first_deep_path") or "")
+        for category in ("directory", "finance", "clerk", "assessor", "tax", "building", "planning"):
+            row[f"deep_hit_{category}"] = _coerce_int(
+                payload.get(f"deep_hit_{category}"),
+                default=_extract_note_int_value(notes, f"deep_hit_{category}", default=0),
+            )
         api_paths_hit = str(payload.get("api_paths_hit") or _extract_api_paths_hit_from_notes(notes) or "")
         api_type = str(payload.get("api_type") or _extract_api_type_from_notes(notes) or "none")
         if api_type not in {"swagger", "rest_root"}:
