@@ -1,0 +1,11 @@
+municipality_id,batch_id,blocked_reason,recovery_mode_attempted,recovery_result,homepage_status,fallback_status,sitemap_status,robots_status,known_path_hits,recovered_contact_count,recovered_role_winner_count,notes
+ct_andover,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_deep_river,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_east_hartford,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_eastford,batch_4,http_forbidden,true,unrecovered_http_block,403,403,200,200,0,0,0,stopped_after_repeated_403_or_429
+ct_easton,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_new_hartford,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_north_stonington,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_plainville,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_stonington,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429
+ct_tolland,batch_4,http_forbidden,true,unrecovered_http_block,403,403,403,not_attempted,0,0,0,stopped_after_repeated_403_or_429

@@ -35,8 +35,12 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "notes",
 )
 
-KNOWN_PATH_ALLOWLIST = (
+KNOWN_PATHS = [
+    "/Directory",
     "/Directory.aspx",
+    "/Directory.aspx?did=",
+    "/staff-directory",
+    "/directory",
     "/directory.aspx",
     "/StaffDirectory.aspx",
     "/staffdirectory.aspx",
@@ -48,20 +52,7 @@ KNOWN_PATH_ALLOWLIST = (
     "/building-department",
     "/planning-zoning",
     "/finance-department",
-)
-
-KNOWN_PATH_PROBE_GROUPS = (
-    ("/Directory.aspx", "/directory.aspx"),
-    ("/StaffDirectory.aspx", "/staffdirectory.aspx"),
-    ("/departments",),
-    ("/government",),
-    ("/town-clerk",),
-    ("/tax-collector",),
-    ("/assessor",),
-    ("/building-department",),
-    ("/planning-zoning",),
-    ("/finance-department",),
-)
+]
 
 RECOVERY_RESULT_VALUES = {
     "unrecovered_http_block",
@@ -69,6 +60,7 @@ RECOVERY_RESULT_VALUES = {
     "recovered_sitemap_path",
     "recovered_manual_seed_needed",
     "partial_recovery",
+    "discovery_failure",
 }
 
 BLOCK_HTTP_STATUS_CODES = {403, 429}
@@ -179,6 +171,7 @@ def _run_recovery_for_municipality(
     stopped_early = False
     known_path_hits = 0
     discovered_path_hits = 0
+    known_path_results: list[dict[str, object]] = []
     recovered_from_known = False
     recovered_from_sitemap = False
     latest_source_url = home_target
@@ -259,8 +252,10 @@ def _run_recovery_for_municipality(
         municipality_domain=municipality_domain,
         limit=DISCOVERED_PROBE_LIMIT,
     )
-    known_probe_urls = _build_known_probe_urls(site_root or home_target)
+    known_probe_entries = _build_known_probe_urls(site_root or home_target)
+    known_probe_urls = [entry["url"] for entry in known_probe_entries]
     known_probe_set = set(known_probe_urls)
+    known_probe_path_by_url = {entry["url"]: entry["path"] for entry in known_probe_entries}
 
     probe_queue: list[tuple[str, str]] = []
     seen_probe_urls: set[str] = set()
@@ -294,6 +289,15 @@ def _run_recovery_for_municipality(
         )
         probes_used += 1
         block_streak, blocked_responses = _update_block_tracking(result, block_streak, blocked_responses)
+        if source_kind == "known":
+            path_value = known_probe_path_by_url.get(target_url, "")
+            known_path_results.append(
+                {
+                    "path": path_value,
+                    "status": result.status_code if result.status_code is not None else "",
+                    "hit": 1 if result.status_code == 200 else 0,
+                }
+            )
 
         if not result.ok or not result.text:
             continue
@@ -323,7 +327,6 @@ def _run_recovery_for_municipality(
         )
 
         if target_url in known_probe_set:
-            known_path_hits += 1
             if extracted_contacts > 0:
                 recovered_from_known = True
         else:
@@ -336,6 +339,23 @@ def _run_recovery_for_municipality(
 
     after_contact_count = _count_contacts(conn, municipality_id)
     recovered_contact_count = max(0, after_contact_count - before_contact_count)
+    known_path_hits = sum(_coerce_int(result.get("hit")) for result in known_path_results)
+    directory_hit = any(
+        _coerce_int(result.get("hit")) == 1
+        and "directory" in str(result.get("path") or "").lower()
+        for result in known_path_results
+    )
+    hit_paths = [
+        str(result.get("path") or "")
+        for result in known_path_results
+        if _coerce_int(result.get("hit")) == 1 and str(result.get("path") or "").strip()
+    ]
+    notes_parts: list[str] = []
+    if hit_paths:
+        notes_parts.append(f"known_paths_hit={','.join(hit_paths)}")
+    if directory_hit:
+        notes_parts.append("directory_hit=1")
+
     status_row["known_path_hits"] = known_path_hits
     status_row["recovered_contact_count"] = recovered_contact_count
 
@@ -345,6 +365,12 @@ def _run_recovery_for_municipality(
     else:
         notes.append("vw_best_role_per_town_missing")
 
+    has_any_200 = (
+        _status_is_200(status_row.get("homepage_status"))
+        or _status_is_200(status_row.get("fallback_status"))
+        or any(_coerce_int(result.get("status"), default=-1) == 200 for result in known_path_results)
+    )
+
     if recovered_contact_count > 0:
         if recovered_from_sitemap:
             status_row["recovery_result"] = "recovered_sitemap_path"
@@ -352,6 +378,8 @@ def _run_recovery_for_municipality(
             status_row["recovery_result"] = "recovered_known_path"
         else:
             status_row["recovery_result"] = "partial_recovery"
+    elif has_any_200 and known_path_hits > 0 and recovered_contact_count == 0:
+        status_row["recovery_result"] = "discovery_failure"
     elif known_path_hits > 0 or discovered_path_hits > 0:
         status_row["recovery_result"] = "partial_recovery"
     elif blocked_responses >= BLOCK_STREAK_STOP_THRESHOLD:
@@ -362,7 +390,11 @@ def _run_recovery_for_municipality(
     if status_row["recovery_result"] not in RECOVERY_RESULT_VALUES:
         status_row["recovery_result"] = "partial_recovery"
     if notes:
-        status_row["notes"] = "; ".join(sorted(set(notes)))
+        notes_parts.extend(sorted(set(notes)))
+    if notes_parts:
+        status_row["notes"] = ";".join(notes_parts)
+    else:
+        status_row["notes"] = str(diagnostics.get("notes") or "")
     return status_row, latest_source_url
 
 
@@ -401,19 +433,18 @@ def _derive_blocked_reason(diagnostics: dict[str, object]) -> str:
     return "blocked_or_forbidden"
 
 
-def _build_known_probe_urls(seed_url: str) -> list[str]:
+def _build_known_probe_urls(seed_url: str) -> list[dict[str, str]]:
     site_root = _site_root(seed_url)
     if not site_root:
         return []
-    out: list[str] = []
+    out: list[dict[str, str]] = []
     seen: set[str] = set()
-    for group in KNOWN_PATH_PROBE_GROUPS:
-        canonical_path = group[0]
-        url = normalize_url(canonical_path, base_url=site_root)
+    for path in KNOWN_PATHS:
+        url = normalize_url(path, base_url=site_root)
         if not url or url in seen:
             continue
         seen.add(url)
-        out.append(url)
+        out.append({"path": path, "url": url})
     return out
 
 
@@ -582,6 +613,10 @@ def _status_label(result: FetchResult) -> str:
     if result.error and result.error != "http_error":
         return f"{result.status_code}:{result.error}"
     return str(result.status_code)
+
+
+def _status_is_200(value: object) -> bool:
+    return _coerce_int(value, default=-1) == 200
 
 
 def _is_internal_link(url: str, municipality_domain: str) -> bool:

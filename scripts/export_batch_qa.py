@@ -165,6 +165,7 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "sitemap_status",
     "robots_status",
     "known_path_hits",
+    "directory_hit",
     "recovered_contact_count",
     "recovered_role_winner_count",
     "notes",
@@ -193,6 +194,7 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "recovered_sitemap_path",
     "recovered_manual_seed_needed",
     "partial_recovery",
+    "discovery_failure",
 }
 
 
@@ -459,6 +461,14 @@ def _coerce_int(value: object, default: int = 0) -> int:
         return default
 
 
+def _extract_directory_hit_from_notes(notes: str) -> int:
+    for part in str(notes or "").split(";"):
+        clean = part.strip().lower()
+        if clean == "directory_hit=1":
+            return 1
+    return 0
+
+
 def fetch_crawl_diagnostics(
     conn,
     municipality_ids: list[str],
@@ -615,6 +625,7 @@ def build_blocked_recovery_status_rows(
             "sitemap_status": "",
             "robots_status": "",
             "known_path_hits": 0,
+            "directory_hit": 0,
             "recovered_contact_count": 0,
             "recovered_role_winner_count": 0,
             "notes": "recovery_not_attempted",
@@ -664,6 +675,7 @@ def build_blocked_recovery_status_rows(
         row["recovered_contact_count"] = _coerce_int(payload.get("recovered_contact_count"))
         row["recovered_role_winner_count"] = _coerce_int(payload.get("recovered_role_winner_count"))
         row["notes"] = str(payload.get("notes") or "")
+        row["directory_hit"] = _extract_directory_hit_from_notes(str(row["notes"]))
 
     return [rows_by_id[municipality_id] for municipality_id in sorted(rows_by_id)]
 
