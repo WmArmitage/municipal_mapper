@@ -69,6 +69,17 @@ API_PROBE_PATHS = [
     "/swagger/index.html",
 ]
 
+API_INVENTORY_PATHS = [
+    "/api",
+    "/api/help",
+    "/api/help/index",
+    "/api/docs",
+    "/swagger",
+    "/swagger/index.html",
+    "/swagger/v1/swagger.json",
+    "/api/swagger.json",
+]
+
 RECOVERY_RESULT_VALUES = {
     "unrecovered_http_block",
     "recovered_known_path",
@@ -80,6 +91,7 @@ RECOVERY_RESULT_VALUES = {
     "directory_present_no_extract",
     "partial_directory_recovery",
     "api_available_no_scrape",
+    "api_inventory_viable",
 }
 
 BLOCK_HTTP_STATUS_CODES = {403, 429}
@@ -198,6 +210,9 @@ def _run_recovery_for_municipality(
     api_probe_results: list[dict[str, object]] = []
     api_hit = 0
     api_type = "none"
+    api_inventory_results: list[dict[str, object]] = []
+    api_inventory_type = "none"
+    api_endpoint_count = 0
     first_directory_hit_url = ""
     first_directory_hit_path = ""
     first_directory_hit_html = ""
@@ -251,6 +266,19 @@ def _run_recovery_for_municipality(
             ),
         )
         api_hit, api_type = classify_api_presence(api_probe_results)
+        if api_hit == 1:
+            api_inventory_results = run_api_inventory(
+                base_url=site_root,
+                fetch_fn=lambda target_url: fetch_url(
+                    target_url,
+                    timeout=timeout,
+                    session=session,
+                    referer=followup_referer,
+                    retries=0,
+                    request_headers=BLOCKED_RECOVERY_HEADERS,
+                ),
+            )
+            api_inventory_type, api_endpoint_count = classify_api_inventory(api_inventory_results)
 
     discovered_candidates: list[tuple[str, str]] = []
 
@@ -414,6 +442,16 @@ def _run_recovery_for_municipality(
         notes_parts.append("api_hit=1")
     if api_type != "none":
         notes_parts.append(f"api_type={api_type}")
+    if api_hit == 1:
+        api_inventory_paths = [
+            str(result.get("path") or "")
+            for result in api_inventory_results
+            if _coerce_int(result.get("status"), default=-1) == 200 and str(result.get("path") or "").strip()
+        ]
+        if api_inventory_paths:
+            notes_parts.append(f"api_inventory_paths={','.join(api_inventory_paths)}")
+        notes_parts.append(f"api_inventory_type={api_inventory_type}")
+        notes_parts.append(f"api_endpoint_count={api_endpoint_count}")
     if directory_hit:
         notes_parts.append("directory_hit=1")
     status_row["directory_hit"] = 1 if directory_hit else 0
@@ -480,7 +518,14 @@ def _run_recovery_for_municipality(
         status_row["recovery_result"] = "unrecovered_http_block"
     else:
         status_row["recovery_result"] = "recovered_manual_seed_needed"
-    if api_hit == 1 and recovered_contact_count == 0 and not directory_hit:
+
+    if (
+        recovered_contact_count == 0
+        and not directory_hit
+        and api_inventory_type in {"swagger_json", "swagger_ui", "rest_json"}
+    ):
+        status_row["recovery_result"] = "api_inventory_viable"
+    elif api_hit == 1 and recovered_contact_count == 0 and not directory_hit:
         status_row["recovery_result"] = "api_available_no_scrape"
 
     if status_row["recovery_result"] not in RECOVERY_RESULT_VALUES:
@@ -619,6 +664,54 @@ def classify_api_presence(results: list[dict[str, object]]) -> tuple[int, str]:
             api_hit = 1
             api_type = "rest_root"
     return api_hit, api_type
+
+
+def run_api_inventory(base_url: str, fetch_fn) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    root = str(base_url or "").rstrip("/")
+    if not root:
+        return results
+
+    for path in API_INVENTORY_PATHS:
+        url = f"{root}{path}"
+        resp = fetch_fn(url)
+        content_type = str(resp.content_type or resp.response_headers.get("content-type") or "").lower()
+        sample = str(resp.text or "")[:500].lower()
+        results.append(
+            {
+                "path": path,
+                "status": resp.status_code if resp.status_code is not None else "",
+                "content_type": content_type,
+                "is_json": "json" in content_type,
+                "has_swagger_markers": ("swagger" in sample or "openapi" in sample),
+                "length": len(str(resp.text or "")),
+            }
+        )
+    return results
+
+
+def classify_api_inventory(results: list[dict[str, object]]) -> tuple[str, int]:
+    endpoint_count = sum(1 for row in results if _coerce_int(row.get("status"), default=-1) == 200)
+
+    for row in results:
+        if (
+            _coerce_int(row.get("status"), default=-1) == 200
+            and bool(row.get("is_json"))
+            and bool(row.get("has_swagger_markers"))
+        ):
+            return "swagger_json", endpoint_count
+
+    for row in results:
+        if _coerce_int(row.get("status"), default=-1) == 200 and bool(row.get("has_swagger_markers")):
+            return "swagger_ui", endpoint_count
+
+    for row in results:
+        if _coerce_int(row.get("status"), default=-1) == 200 and bool(row.get("is_json")):
+            return "rest_json", endpoint_count
+
+    if endpoint_count > 0:
+        return "html_only", endpoint_count
+    return "none", 0
 
 
 def _select_discovered_probe_urls(

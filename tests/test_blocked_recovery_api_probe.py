@@ -29,7 +29,14 @@ if "requests" not in sys.modules:
     )
     sys.modules["requests"] = fake_requests
 
-from scripts.blocked_recovery import API_PROBE_PATHS, classify_api_presence, probe_api_endpoints
+from scripts.blocked_recovery import (
+    API_INVENTORY_PATHS,
+    API_PROBE_PATHS,
+    classify_api_inventory,
+    classify_api_presence,
+    probe_api_endpoints,
+    run_api_inventory,
+)
 from scripts.export_batch_qa import build_blocked_recovery_status_rows
 
 
@@ -83,6 +90,45 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(hit, 1)
         self.assertEqual(api_type, "rest_root")
 
+    def test_run_api_inventory_collects_expected_rows(self) -> None:
+        def fake_fetch(url: str) -> _FakeFetchResult:
+            if url.endswith("/swagger/v1/swagger.json"):
+                return _FakeFetchResult(
+                    200,
+                    "application/json",
+                    '{"openapi":"3.0.1","info":{"title":"Town API"}}',
+                )
+            if url.endswith("/swagger/index.html"):
+                return _FakeFetchResult(200, "text/html", "<html>Swagger UI</html>")
+            return _FakeFetchResult(404, "text/html", "")
+
+        results = run_api_inventory("https://example.gov", fake_fetch)
+        self.assertEqual(len(results), len(API_INVENTORY_PATHS))
+        swagger_json = next(row for row in results if row["path"] == "/swagger/v1/swagger.json")
+        self.assertEqual(swagger_json["status"], 200)
+        self.assertEqual(swagger_json["is_json"], True)
+        self.assertEqual(swagger_json["has_swagger_markers"], True)
+
+    def test_classify_api_inventory_swagger_json(self) -> None:
+        inventory_type, endpoint_count = classify_api_inventory(
+            [
+                {
+                    "path": "/swagger/v1/swagger.json",
+                    "status": 200,
+                    "is_json": True,
+                    "has_swagger_markers": True,
+                },
+                {
+                    "path": "/api",
+                    "status": 200,
+                    "is_json": False,
+                    "has_swagger_markers": False,
+                },
+            ]
+        )
+        self.assertEqual(inventory_type, "swagger_json")
+        self.assertEqual(endpoint_count, 2)
+
     def test_export_parses_api_fields_from_notes(self) -> None:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -101,8 +147,15 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                 "batch_id": "batch_1",
                 "blocked_reason": "http_forbidden",
                 "recovery_mode_attempted": "true",
-                "recovery_result": "api_available_no_scrape",
-                "notes": "api_paths_hit=/api,/api/help/index;api_hit=1;api_type=swagger",
+                "recovery_result": "api_inventory_viable",
+                "notes": (
+                    "api_paths_hit=/api,/api/help/index;"
+                    "api_hit=1;"
+                    "api_type=swagger;"
+                    "api_inventory_paths=/api/help/index,/swagger/v1/swagger.json;"
+                    "api_inventory_type=swagger_json;"
+                    "api_endpoint_count=2"
+                ),
             }
             conn.execute(
                 "INSERT INTO signals (municipality_id, signal_type, value) VALUES (?, ?, ?)",
@@ -127,7 +180,10 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["api_hit"], 1)
         self.assertEqual(row["api_type"], "swagger")
         self.assertEqual(row["api_paths_hit"], "/api,/api/help/index")
-        self.assertEqual(row["recovery_result"], "api_available_no_scrape")
+        self.assertEqual(row["api_inventory_type"], "swagger_json")
+        self.assertEqual(row["api_endpoint_count"], 2)
+        self.assertEqual(row["api_inventory_paths"], "/api/help/index,/swagger/v1/swagger.json")
+        self.assertEqual(row["recovery_result"], "api_inventory_viable")
 
 
 if __name__ == "__main__":

@@ -174,6 +174,9 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "api_hit",
     "api_type",
     "api_paths_hit",
+    "api_inventory_type",
+    "api_endpoint_count",
+    "api_inventory_paths",
     "notes",
 )
 
@@ -205,6 +208,7 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "directory_present_no_extract",
     "partial_directory_recovery",
     "api_available_no_scrape",
+    "api_inventory_viable",
 }
 
 
@@ -502,6 +506,17 @@ def _extract_api_paths_hit_from_notes(notes: str) -> str:
     return str(_extract_note_value(notes, "api_paths_hit") or "").strip()
 
 
+def _extract_api_inventory_type_from_notes(notes: str) -> str:
+    value = str(_extract_note_value(notes, "api_inventory_type") or "").strip().lower()
+    if value in {"swagger_json", "swagger_ui", "rest_json", "html_only", "none"}:
+        return value
+    return "none"
+
+
+def _extract_api_inventory_paths_from_notes(notes: str) -> str:
+    return str(_extract_note_value(notes, "api_inventory_paths") or "").strip()
+
+
 def fetch_crawl_diagnostics(
     conn,
     municipality_ids: list[str],
@@ -667,6 +682,9 @@ def build_blocked_recovery_status_rows(
             "api_hit": 0,
             "api_type": "none",
             "api_paths_hit": "",
+            "api_inventory_type": "none",
+            "api_endpoint_count": 0,
+            "api_inventory_paths": "",
             "notes": "recovery_not_attempted",
         }
 
@@ -727,6 +745,18 @@ def build_blocked_recovery_status_rows(
         )
         if row["api_hit"] <= 0 and api_type != "none":
             row["api_hit"] = 1
+        api_inventory_type = str(payload.get("api_inventory_type") or _extract_api_inventory_type_from_notes(notes) or "none")
+        if api_inventory_type not in {"swagger_json", "swagger_ui", "rest_json", "html_only", "none"}:
+            api_inventory_type = "none"
+        api_inventory_paths = str(payload.get("api_inventory_paths") or _extract_api_inventory_paths_from_notes(notes) or "")
+        row["api_inventory_type"] = api_inventory_type
+        row["api_inventory_paths"] = api_inventory_paths
+        row["api_endpoint_count"] = _coerce_int(
+            payload.get("api_endpoint_count"),
+            default=_extract_note_int_value(notes, "api_endpoint_count", default=0),
+        )
+        if row["api_endpoint_count"] <= 0 and api_inventory_paths:
+            row["api_endpoint_count"] = len([part for part in api_inventory_paths.split(",") if part.strip()])
         row["directory_hit"] = _coerce_int(payload.get("directory_hit"), default=_extract_directory_hit_from_notes(notes))
         row["directory_fallback_attempted"] = _coerce_int(
             payload.get("directory_fallback_attempted"),
