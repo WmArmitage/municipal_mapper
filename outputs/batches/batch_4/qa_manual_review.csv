@@ -2,7 +2,7 @@ municipality_id,town_name,review_type,role_normalized,name,email,phone,departmen
 ct_andover,Andover,crawl_diagnostic_zero_yield,,,,,,,https://www.andoverconnecticut.org/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_deep_river,Deep River,crawl_diagnostic_zero_yield,,,,,,,https://www.deepriverct.us/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_east_hartford,East Hartford,crawl_diagnostic_zero_yield,,,,,,,https://www.easthartfordct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
-ct_eastford,Eastford,crawl_diagnostic_zero_yield,,,,,,,https://www.eastfordct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_eastford,Eastford,missing_role_groups_2plus,,,,,,,,executive; tax; building; planning; finance,5,,normal_coverage_gap
 ct_easton,Easton,crawl_diagnostic_zero_yield,,,,,,,https://www.eastonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_franklin,Franklin,missing_role_groups_2plus,,,,,,,,planning; finance,2,,normal_coverage_gap
 ct_franklin,Franklin,suspicious_winner,Assessor,,,8606427352,"If you are being taxed on property you no longer own, please contact the assessor’s office at",department_page,https://www.franklinct.gov/tax-collector,,,assessor_tax_mismatch,suspicious_winner

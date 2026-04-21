@@ -11,5 +11,5 @@ ct_north_stonington,North Stonington,executive; assessment; tax; clerk; building
 ct_stonington,Stonington,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_andover,Andover,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_tolland,Tolland,executive; assessment; tax; clerk; building; planning; finance,7,,
-ct_eastford,Eastford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_eastford,Eastford,executive; tax; building; planning; finance,5,assessment; clerk,assessment: Assessor; clerk: Town Clerk
 ct_windham,Windham,tax; finance,2,executive; assessment; clerk; building; planning,"executive: First Selectman, Mayor, Town Manager; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner"
