@@ -49,6 +49,12 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "first_deep_extraction_category",
     "first_deep_extraction_path",
     "deep_extraction_paths",
+    "deep_fetch_success_count",
+    "deep_html_candidate_count",
+    "deep_extraction_attempt_count",
+    "deep_extraction_contact_count",
+    "deep_extraction_outcomes",
+    "deep_extraction_zero_reason",
     "deep_path_trust",
     "deep_path_legacy_suspected",
     "recovered_contact_count",
@@ -365,6 +371,12 @@ def _run_recovery_for_municipality(
         "first_deep_extraction_category": "",
         "first_deep_extraction_path": "",
         "deep_extraction_paths": "",
+        "deep_fetch_success_count": 0,
+        "deep_html_candidate_count": 0,
+        "deep_extraction_attempt_count": 0,
+        "deep_extraction_contact_count": 0,
+        "deep_extraction_outcomes": "",
+        "deep_extraction_zero_reason": "not_applicable",
         "deep_path_trust": "none",
         "deep_path_legacy_suspected": 0,
         "recovered_contact_count": 0,
@@ -411,8 +423,14 @@ def _run_recovery_for_municipality(
     first_successful_deep_path = ""
     first_successful_deep_category = ""
     deep_extraction_contact_total = 0
+    deep_fetch_success_count = 0
+    deep_html_candidate_count = 0
+    deep_extraction_attempt_count = 0
     deep_extraction_path_set: set[str] = set()
     deep_extraction_paths: list[str] = []
+    deep_extraction_contacts_by_path: dict[str, int] = {}
+    deep_extraction_outcomes = ""
+    deep_extraction_zero_reason = "not_applicable"
     first_deep_extraction_path = ""
     first_deep_extraction_category = ""
     first_directory_hit_url = ""
@@ -644,6 +662,8 @@ def _run_recovery_for_municipality(
             nonlocal followup_referer
             nonlocal latest_source_url
             nonlocal deep_extraction_contact_total
+            nonlocal deep_extraction_attempt_count
+            nonlocal deep_extraction_contacts_by_path
             nonlocal first_deep_extraction_path
             nonlocal first_deep_extraction_category
 
@@ -672,6 +692,8 @@ def _run_recovery_for_municipality(
                 return False
 
             deep_page_type = DEEP_PATH_PAGE_TYPE_BY_CATEGORY.get(category, "department_page")
+            deep_extraction_attempt_count += 1
+            extraction_marker = str(row.get("path") or source_url)
             extracted_contacts, _ = process_text_extractions(
                 conn,
                 municipality_id,
@@ -679,11 +701,15 @@ def _run_recovery_for_municipality(
                 html_text,
                 page_type=deep_page_type,
             )
+            if extraction_marker:
+                deep_extraction_contacts_by_path[extraction_marker] = (
+                    _coerce_int(deep_extraction_contacts_by_path.get(extraction_marker), default=0)
+                    + max(0, extracted_contacts)
+                )
             if extracted_contacts <= 0:
                 return False
 
             deep_extraction_contact_total += extracted_contacts
-            extraction_marker = str(row.get("path") or source_url)
             if extraction_marker and extraction_marker not in deep_extraction_path_set:
                 deep_extraction_path_set.add(extraction_marker)
                 deep_extraction_paths.append(extraction_marker)
@@ -710,6 +736,16 @@ def _run_recovery_for_municipality(
             on_result=_handle_deep_probe_result,
         )
         deep_path_hits = sum(_coerce_int(row.get("hit"), default=0) for row in deep_path_results)
+        deep_fetch_success_count = sum(
+            1 for row in deep_path_results if _coerce_int(row.get("hit"), default=0) == 1
+        )
+        deep_html_candidate_count = sum(
+            1
+            for row in deep_path_results
+            if _coerce_int(row.get("hit"), default=0) == 1
+            and "html" in str(row.get("content_type") or "").lower()
+            and len(str(row.get("text") or "")) >= 500
+        )
         deep_path_hits_by_type = {
             category: sum(
                 1
@@ -874,6 +910,11 @@ def _run_recovery_for_municipality(
         notes.append("stopped_after_repeated_403_or_429")
 
     known_path_hits = sum(_coerce_int(result.get("hit")) for result in known_path_results)
+    if deep_extraction_contacts_by_path:
+        deep_extraction_outcomes = ",".join(
+            f"{path}:{_coerce_int(deep_extraction_contacts_by_path.get(path), default=0)}"
+            for path in sorted(deep_extraction_contacts_by_path)
+        )
     directory_hit = playwright_directory_hit or any(
         is_directory_hit(str(result.get("path") or ""), _coerce_int(result.get("status"), default=-1))
         for result in known_path_results
@@ -924,6 +965,12 @@ def _run_recovery_for_municipality(
             notes_parts.append(f"best_api_endpoint_class={best_api_endpoint_class}")
     if deep_path_hits > 0:
         notes_parts.append(f"deep_path_hits={deep_path_hits}")
+        notes_parts.append(f"deep_fetch_success_count={deep_fetch_success_count}")
+        notes_parts.append(f"deep_html_candidate_count={deep_html_candidate_count}")
+        notes_parts.append(f"deep_extraction_attempt_count={deep_extraction_attempt_count}")
+        notes_parts.append(f"deep_extraction_contact_count={deep_extraction_contact_total}")
+        if deep_extraction_outcomes:
+            notes_parts.append(f"deep_extraction_outcomes={deep_extraction_outcomes}")
         notes_parts.append(f"deep_path_trust={deep_path_trust}")
         notes_parts.append(f"deep_path_legacy_suspected={deep_path_legacy_suspected}")
     for category, hits in deep_path_hits_by_type.items():
@@ -959,6 +1006,11 @@ def _run_recovery_for_municipality(
     status_row["first_deep_extraction_category"] = first_deep_extraction_category
     status_row["first_deep_extraction_path"] = first_deep_extraction_path
     status_row["deep_extraction_paths"] = ",".join(deep_extraction_paths)
+    status_row["deep_fetch_success_count"] = deep_fetch_success_count
+    status_row["deep_html_candidate_count"] = deep_html_candidate_count
+    status_row["deep_extraction_attempt_count"] = deep_extraction_attempt_count
+    status_row["deep_extraction_contact_count"] = deep_extraction_contact_total
+    status_row["deep_extraction_outcomes"] = deep_extraction_outcomes
     status_row["deep_path_trust"] = deep_path_trust
     status_row["deep_path_legacy_suspected"] = deep_path_legacy_suspected
     for category in DEEP_PATH_EXPORT_CATEGORIES:
@@ -1003,6 +1055,19 @@ def _run_recovery_for_municipality(
     status_row["recovered_contact_count"] = max(0, _count_contacts(conn, municipality_id) - before_contact_count)
     recovered_contact_count = _coerce_int(status_row["recovered_contact_count"])
     recovered_role_winner_count = _coerce_int(status_row.get("recovered_role_winner_count"))
+    if deep_path_hits > 0:
+        if deep_html_candidate_count <= 0:
+            deep_extraction_zero_reason = "no_html_candidate"
+        elif deep_extraction_attempt_count <= 0:
+            deep_extraction_zero_reason = "guard_filtered_all_html"
+        elif deep_extraction_contact_total <= 0:
+            deep_extraction_zero_reason = "extractor_returned_zero"
+        elif recovered_contact_count <= 0:
+            deep_extraction_zero_reason = "upsert_no_net_new"
+        else:
+            deep_extraction_zero_reason = "none"
+        status_row["deep_extraction_zero_reason"] = deep_extraction_zero_reason
+        notes_parts.append(f"deep_extraction_zero_reason={deep_extraction_zero_reason}")
 
     if directory_hit:
         if recovered_contact_count > 0 and recovered_role_winner_count == 0:
@@ -1031,6 +1096,8 @@ def _run_recovery_for_municipality(
         if recovered_contact_count > 0 and recovered_role_winner_count > 0:
             status_row["recovery_result"] = "recovered_deep_path"
         elif recovered_contact_count > 0 and recovered_role_winner_count == 0:
+            status_row["recovery_result"] = "partial_deep_path_recovery"
+        elif deep_extraction_contact_total > 0:
             status_row["recovery_result"] = "partial_deep_path_recovery"
         elif recovered_contact_count == 0:
             status_row["recovery_result"] = "deep_path_present_no_extract"

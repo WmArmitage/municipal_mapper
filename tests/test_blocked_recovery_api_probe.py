@@ -382,6 +382,12 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                 "first_deep_extraction_category": "directory",
                 "first_deep_extraction_path": "/Directory.aspx",
                 "deep_extraction_paths": "/Directory.aspx",
+                "deep_fetch_success_count": 2,
+                "deep_html_candidate_count": 2,
+                "deep_extraction_attempt_count": 2,
+                "deep_extraction_contact_count": 4,
+                "deep_extraction_outcomes": "/Directory.aspx:3,/finance-department:1",
+                "deep_extraction_zero_reason": "none",
                 "deep_path_trust": "high",
                 "deep_path_legacy_suspected": 0,
                 "notes": (
@@ -394,6 +400,12 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
                     "first_deep_extraction_category=directory;"
                     "first_deep_extraction_path=/Directory.aspx;"
                     "deep_extraction_paths=/Directory.aspx;"
+                    "deep_fetch_success_count=2;"
+                    "deep_html_candidate_count=2;"
+                    "deep_extraction_attempt_count=2;"
+                    "deep_extraction_contact_count=4;"
+                    "deep_extraction_outcomes=/Directory.aspx:3,/finance-department:1;"
+                    "deep_extraction_zero_reason=none;"
                     "deep_path_trust=high;"
                     "deep_path_legacy_suspected=0"
                 ),
@@ -427,6 +439,12 @@ class BlockedRecoveryApiProbeTests(unittest.TestCase):
         self.assertEqual(row["first_deep_extraction_category"], "directory")
         self.assertEqual(row["first_deep_extraction_path"], "/Directory.aspx")
         self.assertEqual(row["deep_extraction_paths"], "/Directory.aspx")
+        self.assertEqual(row["deep_fetch_success_count"], 2)
+        self.assertEqual(row["deep_html_candidate_count"], 2)
+        self.assertEqual(row["deep_extraction_attempt_count"], 2)
+        self.assertEqual(row["deep_extraction_contact_count"], 4)
+        self.assertEqual(row["deep_extraction_outcomes"], "/Directory.aspx:3,/finance-department:1")
+        self.assertEqual(row["deep_extraction_zero_reason"], "none")
         self.assertEqual(row["deep_path_trust"], "high")
         self.assertEqual(row["deep_path_legacy_suspected"], 0)
         self.assertEqual(row["recovery_result"], "deep_path_present_no_extract")

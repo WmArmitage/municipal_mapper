@@ -183,6 +183,12 @@ BLOCKED_RECOVERY_STATUS_FIELDS = (
     "first_deep_extraction_category",
     "first_deep_extraction_path",
     "deep_extraction_paths",
+    "deep_fetch_success_count",
+    "deep_html_candidate_count",
+    "deep_extraction_attempt_count",
+    "deep_extraction_contact_count",
+    "deep_extraction_outcomes",
+    "deep_extraction_zero_reason",
     "deep_path_trust",
     "deep_path_legacy_suspected",
     "recovered_contact_count",
@@ -728,6 +734,12 @@ def build_blocked_recovery_status_rows(
             "first_deep_extraction_category": "",
             "first_deep_extraction_path": "",
             "deep_extraction_paths": "",
+            "deep_fetch_success_count": 0,
+            "deep_html_candidate_count": 0,
+            "deep_extraction_attempt_count": 0,
+            "deep_extraction_contact_count": 0,
+            "deep_extraction_outcomes": "",
+            "deep_extraction_zero_reason": "not_applicable",
             "deep_path_trust": "none",
             "deep_path_legacy_suspected": 0,
             "recovered_contact_count": 0,
@@ -829,6 +841,32 @@ def build_blocked_recovery_status_rows(
             payload.get("first_deep_extraction_path")
             or _extract_note_value(notes, "first_deep_extraction_path")
             or ""
+        )
+        row["deep_fetch_success_count"] = _coerce_int(
+            payload.get("deep_fetch_success_count"),
+            default=_extract_note_int_value(notes, "deep_fetch_success_count", default=0),
+        )
+        row["deep_html_candidate_count"] = _coerce_int(
+            payload.get("deep_html_candidate_count"),
+            default=_extract_note_int_value(notes, "deep_html_candidate_count", default=0),
+        )
+        row["deep_extraction_attempt_count"] = _coerce_int(
+            payload.get("deep_extraction_attempt_count"),
+            default=_extract_note_int_value(notes, "deep_extraction_attempt_count", default=0),
+        )
+        row["deep_extraction_contact_count"] = _coerce_int(
+            payload.get("deep_extraction_contact_count"),
+            default=_extract_note_int_value(notes, "deep_extraction_contact_count", default=0),
+        )
+        row["deep_extraction_outcomes"] = str(
+            payload.get("deep_extraction_outcomes")
+            or _extract_note_value(notes, "deep_extraction_outcomes")
+            or ""
+        )
+        row["deep_extraction_zero_reason"] = str(
+            payload.get("deep_extraction_zero_reason")
+            or _extract_note_value(notes, "deep_extraction_zero_reason")
+            or "not_applicable"
         )
         deep_path_trust = str(payload.get("deep_path_trust") or _extract_note_value(notes, "deep_path_trust") or "none").strip().lower()
         if deep_path_trust not in {"none", "low", "medium", "high"}:
