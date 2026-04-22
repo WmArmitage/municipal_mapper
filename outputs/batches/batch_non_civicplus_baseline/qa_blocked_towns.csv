@@ -1,0 +1,10 @@
+municipality_id,town_name,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class,blocked_reason
+ct_farmington,Farmington,batch_non_civicplus_baseline,https://www.farmington-ct.org/,https://www.farmington-ct.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_glastonbury,Glastonbury,batch_non_civicplus_baseline,https://www.glastonburyct.gov/,https://www.glastonburyct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_hartford,Hartford,batch_non_civicplus_baseline,https://www.hartfordct.gov/Home,https://www.hartfordct.gov/Home,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_manchester,Manchester,batch_non_civicplus_baseline,https://www.manchesterct.gov/Home,https://www.manchesterct.gov/Home,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_new_fairfield,New Fairfield,batch_non_civicplus_baseline,https://www.newfairfield.org/,https://www.newfairfield.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_new_haven,New Haven,batch_non_civicplus_baseline,https://www.newhavenct.gov/,https://www.newhavenct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_stamford,Stamford,batch_non_civicplus_baseline,https://www.stamfordct.gov/,https://www.stamfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_weston,Weston,batch_non_civicplus_baseline,https://www.westonct.gov/,https://www.westonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden
+ct_westport,Westport,batch_non_civicplus_baseline,https://www.westportct.gov/,https://www.westportct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden,http_forbidden

@@ -1,0 +1,84 @@
+municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
+ct_ansonia,Ansonia,New Haven County,75,55,6,0
+ct_avon,Avon,Hartford County,120,55,2,1
+ct_barkhamsted,Barkhamsted,Litchfield County,118,97,7,3
+ct_berlin,Berlin,Hartford County,248,88,6,0
+ct_bethany,Bethany,New Haven County,48,40,8,1
+ct_bethel,Bethel,Fairfield County,95,64,8,4
+ct_bethlehem,Bethlehem,Litchfield County,38,24,6,3
+ct_bloomfield,Bloomfield,Hartford County,185,108,6,9
+ct_bolton,Bolton,Tolland County,92,27,6,8
+ct_bridgeport,Bridgeport,Fairfield County,58,52,5,15
+ct_canaan,Canaan,Litchfield County,121,67,7,2
+ct_canton,Canton,Hartford County,107,80,8,5
+ct_chaplin,Chaplin,Windham County,117,52,7,0
+ct_colebrook,Colebrook,Litchfield County,54,33,7,1
+ct_cornwall,Cornwall,Litchfield County,333,54,6,12
+ct_derby,Derby,New Haven County,1,1,0,1
+ct_durham,Durham,Middlesex County,145,61,8,11
+ct_east_granby,East Granby,Hartford County,204,52,7,4
+ct_east_haddam,East Haddam,Middlesex County,139,90,8,10
+ct_east_lyme,East Lyme,New London County,0,0,0,0
+ct_ellington,Ellington,Tolland County,59,23,5,2
+ct_fairfield,Fairfield,Fairfield County,140,50,5,9
+ct_farmington,Farmington,Hartford County,0,0,0,0
+ct_glastonbury,Glastonbury,Hartford County,0,0,0,1
+ct_griswold,Griswold,New London County,121,65,8,7
+ct_groton,Groton,New London County,43,36,7,5
+ct_guilford,Guilford,New Haven County,142,83,7,28
+ct_hampton,Hampton,Windham County,42,24,5,0
+ct_hartford,Hartford,Hartford County,0,0,0,1
+ct_hartland,Hartland,Hartford County,100,22,6,1
+ct_hebron,Hebron,Tolland County,73,17,7,2
+ct_killingly,Killingly,Windham County,41,11,4,19
+ct_killingworth,Killingworth,Middlesex County,71,60,7,11
+ct_litchfield,Litchfield,Litchfield County,87,55,7,4
+ct_lyme,Lyme,New London County,45,29,7,6
+ct_manchester,Manchester,Hartford County,0,0,0,0
+ct_marlborough,Marlborough,Hartford County,146,92,6,9
+ct_meriden,Meriden,New Haven County,160,94,5,3
+ct_monroe,Monroe,Fairfield County,128,75,6,2
+ct_montville,Montville,New London County,210,107,7,4
+ct_morris,Morris,Litchfield County,214,48,6,6
+ct_naugatuck,Naugatuck,New Haven County,9,9,0,0
+ct_new_britain,New Britain,Hartford County,88,48,4,7
+ct_new_canaan,New Canaan,Fairfield County,77,71,6,9
+ct_new_fairfield,New Fairfield,Fairfield County,0,0,0,1
+ct_new_haven,New Haven,New Haven County,0,0,0,1
+ct_new_london,New London,New London County,2,2,0,0
+ct_new_milford,New Milford,Litchfield County,113,76,6,2
+ct_norfolk,Norfolk,Litchfield County,50,29,6,5
+ct_north_canaan,North Canaan,Litchfield County,66,28,7,3
+ct_north_haven,North Haven,New Haven County,85,39,7,14
+ct_plainfield,Plainfield,Windham County,65,46,8,15
+ct_plymouth,Plymouth,Litchfield County,87,22,4,0
+ct_portland,Portland,Middlesex County,94,70,6,2
+ct_prospect,Prospect,New Haven County,53,17,5,3
+ct_putnam,Putnam,Windham County,81,15,7,4
+ct_redding,Redding,Fairfield County,76,66,8,4
+ct_ridgefield,Ridgefield,Fairfield County,78,30,4,44
+ct_salisbury,Salisbury,Litchfield County,59,40,7,2
+ct_scotland,Scotland,Windham County,73,46,8,7
+ct_seymour,Seymour,New Haven County,105,60,8,2
+ct_shelton,Shelton,Fairfield County,70,30,5,1
+ct_sherman,Sherman,Fairfield County,120,48,8,19
+ct_somers,Somers,Tolland County,63,38,6,20
+ct_southbury,Southbury,New Haven County,111,37,6,6
+ct_southington,Southington,Hartford County,150,120,6,3
+ct_sprague,Sprague,New London County,87,65,8,1
+ct_stafford,Stafford,Tolland County,159,110,7,8
+ct_stamford,Stamford,Fairfield County,0,0,0,1
+ct_stratford,Stratford,Fairfield County,0,0,0,0
+ct_suffield,Suffield,Hartford County,114,74,8,1
+ct_thomaston,Thomaston,Litchfield County,146,52,7,3
+ct_union,Union,Tolland County,202,31,6,7
+ct_vernon,Vernon,Tolland County,0,0,0,0
+ct_wallingford,Wallingford,New Haven County,205,123,6,4
+ct_waterbury,Waterbury,New Haven County,118,89,4,4
+ct_watertown,Watertown,Litchfield County,66,27,6,43
+ct_west_hartford,West Hartford,Hartford County,134,62,6,2
+ct_weston,Weston,Fairfield County,0,0,0,0
+ct_westport,Westport,Fairfield County,0,0,0,0
+ct_winchester,Winchester,Litchfield County,129,66,10,8
+ct_windsor_locks,Windsor Locks,Hartford County,85,46,7,5
+ct_woodbury,Woodbury,Litchfield County,128,40,7,11

@@ -26,6 +26,7 @@ from src.discover import (
     select_contact_child_links,
     select_high_value_links,
 )
+from src.granicus import run_granicus_strategy_for_municipality
 from src.http_client import FetchResult, candidate_sitemap_urls, create_session, fetch_url
 from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace, safe_phone_str
 from src.parsers import (
@@ -81,6 +82,7 @@ DIRECTORY_CANDIDATE_PAGE_TYPES = {
     "department_page",
     "official_page",
 }
+GRANICUS_VENDOR_NAME = "granicus"
 
 
 def extract_title(html: str) -> str | None:
@@ -283,25 +285,16 @@ def classify_crawl_diagnostic(
     return "ok"
 
 
-def process_text_extractions(
+def persist_contact_rows(
     conn,
     municipality_id: str,
     source_url: str,
-    text: str,
-    page_type: str | None = None,
-) -> tuple[int, int]:
-    contact_count = 0
-    location_count = 0
-    seen_locations: set[str] = set()
-    extracted_locations = extract_locations(text, source_url)
-    fallback_address = None
-    fallback_hours = None
-    if extracted_locations:
-        fallback_address = extracted_locations[0].get("address")
-        fallback_hours = extracted_locations[0].get("hours")
-
+    contacts: list[dict[str, str | float | None]],
+    fallback_address: str | None = None,
+    fallback_hours: str | None = None,
+) -> int:
     merged_contacts: dict[tuple[str, ...], dict[str, str | float | None]] = {}
-    for contact in extract_contacts(text, source_url, page_type=page_type):
+    for contact in contacts:
         email = str(contact.get("email") or "").strip().lower()
         phone = safe_phone_str(contact.get("phone"))
         phone_ext = safe_phone_str(contact.get("phone_ext"))
@@ -325,20 +318,20 @@ def process_text_extractions(
             "address": address,
             "hours": hours,
             "source_context": source_context or None,
-            "source_url": source_url,
+            "source_url": str(contact.get("source_url") or source_url),
             "confidence": float(contact.get("confidence") or 0.45),
         }
         merge_key = build_contact_merge_key(merged_row, source_url)
         prior = merged_contacts.get(merge_key)
         merged_contacts[merge_key] = merge_contact_rows(prior, merged_row) if prior else merged_row
 
+    persisted_count = 0
     for merged in merged_contacts.values():
         effective_confidence = min(
             0.995,
             float(merged.get("confidence") or 0.45) + (contact_row_richness(merged) * 0.01),
         )
         contact_id = build_contact_id(municipality_id, merged, source_url)
-
         db.upsert_contact(
             conn,
             {
@@ -358,7 +351,36 @@ def process_text_extractions(
                 "confidence": round(effective_confidence, 3),
             },
         )
-        contact_count += 1
+        persisted_count += 1
+    return persisted_count
+
+
+def process_text_extractions(
+    conn,
+    municipality_id: str,
+    source_url: str,
+    text: str,
+    page_type: str | None = None,
+) -> tuple[int, int]:
+    contact_count = 0
+    location_count = 0
+    seen_locations: set[str] = set()
+    extracted_locations = extract_locations(text, source_url)
+    fallback_address = None
+    fallback_hours = None
+    if extracted_locations:
+        fallback_address = extracted_locations[0].get("address")
+        fallback_hours = extracted_locations[0].get("hours")
+
+    extracted_contacts = extract_contacts(text, source_url, page_type=page_type)
+    contact_count += persist_contact_rows(
+        conn=conn,
+        municipality_id=municipality_id,
+        source_url=source_url,
+        contacts=extracted_contacts,
+        fallback_address=fallback_address,
+        fallback_hours=fallback_hours,
+    )
 
     for location in extracted_locations:
         dedupe_address, dedupe_hours = location_dedupe_key(location.get("address"), location.get("hours"))
@@ -417,6 +439,12 @@ def crawl_single_municipality(
         "contact_rows_extracted": 0,
         "detected_block_signal": 0,
         "detected_js_shell_signal": 0,
+        "granicus_attempted": 0,
+        "granicus_candidates_attempted": 0,
+        "granicus_blocked_candidate_count": 0,
+        "granicus_directory_match_count": 0,
+        "granicus_contacts_extracted": 0,
+        "granicus_fallback_to_generic": 0,
         "diagnostic_class": "ok",
     }
 
@@ -508,8 +536,15 @@ def crawl_single_municipality(
         page_type: str,
         discovered_from: str,
         referer: str | None = None,
+        request_headers: dict[str, str] | None = None,
     ) -> tuple[bool, str | None, str | None, str | None, FetchResult]:
-        result = fetch_url(url, session=session, timeout=timeout, referer=referer)
+        result = fetch_url(
+            url,
+            session=session,
+            timeout=timeout,
+            referer=referer,
+            request_headers=request_headers,
+        )
         final_url = result.final_url or url
 
         if not result.ok:
@@ -706,25 +741,112 @@ def crawl_single_municipality(
                     sitemap_text, encoding="utf-8", errors="ignore"
                 )
 
+    platform_hint = str(municipality.get("platform") or "").strip().lower()
+    granicus_vendor_detected = GRANICUS_VENDOR_NAME in {vendor.lower() for vendor in vendor_best}
+    should_try_granicus = platform_hint == GRANICUS_VENDOR_NAME or granicus_vendor_detected
+    skip_generic_candidate_crawl = False
+    granicus_result: dict[str, object] | None = None
+    diagnostics["extracted_link_count"] = len(discovered_links)
+    diagnostics["candidate_service_link_count"] = 0
+    diagnostics["candidate_directory_link_count"] = 0
+
+    if should_try_granicus and entry_url:
+        diagnostics["granicus_attempted"] = 1
+        granicus_result = run_granicus_strategy_for_municipality(
+            municipality_homepage=entry_url,
+            timeout=timeout,
+            session=session,
+        )
+        attempted_rows = list(granicus_result.get("attempted_rows") or [])
+        for row in attempted_rows:
+            final_url = str(row.get("final_url") or "")
+            if not final_url:
+                continue
+            status_code = _coerce_int(row.get("status_code")) or None
+            if status_code is None or status_code < 200 or status_code >= 400:
+                continue
+            if final_url in seen_fetched_urls:
+                continue
+            seen_fetched_urls.add(final_url)
+            page_type = "directory_page" if bool(row.get("directory_match")) else classify_page_type(final_url, "")
+            page_id = make_id("page", municipality_id, final_url)
+            db.upsert_page(
+                conn,
+                {
+                    "page_id": page_id,
+                    "municipality_id": municipality_id,
+                    "url": final_url,
+                    "page_type": page_type,
+                    "title": str(row.get("page_title") or ""),
+                    "discovered_from": f"granicus:{row.get('source_kind') or 'candidate'}",
+                },
+            )
+            stats["fetched_pages"] += 1
+
+        granicus_contacts = list(granicus_result.get("contacts") or [])
+        stats["contacts"] += persist_contact_rows(
+            conn=conn,
+            municipality_id=municipality_id,
+            source_url=entry_url,
+            contacts=granicus_contacts,
+        )
+
+        diagnostics["granicus_candidates_attempted"] = _coerce_int(granicus_result.get("attempted_count"))
+        diagnostics["granicus_blocked_candidate_count"] = len(list(granicus_result.get("blocked_urls") or []))
+        diagnostics["granicus_directory_match_count"] = len(list(granicus_result.get("matched_directory_urls") or []))
+        diagnostics["granicus_contacts_extracted"] = _coerce_int(granicus_result.get("contacts_total"))
+        skip_generic_candidate_crawl = _coerce_int(granicus_result.get("contacts_total")) > 0
+        diagnostics["granicus_fallback_to_generic"] = 0 if skip_generic_candidate_crawl else 1
+        granicus_signal_payload = {
+            "municipality_id": municipality_id,
+            "seed_url": entry_url,
+            "attempted_count": diagnostics["granicus_candidates_attempted"],
+            "candidate_urls_attempted": granicus_result.get("candidate_urls_attempted") or [],
+            "blocked_urls": granicus_result.get("blocked_urls") or [],
+            "matched_directory_urls": granicus_result.get("matched_directory_urls") or [],
+            "contacts_by_url": granicus_result.get("contacts_by_url") or [],
+            "contacts_total": diagnostics["granicus_contacts_extracted"],
+            "extraction_source_counts": granicus_result.get("extraction_source_counts") or {},
+            "fallback_to_generic": diagnostics["granicus_fallback_to_generic"],
+        }
+        upsert_signal(
+            conn,
+            municipality_id,
+            "granicus_diagnostics",
+            json.dumps(granicus_signal_payload, sort_keys=True),
+            1.0,
+            entry_url,
+        )
+        granicus_outcome = "contacts_found" if skip_generic_candidate_crawl else "no_contacts"
+        if diagnostics["granicus_blocked_candidate_count"] == diagnostics["granicus_candidates_attempted"]:
+            granicus_outcome = "blocked"
+        upsert_signal(conn, municipality_id, "granicus_strategy", granicus_outcome, 0.95, entry_url)
+        register_vendor_signal("Granicus", 0.96 if platform_hint == GRANICUS_VENDOR_NAME else 0.82, entry_url)
+
     high_value_links: list[dict[str, str | float]] = []
     fallback_triggered = False
     fallback_logged = False
 
-    internal_discovered_links = [
-        link
-        for link in discovered_links
-        if is_internal_link(str(link.get("url") or ""), municipality_domain)
-    ]
-    external_discovered_links = [
-        link
-        for link in discovered_links
-        if not is_internal_link(str(link.get("url") or ""), municipality_domain)
-    ]
-    seed_internal_links = [
-        link
-        for link in internal_discovered_links
-        if str(link.get("source_url") or "") == (primary_seed_url or "")
-    ]
+    if skip_generic_candidate_crawl:
+        internal_discovered_links: list[dict[str, str]] = []
+        external_discovered_links: list[dict[str, str]] = []
+        seed_internal_links: list[dict[str, str]] = []
+    else:
+        internal_discovered_links = [
+            link
+            for link in discovered_links
+            if is_internal_link(str(link.get("url") or ""), municipality_domain)
+        ]
+        external_discovered_links = [
+            link
+            for link in discovered_links
+            if not is_internal_link(str(link.get("url") or ""), municipality_domain)
+        ]
+        seed_internal_links = [
+            link
+            for link in internal_discovered_links
+            if str(link.get("source_url") or "") == (primary_seed_url or "")
+        ]
 
     target_min_candidates = min(max_candidate_pages, 10)
     if max_candidate_pages >= 5:
@@ -752,7 +874,7 @@ def crawl_single_municipality(
         limit=max_candidate_pages,
     )
 
-    if len(high_value_links) < 5 and max_candidate_pages >= 5:
+    if not skip_generic_candidate_crawl and len(high_value_links) < 5 and max_candidate_pages >= 5:
         fallback_triggered = True
         relaxed_links = select_high_value_links(
             internal_discovered_links,
@@ -762,13 +884,13 @@ def crawl_single_municipality(
         )
         high_value_links = merge_candidate_links(high_value_links, relaxed_links, max_candidate_pages)
 
-    if len(high_value_links) < target_min_candidates:
+    if not skip_generic_candidate_crawl and len(high_value_links) < target_min_candidates:
         fallback_triggered = True
         seed_links = seed_internal_links or internal_discovered_links
         unscored_links = build_unscored_internal_candidates(seed_links, limit=max(max_candidate_pages, 30))
         high_value_links = merge_candidate_links(high_value_links, unscored_links, max_candidate_pages)
 
-    if fallback_triggered:
+    if fallback_triggered and not skip_generic_candidate_crawl:
         print(f"Fallback triggered for {municipality_id}")
         fallback_logged = True
 

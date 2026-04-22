@@ -1,0 +1,84 @@
+municipality_id,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class
+ct_ansonia,batch_non_civicplus_baseline,https://www.cityofansonia.com/,https://www.cityofansonia.com/,0,200,0,text/html,"Home - City of Ansonia, Connecticut",73336,34,1,1,75,1,1,ok
+ct_avon,batch_non_civicplus_baseline,https://www.avonct.gov/,https://www.avonct.gov/,0,200,0,text/html,"Avon, CT",113841,1046,50,75,121,1,1,ok
+ct_barkhamsted,batch_non_civicplus_baseline,https://www.barkhamsted.us/,https://www.barkhamsted.us/,0,200,0,text/html,"Welcome to Barkhamsted, CT",72512,129,26,21,119,0,1,ok
+ct_berlin,batch_non_civicplus_baseline,https://www.berlinct.gov/,https://www.berlinct.gov/,0,200,0,text/html,"Home / Berlin, CT",74749,4230,50,73,287,0,1,ok
+ct_bethany,batch_non_civicplus_baseline,https://bethany-ct.com/,https://bethanyct.gov/,0,200,1,text/html,Town of Bethany,47904,43,8,0,49,0,1,ok
+ct_bethel,batch_non_civicplus_baseline,https://bethel-ct.gov/,https://bethel-ct.gov/,0,200,0,text/html,"Bethel, CT",93059,3915,50,41,130,1,1,ok
+ct_bethlehem,batch_non_civicplus_baseline,https://bethlehemct.org/,https://bethlehemct.org/,0,200,0,text/html,Town of Bethlehem Connecticut,38683,1706,15,14,41,1,1,ok
+ct_bloomfield,batch_non_civicplus_baseline,https://www.bloomfieldct.gov/,https://www.bloomfieldct.gov/,0,200,0,text/html,"Bloomfield, CT | Official Website",135339,1321,50,9,232,0,1,ok
+ct_bolton,batch_non_civicplus_baseline,https://www.boltonct.gov/,https://www.boltonct.gov/,0,200,0,text/html,"Bolton, Connecticut",155215,1154,50,58,93,0,1,ok
+ct_bridgeport,batch_non_civicplus_baseline,https://www.bridgeportct.gov/,https://www.bridgeportct.gov/,0,200,0,text/html,Homepage | City of Bridgeport,37467,1667,50,20,61,0,1,ok
+ct_canaan,batch_non_civicplus_baseline,https://www.canaanfallsvillage.org/,https://www.canaanfallsvillage.org/,0,200,0,text/html,"Welcome to Falls Village / Town of Canaan, CT!",64342,120,25,19,171,0,1,ok
+ct_canton,batch_non_civicplus_baseline,https://www.townofcantonct.org/,https://www.townofcantonct.org/,0,200,0,text/html,"Town of Canton, CT",450593,43,6,5,134,1,1,ok
+ct_chaplin,batch_non_civicplus_baseline,https://www.chaplinct.org/,https://www.chaplinct.org/,0,200,0,text/html,"Town of Chaplin, Connecticut",38948,144,35,34,153,1,1,ok
+ct_colebrook,batch_non_civicplus_baseline,https://www.townofcolebrook.org/,https://www.townofcolebrook.org/,0,200,0,text/html,"Town of Colebrook, Connecticut",68381,198,22,21,105,0,1,ok
+ct_cornwall,batch_non_civicplus_baseline,https://cornwallct.org/,https://cornwallct.org/,0,200,0,text/html,Cornwall CT - Greenest Town in Connecticut,1081383,5638,50,16,402,0,1,ok
+ct_derby,batch_non_civicplus_baseline,https://www.derbyct.gov/,https://www.derbyct.gov/,0,200,0,text/html,"City of Derby, ConnecticutHome",55178,15,0,0,1,0,1,ok
+ct_durham,batch_non_civicplus_baseline,https://www.townofdurhamct.org/,https://www.townofdurhamct.org/,0,200,0,text/html,"Welcome to Durham, CT!",102616,158,30,25,149,0,1,ok
+ct_east_granby,batch_non_civicplus_baseline,https://eastgranbyct.org/,https://eastgranbyct.org/,0,200,0,text/html,"Town of East Granby, CT – Incorporated in 1858, Town of East Granby, Connecticut",164234,317,32,27,204,1,1,ok
+ct_east_haddam,batch_non_civicplus_baseline,https://www.easthaddam.org/,https://www.easthaddam.org/,0,200,0,text/html,"Welcome to the Official Website of the Town of East Haddam, Connecticut - home",88679,3286,50,39,183,0,1,ok
+ct_east_lyme,batch_non_civicplus_baseline,https://eltownhall.com/,https://eltownhall.com/,0,200,0,text/html,,26544,10,0,0,0,0,1,probable_js_shell
+ct_ellington,batch_non_civicplus_baseline,https://www.ellington-ct.gov/,https://www.ellington-ct.gov/,0,200,0,text/html,Home - Town of Ellington,131383,1099,50,75,60,1,1,ok
+ct_fairfield,batch_non_civicplus_baseline,https://www.fairfieldct.org/,https://fairfieldct.gov/,0,200,1,text/html,"Home - Town of Fairfield, Connecticut",77286,242,39,4,158,1,1,ok
+ct_farmington,batch_non_civicplus_baseline,https://www.farmington-ct.org/,https://www.farmington-ct.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_glastonbury,batch_non_civicplus_baseline,https://www.glastonburyct.gov/,https://www.glastonburyct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_griswold,batch_non_civicplus_baseline,https://www.griswold-ct.org/,https://www.griswold-ct.org/,0,200,0,text/html,"Welcome to Griswold, CT",91863,270,33,28,142,1,1,ok
+ct_groton,batch_non_civicplus_baseline,https://www.groton-ct.gov/,https://www.groton-ct.gov/,0,200,0,text/html,"Welcome to the Town of Groton, Connecticut",108915,382,50,75,68,0,1,ok
+ct_guilford,batch_non_civicplus_baseline,https://www.guilfordct.gov/,https://www.guilfordct.gov/,0,200,0,text/html,Guilford,95560,318,50,73,142,1,1,ok
+ct_hampton,batch_non_civicplus_baseline,https://www.hamptonct.org/,https://www.hamptonct.org/,0,200,0,text/html,Town of Hampton Connecticut,24204,71,8,8,43,1,1,ok
+ct_hartford,batch_non_civicplus_baseline,https://www.hartfordct.gov/Home,https://www.hartfordct.gov/Home,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_hartland,batch_non_civicplus_baseline,https://www.hartlandct.org/,https://www.hartlandct.org/,0,200,0,text/html,"Town of Hartland, CT - Home Page",81327,85,18,17,100,1,1,ok
+ct_hebron,batch_non_civicplus_baseline,https://www.hebronct.com/,https://www.hebronct.com/,0,200,0,text/html,Welcome to Hebron - Town of Hebron,80443,167,50,68,73,1,1,ok
+ct_killingly,batch_non_civicplus_baseline,https://www.killinglyct.gov/,https://www.killinglyct.gov/,0,200,0,text/html,"Killingly, CT",112910,355,50,75,41,1,1,ok
+ct_killingworth,batch_non_civicplus_baseline,https://townofkillingworth.com/,https://townofkillingworth.com/,0,200,0,text/html,Official Website of Town of Killingworth,171178,175,22,19,131,0,1,ok
+ct_litchfield,batch_non_civicplus_baseline,https://www.townoflitchfieldct.gov/,https://www.townoflitchfieldct.gov/,0,200,0,text/html,"Litchfield, CT | Welcome to our town!",101634,207,42,28,89,0,1,ok
+ct_lyme,batch_non_civicplus_baseline,https://townlyme.org/,https://townlyme.org/,0,200,0,text/html,Town of Lyme | Founded 1665,294894,152,15,11,45,0,1,ok
+ct_manchester,batch_non_civicplus_baseline,https://www.manchesterct.gov/Home,https://www.manchesterct.gov/Home,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_marlborough,batch_non_civicplus_baseline,https://www.marlboroughct.net/,https://www.marlboroughct.net/,0,200,0,text/html,"Marlborough, CT",60128,187,24,20,173,1,1,ok
+ct_meriden,batch_non_civicplus_baseline,https://www.meridenct.gov/,https://www.meridenct.gov/,0,200,0,text/html,"Welcome to the City of Meriden, Connecticut",45251,1344,50,75,170,1,1,ok
+ct_monroe,batch_non_civicplus_baseline,https://www.monroect.gov/,https://www.monroect.gov/,0,200,0,text/html,Town of Monroe - Home,180302,1272,50,42,160,1,1,ok
+ct_montville,batch_non_civicplus_baseline,https://www.townofmontville.org/,https://www.townofmontville.org/,0,200,0,text/html,"Town of Montville, CT",28777,631,50,33,211,1,1,ok
+ct_morris,batch_non_civicplus_baseline,https://www.morrisct.gov/,https://www.morrisct.gov/,0,200,0,text/html,"Welcome to Morris, CT!",106873,184,25,21,216,0,1,ok
+ct_naugatuck,batch_non_civicplus_baseline,http://www.naugatuck-ct.gov/,https://www.naugatuck-ct.gov/,0,200,1,text/html,"Naugatuck, CT | View Our Borough's News, Resources, & Things To Do - Naugatuck, CT",47968,23,0,0,22,0,1,ok
+ct_new_britain,batch_non_civicplus_baseline,https://www.newbritainct.gov/,https://www.newbritainct.gov/,0,200,0,text/html,Home - City of New Britain,119417,1615,50,73,88,1,1,ok
+ct_new_canaan,batch_non_civicplus_baseline,https://www.newcanaan.info/,https://www.newcanaan.info/,0,200,0,text/html,Welcome to New Canaan CT,76270,286,50,58,82,1,1,ok
+ct_new_fairfield,batch_non_civicplus_baseline,https://www.newfairfield.org/,https://www.newfairfield.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_new_haven,batch_non_civicplus_baseline,https://www.newhavenct.gov/,https://www.newhavenct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_new_london,batch_non_civicplus_baseline,https://newlondonct.gov/,https://newlondonct.gov/,0,200,0,text/html,Welcome to New London,72311,20,2,2,4,0,1,ok
+ct_new_milford,batch_non_civicplus_baseline,https://www.newmilford.org/,https://www.newmilford.org/,0,200,0,text/html,"Home : Town of New Milford, CT",35066,59,5,2,206,0,1,ok
+ct_norfolk,batch_non_civicplus_baseline,https://norfolkct.org/,https://norfolkct.org/,0,200,0,text/html,"Home - Norfolk, Connecticut",75561,145,18,11,95,0,1,ok
+ct_north_canaan,batch_non_civicplus_baseline,https://www.northcanaan.org/,https://www.northcanaan.org/,0,200,0,text/html,"Welcome to North Canaan, CT!",49209,99,21,20,66,0,1,ok
+ct_north_haven,batch_non_civicplus_baseline,https://www.northhaven-ct.gov/,https://www.northhaven-ct.gov/,0,200,0,text/html,"Town of North Haven, CT 06473",86868,292,35,26,111,1,1,ok
+ct_plainfield,batch_non_civicplus_baseline,https://www.plainfieldct.org/,https://www.plainfieldct.org/,0,200,0,text/html,"Town of Plainfield, Connecticut",86560,279,50,54,79,0,1,ok
+ct_plymouth,batch_non_civicplus_baseline,https://www.plymouthct.gov/,https://www.plymouthct.gov/,0,200,0,text/html,"Official Website for the Town of Plymouth, Connecticut - Home",113902,915,4,1,104,1,1,ok
+ct_portland,batch_non_civicplus_baseline,https://www.portlandct.org/,https://www.portlandct.org/,0,200,0,text/html,Official | Town of Portland,886414,49,4,2,113,1,1,ok
+ct_prospect,batch_non_civicplus_baseline,https://townofprospect.gov/,https://townofprospect.gov/,0,200,0,text/html,Home - Town of Prospect,117619,159,24,16,60,1,1,ok
+ct_putnam,batch_non_civicplus_baseline,https://www.putnamct.us/,https://www.putnamct.us/,0,200,0,text/html,Home - Town of Putnam,69184,548,50,67,81,1,1,ok
+ct_redding,batch_non_civicplus_baseline,https://reddingct.gov/,https://reddingct.gov/,0,200,0,text/html,"Town of Redding, Connecticut Official Website - Homepage",226972,369,33,27,93,0,1,ok
+ct_ridgefield,batch_non_civicplus_baseline,https://www.ridgefieldct.gov/,https://www.ridgefieldct.gov/,0,200,0,text/html,Ridgefield CT,109264,397,50,75,78,1,1,ok
+ct_salisbury,batch_non_civicplus_baseline,https://www.salisburyct.us/,https://www.salisburyct.us/,0,200,0,text/html,,238347,111,31,26,101,0,1,ok
+ct_scotland,batch_non_civicplus_baseline,https://www.scotlandct.org/,https://www.scotlandct.org/,0,200,0,text/html,"Welcome to Scotland, CT!",77524,132,23,20,85,0,1,ok
+ct_seymour,batch_non_civicplus_baseline,https://www.seymourct.org/,https://www.seymourct.org/,0,200,0,text/html,"The Official Website of the Town of Seymour, CT - home",69354,3106,5,1,232,0,1,ok
+ct_shelton,batch_non_civicplus_baseline,https://cityofshelton.org/,https://cityofshelton.org/,0,200,0,text/html,Shelton - Home,214494,406,49,45,70,1,1,ok
+ct_sherman,batch_non_civicplus_baseline,https://www.shermanct.gov/,https://www.shermanct.gov/,0,200,0,text/html,"Welcome to Sherman, CT!",195001,269,41,31,125,0,1,ok
+ct_somers,batch_non_civicplus_baseline,https://www.somersct.gov/,https://www.somersct.gov/,0,200,0,text/html,"Town of Somers, CT",90483,278,50,57,98,1,1,ok
+ct_southbury,batch_non_civicplus_baseline,https://www.southbury-ct.org/,https://www.southbury-ct.org/,0,200,0,text/html,"Home - Southbury, CT",376573,1183,47,6,116,0,1,ok
+ct_southington,batch_non_civicplus_baseline,https://www.southington.org/,https://www.southingtonct.gov/,0,200,1,text/html,"Southington, CT",93116,192,39,0,156,1,1,ok
+ct_sprague,batch_non_civicplus_baseline,https://www.ctsprague.org/,https://www.ctsprague.org/,0,200,0,text/html,"Town of Sprague, CT",43393,95,6,4,96,1,1,ok
+ct_stafford,batch_non_civicplus_baseline,https://www.staffordct.org/,https://www.staffordct.org/,0,200,0,text/html,"Town of Stafford, CT",115619,321,50,75,229,1,1,ok
+ct_stamford,batch_non_civicplus_baseline,https://www.stamfordct.gov/,https://www.stamfordct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_stratford,batch_non_civicplus_baseline,https://www.townofstratford.com/,https://www.townofstratford.com/,0,200,0,text/html,Client Challenge,3036,0,0,0,0,0,1,probable_js_shell
+ct_suffield,batch_non_civicplus_baseline,https://www.suffieldct.gov/,https://www.suffieldct.gov/,0,200,0,text/html,Home - Town of Suffield,83250,645,45,42,137,1,1,ok
+ct_thomaston,batch_non_civicplus_baseline,https://www.thomastonct.gov/,https://www.thomastonct.gov/,0,200,0,text/html,"Welcome to Thomaston, CT's Official Municipal Website",140863,242,45,41,149,0,1,ok
+ct_union,batch_non_civicplus_baseline,https://www.unionconnecticut.org/,https://www.unionconnecticut.org/,0,200,0,text/html,"Town of Union, Connecticut | Established 1734",186259,220,41,31,229,0,1,ok
+ct_vernon,batch_non_civicplus_baseline,https://www.vernon-ct.gov/,https://www.vernon-ct.gov/,0,200,0,text/html,Client Challenge,3036,0,0,0,0,0,1,probable_js_shell
+ct_wallingford,batch_non_civicplus_baseline,https://www.wallingfordct.gov/,https://www.wallingfordct.gov/,0,200,0,text/html,"The Town of Wallingford, Connecticut",27693,560,50,14,208,0,1,ok
+ct_waterbury,batch_non_civicplus_baseline,https://www.waterburyct.org/,https://www.waterburyct.org/,0,200,0,text/html,"Welcome to the Brass City! - City of Waterbury, CT",62831,61,9,8,236,0,1,ok
+ct_watertown,batch_non_civicplus_baseline,https://www.watertownct.org/,https://www.watertownct.org/,0,200,0,text/html,"Watertown, CT",98825,363,50,74,67,1,1,ok
+ct_west_hartford,batch_non_civicplus_baseline,https://www.westhartfordct.gov/,https://www.westhartfordct.gov/,0,200,0,text/html,Home - Town of West Hartford,231422,2267,50,75,140,1,1,ok
+ct_weston,batch_non_civicplus_baseline,https://www.westonct.gov/,https://www.westonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_westport,batch_non_civicplus_baseline,https://www.westportct.gov/,https://www.westportct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_winchester,batch_non_civicplus_baseline,https://www.townofwinchester.org/,https://www.townofwinchester.org/,0,200,0,text/html,"Winchester, CT | Welcome to our town!",161275,162,38,34,130,0,1,ok
+ct_windsor_locks,batch_non_civicplus_baseline,https://windsorlocksct.org/,https://windsorlocksct.org/,0,200,0,text/html,"Town of Windsor Locks, Connecticut",456439,78,6,5,85,1,1,ok
+ct_woodbury,batch_non_civicplus_baseline,https://woodburyct.org/,https://woodburyct.org/,0,200,0,text/html,"Woodbury, CT",56521,3523,31,26,150,1,1,ok

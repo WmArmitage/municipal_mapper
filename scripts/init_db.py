@@ -23,15 +23,25 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Delete and recreate database/master.sqlite before loading seed data.",
     )
+    parser.add_argument(
+        "--db",
+        default=str(ROOT / "database" / "master.sqlite"),
+        help="Target SQLite DB path (default: database/master.sqlite).",
+    )
+    parser.add_argument(
+        "--seed-csv",
+        default=str(ROOT / "config" / "municipalities_seed.csv"),
+        help="Municipality seed CSV path.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     ensure_directories()
-    db_path = ROOT / "database" / "master.sqlite"
+    db_path = Path(args.db)
     schema_path = ROOT / "database" / "schema.sql"
-    seed_path = ROOT / "config" / "municipalities_seed.csv"
+    seed_path = Path(args.seed_csv)
 
     if args.reset and db_path.exists():
         db_path.unlink()

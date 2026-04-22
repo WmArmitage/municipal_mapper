@@ -26,6 +26,14 @@ class VendorDetectionTests(unittest.TestCase):
         self.assertEqual(category, "jobs")
         self.assertGreater(confidence, 0.0)
 
+    def test_detect_granicus_vendor_by_text(self) -> None:
+        vendor, confidence = detect_vendor(
+            "https://www.example.gov/directory.aspx",
+            "Powered by Granicus CivicEngage",
+        )
+        self.assertEqual(vendor, "Granicus")
+        self.assertGreater(confidence, 0.7)
+
 
 if __name__ == "__main__":
     unittest.main()

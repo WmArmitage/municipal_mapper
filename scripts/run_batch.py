@@ -60,6 +60,7 @@ def main() -> None:
     args = parse_args()
     conn = db.get_connection(args.db)
     try:
+        platform_map = load_seed_platform_map(args.seed_csv)
         municipalities = db.list_municipalities(conn)
         if args.batch_id:
             selected_rows = load_selected_manifest_rows(
@@ -68,7 +69,6 @@ def main() -> None:
                 status=args.manifest_status,
             )
             if args.platform:
-                platform_map = load_seed_platform_map(args.seed_csv)
                 selected_rows, excluded_by_platform = filter_rows_by_platform(
                     selected_rows,
                     platform_map,
@@ -120,14 +120,16 @@ def main() -> None:
 
         for municipality in municipalities:
             municipality_id = municipality["municipality_id"]
-            in_scope_municipalities.append(municipality)
+            crawl_municipality = dict(municipality)
+            crawl_municipality["platform"] = platform_map.get(municipality_id, "")
+            in_scope_municipalities.append(crawl_municipality)
             if not args.force and db.municipality_has_pages(conn, municipality_id):
                 skipped += 1
                 continue
 
             summary = crawl_single_municipality(
                 conn=conn,
-                municipality=municipality,
+                municipality=crawl_municipality,
                 raw_dir=ROOT / "data" / "raw",
                 max_candidate_pages=args.max_candidate_pages,
             )

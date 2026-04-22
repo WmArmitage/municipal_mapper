@@ -1,0 +1,84 @@
+municipality_id,town_name,vendor_platform,diagnostic_class,blocked_reason,raw_contacts,clean_contacts,role_winners,missing_group_count,coverage_interpretation
+ct_ansonia,Ansonia,Catalisgov,ok,,75,55,6,2,normal_coverage_gap
+ct_avon,Avon,Revize,ok,,120,55,2,5,normal_coverage_gap; suspicious_winner
+ct_barkhamsted,Barkhamsted,CivicLift,ok,,118,97,7,0,
+ct_berlin,Berlin,CoreBT,ok,,248,88,6,1,suspicious_winner
+ct_bethany,Bethany,Catalisgov,ok,,48,40,8,0,
+ct_bethel,Bethel,Catalisgov,ok,,95,64,8,0,suspicious_winner
+ct_bethlehem,Bethlehem,Catalisgov,ok,,38,24,6,1,suspicious_winner
+ct_bloomfield,Bloomfield,(blank),ok,,185,108,6,1,
+ct_bolton,Bolton,Aptuitiv,ok,,92,27,6,2,normal_coverage_gap
+ct_bridgeport,Bridgeport,ifsight,ok,,58,52,5,2,normal_coverage_gap; suspicious_winner
+ct_canaan,Canaan,CivicLift,ok,,121,67,7,0,
+ct_canton,Canton,Catalisgov,ok,,107,80,8,0,
+ct_chaplin,Chaplin,Quasar,ok,,117,52,7,0,suspicious_winner
+ct_colebrook,Colebrook,Wordpress,ok,,54,33,7,0,
+ct_cornwall,Cornwall,(blank),ok,,333,54,6,1,
+ct_derby,Derby,EvoGov,ok,,1,1,0,7,normal_coverage_gap
+ct_durham,Durham,CivicLift,ok,,145,61,8,0,suspicious_winner
+ct_east_granby,East Granby,AWR Web Design,ok,,204,52,7,0,
+ct_east_haddam,East Haddam,EvoGov,ok,,139,90,8,0,suspicious_winner
+ct_east_lyme,East Lyme,(blank),probable_js_shell,,0,0,0,7,crawl_diagnostic_nonblocked_failure
+ct_ellington,Ellington,finalsite,ok,,59,23,5,2,normal_coverage_gap
+ct_fairfield,Fairfield,Revize,ok,,140,50,5,2,normal_coverage_gap; suspicious_winner
+ct_farmington,Farmington,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_glastonbury,Glastonbury,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_griswold,Griswold,Revize,ok,,121,65,8,0,suspicious_winner
+ct_groton,Groton,Revize,ok,,43,36,7,1,suspicious_winner
+ct_guilford,Guilford,Revize,ok,,142,83,7,0,suspicious_winner
+ct_hampton,Hampton,Quasar Internet Solutions,ok,,42,24,5,2,normal_coverage_gap; suspicious_winner
+ct_hartford,Hartford,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_hartland,Hartland,AWR Web Design,ok,,100,22,6,1,suspicious_winner
+ct_hebron,Hebron,(blank),ok,,73,17,7,0,suspicious_winner
+ct_killingly,Killingly,Revize,ok,,41,11,4,3,normal_coverage_gap
+ct_killingworth,Killingworth,PurpleDog,ok,,71,60,7,0,suspicious_winner
+ct_litchfield,Litchfield,CivicLift,ok,,87,55,7,0,suspicious_winner
+ct_lyme,Lyme,(blank),ok,,45,29,7,1,suspicious_winner
+ct_manchester,Manchester,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_marlborough,Marlborough,Revize,ok,,146,92,6,1,suspicious_winner
+ct_meriden,Meriden,Web Solutions,ok,,160,94,5,2,normal_coverage_gap
+ct_monroe,Monroe,Catalis,ok,,128,75,6,1,
+ct_montville,Montville,Web Solutions,ok,,210,107,7,0,suspicious_winner
+ct_morris,Morris,CivicLift,ok,,214,48,6,1,
+ct_naugatuck,Naugatuck,Catalis,ok,,9,9,0,7,normal_coverage_gap
+ct_new_britain,New Britain,finalsite,ok,,88,48,4,3,normal_coverage_gap
+ct_new_canaan,New Canaan,Revize,ok,,77,71,6,1,suspicious_winner
+ct_new_fairfield,New Fairfield,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_new_haven,New Haven,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_new_london,New London,Catalis,ok,,2,2,0,7,normal_coverage_gap
+ct_new_milford,New Milford,Catalis,ok,,113,76,6,1,
+ct_norfolk,Norfolk,(blank),ok,,50,29,6,1,suspicious_winner
+ct_north_canaan,North Canaan,CivicLift,ok,,66,28,7,0,
+ct_north_haven,North Haven,Revize,ok,,85,39,7,1,
+ct_plainfield,Plainfield,Revize,ok,,65,46,8,0,suspicious_winner
+ct_plymouth,Plymouth,EvoGov,ok,,87,22,4,3,normal_coverage_gap; suspicious_winner
+ct_portland,Portland,(blank),ok,,94,70,6,1,suspicious_winner
+ct_prospect,Prospect,TownWeb,ok,,53,17,5,2,normal_coverage_gap; suspicious_winner
+ct_putnam,Putnam,finalsite,ok,,81,15,7,1,suspicious_winner
+ct_redding,Redding,(blank),ok,,76,66,8,0,suspicious_winner
+ct_ridgefield,Ridgefield,Revize,ok,,78,30,4,3,normal_coverage_gap; suspicious_winner
+ct_salisbury,Salisbury,Wordpress,ok,,59,40,7,0,suspicious_winner
+ct_scotland,Scotland,CivicLift,ok,,73,46,8,0,suspicious_winner
+ct_seymour,Seymour,EvoGov,ok,,105,60,8,0,suspicious_winner
+ct_shelton,Shelton,Catalis,ok,,70,30,5,2,normal_coverage_gap
+ct_sherman,Sherman,CivicLift,ok,,120,48,8,0,suspicious_winner
+ct_somers,Somers,egovlink,ok,,63,38,6,2,normal_coverage_gap
+ct_southbury,Southbury,Catalis,ok,,111,37,6,1,
+ct_southington,Southington,Revize,ok,,150,120,6,1,suspicious_winner
+ct_sprague,Sprague,Quasar Internet Solutions,ok,,87,65,8,0,suspicious_winner
+ct_stafford,Stafford,Revize,ok,,159,110,7,0,
+ct_stamford,Stamford,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_stratford,Stratford,Apptegy,probable_js_shell,,0,0,0,7,crawl_diagnostic_nonblocked_failure
+ct_suffield,Suffield,finalsite,ok,,114,74,8,0,suspicious_winner
+ct_thomaston,Thomaston,CivicLift,ok,,146,52,7,0,suspicious_winner
+ct_union,Union,(blank),ok,,202,31,6,1,suspicious_winner
+ct_vernon,Vernon,Apptegy,probable_js_shell,,0,0,0,7,crawl_diagnostic_nonblocked_failure
+ct_wallingford,Wallingford,Web Solutions,ok,,205,123,6,1,
+ct_waterbury,Waterbury,Catalis,ok,,118,89,4,3,normal_coverage_gap
+ct_watertown,Watertown,Revize,ok,,66,27,6,1,suspicious_winner
+ct_west_hartford,West Hartford,finalsite,ok,,134,62,6,1,suspicious_winner
+ct_weston,Weston,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_westport,Westport,Granicus,blocked_or_forbidden,http_forbidden,0,0,0,7,blocked_town
+ct_winchester,Winchester,CivicLift,ok,,129,66,10,0,suspicious_winner
+ct_windsor_locks,Windsor Locks,TownWeb,ok,,85,46,7,0,suspicious_winner
+ct_woodbury,Woodbury,Catalis,ok,,128,40,7,1,

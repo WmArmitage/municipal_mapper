@@ -1,0 +1,55 @@
+municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
+ct_ansonia,Ansonia,tax; building,2,executive; assessment; clerk; planning; finance,"executive: Mayor; assessment: Assessor; clerk: Town Clerk; planning: Planner, Land Use; finance: Treasurer"
+ct_avon,Avon,executive; assessment; tax; building; finance,5,clerk; planning,clerk: Town Clerk; planning: Planner
+ct_berlin,Berlin,tax,1,executive; assessment; clerk; building; planning; finance,executive: Town Manager; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Finance Director
+ct_bethlehem,Bethlehem,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_bloomfield,Bloomfield,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_bolton,Bolton,planning; finance,2,executive; assessment; tax; clerk; building,"executive: First Selectman, Town Administrator; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official"
+ct_bridgeport,Bridgeport,building; finance,2,executive; assessment; tax; clerk; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner
+ct_cornwall,Cornwall,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_derby,Derby,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_east_lyme,East Lyme,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_ellington,Ellington,building; finance,2,executive; assessment; tax; clerk; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner
+ct_fairfield,Fairfield,planning; finance,2,executive; assessment; tax; clerk; building,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official
+ct_farmington,Farmington,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_glastonbury,Glastonbury,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_groton,Groton,building,1,executive; assessment; tax; clerk; planning; finance,"executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner; finance: Finance Director, Treasurer"
+ct_hampton,Hampton,executive; planning,2,assessment; tax; clerk; building; finance,assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; finance: Treasurer
+ct_hartford,Hartford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_hartland,Hartland,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_killingly,Killingly,tax; building; finance,3,executive; assessment; clerk; planning,executive: Town Manager; assessment: Assessor; clerk: Town Clerk; planning: Planner
+ct_lyme,Lyme,executive,1,assessment; tax; clerk; building; planning; finance,"assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Finance Director, Treasurer"
+ct_manchester,Manchester,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_marlborough,Marlborough,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_meriden,Meriden,clerk; finance,2,executive; assessment; tax; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner
+ct_monroe,Monroe,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_morris,Morris,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_naugatuck,Naugatuck,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_new_britain,New Britain,building; planning; finance,3,executive; assessment; tax; clerk,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk
+ct_new_canaan,New Canaan,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_new_fairfield,New Fairfield,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_new_haven,New Haven,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_new_london,New London,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_new_milford,New Milford,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Land Use
+ct_norfolk,Norfolk,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_north_haven,North Haven,clerk,1,executive; assessment; tax; building; planning; finance,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner, Land Use; finance: Treasurer"
+ct_plymouth,Plymouth,building; planning; finance,3,executive; assessment; tax; clerk,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk
+ct_portland,Portland,tax,1,executive; assessment; clerk; building; planning; finance,executive: First Selectman; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Finance Director
+ct_prospect,Prospect,planning; finance,2,executive; assessment; tax; clerk; building,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official
+ct_putnam,Putnam,tax,1,executive; assessment; clerk; building; planning; finance,"executive: Mayor, Town Administrator; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Finance Director"
+ct_ridgefield,Ridgefield,executive; building; finance,3,assessment; tax; clerk; planning,assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner
+ct_shelton,Shelton,assessment; finance,2,executive; tax; clerk; building; planning,executive: Mayor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_somers,Somers,tax; finance,2,executive; assessment; clerk; building; planning,"executive: First Selectman; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner, Land Use"
+ct_southbury,Southbury,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_southington,Southington,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_stamford,Stamford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_stratford,Stratford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_union,Union,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_vernon,Vernon,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_wallingford,Wallingford,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_waterbury,Waterbury,tax; planning; finance,3,executive; assessment; clerk; building,executive: Mayor; assessment: Assessor; clerk: Town Clerk; building: Building Official
+ct_watertown,Watertown,building,1,executive; assessment; tax; clerk; planning; finance,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner; finance: Finance Director
+ct_west_hartford,West Hartford,tax,1,executive; assessment; clerk; building; planning; finance,executive: Town Manager; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Finance Director
+ct_weston,Weston,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_westport,Westport,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_woodbury,Woodbury,finance,1,executive; assessment; tax; clerk; building; planning,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner, Land Use"

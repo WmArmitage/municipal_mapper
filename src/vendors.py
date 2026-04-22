@@ -4,6 +4,7 @@ from src.normalize import get_domain
 
 VENDOR_DOMAIN_RULES: dict[str, tuple[str, ...]] = {
     "CivicPlus": ("civicplus.com", "municodeweb.com"),
+    "Granicus": ("granicus.com", "civicengage.com"),
     "AxisGIS": ("axisgis.com",),
     "PropertyRecordCards": ("propertyrecordcards.com", "propertycards.com"),
     "MyTaxBill": ("mytaxbill.org",),
@@ -15,6 +16,7 @@ VENDOR_DOMAIN_RULES: dict[str, tuple[str, ...]] = {
 
 VENDOR_TEXT_RULES: dict[str, tuple[str, ...]] = {
     "CivicPlus": ("powered by civicplus", "civicplus"),
+    "Granicus": ("powered by granicus", "granicus", "civicengage"),
     "AxisGIS": ("axisgis",),
     "PropertyRecordCards": ("propertyrecordcards", "property record cards"),
     "MyTaxBill": ("mytaxbill",),
