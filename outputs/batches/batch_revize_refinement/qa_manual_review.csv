@@ -1,0 +1,15 @@
+municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason,coverage_interpretation
+ct_avon,Avon,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_groton,Groton,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_guilford,Guilford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_killingly,Killingly,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_marlborough,Marlborough,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_new_canaan,New Canaan,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_north_haven,North Haven,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_plainfield,Plainfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_ridgefield,Ridgefield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_southington,Southington,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_stafford,Stafford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_watertown,Watertown,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap

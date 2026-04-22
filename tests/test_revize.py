@@ -219,6 +219,116 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertGreaterEqual(len(list(result.get("matched_urls") or [])), 1)
         self.assertTrue(any(str(row.get("fetch_outcome")) == "ok_detected" for row in list(result.get("attempted_rows") or [])))
 
+    def test_sidebar_staff_h4_span_tel_mailto_extraction(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building Department</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head"><h4>Alex Carter<span>Building Official</span></h4></div>
+                <div class="staff-details">
+                  <a class="staff-link" href="tel:(860)555-3000">Phone</a>
+                  <a class="staff-link" href="mailto:alex.carter@example.gov">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        self.assertGreaterEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(str(row.get("name") or ""), "Alex Carter")
+        self.assertEqual(str(row.get("title") or ""), "Building Official")
+        self.assertEqual(str(row.get("phone") or ""), "8605553000")
+        self.assertEqual(str(row.get("email") or ""), "alex.carter@example.gov")
+        self.assertEqual(str(row.get("department") or ""), "Building")
+        self.assertEqual(str(row.get("revize_source_type") or ""), "sidebar_staff")
+
+    def test_sidebar_staff_vacancy_is_suppressed(self) -> None:
+        html = """
+        <html>
+          <body>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head"><h4>VACANT<span>Building Official</span></h4></div>
+                <div class="staff-details">
+                  <a class="staff-link" href="tel:(860)555-3000">Phone</a>
+                  <a class="staff-link" href="mailto:building@example.gov">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/building/index.php",
+            harvested_links=["https://www.example.gov/departments/building/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        rows = list(result.get("contacts") or [])
+        self.assertFalse(any(str(row.get("name") or "").strip().lower() == "vacant" for row in rows))
+        self.assertGreaterEqual(int(result.get("suppressed_vacancy_rows") or 0), 1)
+
+    def test_department_contact_block_extraction(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building Department</h1>
+            <section>
+              <h3>Contact Info</h3>
+              <p>Phone: (860) 555-4444</p>
+              <p>Email: building@example.gov</p>
+              <p>17 Main St, Avon, CT</p>
+              <p>Hours: Mon-Fri 8:30 AM - 4:30 PM</p>
+            </section>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        dept_rows = [row for row in rows if str(row.get("revize_source_type") or "") == "department_contact_block"]
+        self.assertGreaterEqual(len(dept_rows), 1)
+        dept = dept_rows[0]
+        self.assertEqual(str(dept.get("name") or ""), "")
+        self.assertEqual(str(dept.get("title") or ""), "Department Contact")
+        self.assertEqual(str(dept.get("department") or ""), "Building")
+        self.assertEqual(str(dept.get("email") or ""), "building@example.gov")
+
+    def test_department_inference_from_url_and_title(self) -> None:
+        html = """
+        <html>
+          <head><title>Town of Example | Building Department</title></head>
+          <body>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head"><h4>Jamie Stone<span>Inspector</span></h4></div>
+                <div class="staff-details">
+                  <a class="staff-link" href="mailto:jamie.stone@example.gov">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        self.assertGreaterEqual(len(rows), 1)
+        self.assertEqual(str(rows[0].get("department") or ""), "Building")
+
 
 if __name__ == "__main__":
     unittest.main()

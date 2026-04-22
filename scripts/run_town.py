@@ -954,9 +954,9 @@ def crawl_single_municipality(
                 continue
             seen_fetched_urls.add(final_url)
             extraction_source_type = str(row.get("extraction_source_type") or "unknown")
-            if extraction_source_type in {"table_directory", "department_section"}:
+            if extraction_source_type in {"table_directory", "department_section", "sidebar_staff"}:
                 page_type = "directory_page"
-            elif extraction_source_type in {"profile_block", "single_profile_page"}:
+            elif extraction_source_type in {"profile_block", "single_profile_page", "department_contact_block"}:
                 page_type = "contact_page"
             else:
                 page_type = classify_page_type(final_url, "")
@@ -975,12 +975,13 @@ def crawl_single_municipality(
             stats["fetched_pages"] += 1
 
         revize_contacts = list(revize_result.get("contacts") or [])
-        stats["contacts"] += persist_contact_rows(
+        persisted_revize_contacts = persist_contact_rows(
             conn=conn,
             municipality_id=municipality_id,
             source_url=entry_url,
             contacts=revize_contacts,
         )
+        stats["contacts"] += persisted_revize_contacts
 
         diagnostics["revize_candidates_generated"] = _coerce_int(revize_result.get("candidate_urls_generated_count"))
         diagnostics["revize_candidates_attempted"] = _coerce_int(revize_result.get("candidate_urls_attempted_count"))
@@ -992,10 +993,11 @@ def crawl_single_municipality(
         diagnostics["revize_suspicious_reduction_count"] = sum(
             _coerce_int(value) for value in reduction_counts.values()
         )
-        skip_generic_candidate_crawl = _coerce_int(revize_result.get("contacts_total")) > 0
+        skip_generic_candidate_crawl = _coerce_int(persisted_revize_contacts) > 0
         diagnostics["revize_pass_produced_contacts_before_fallback"] = 1 if skip_generic_candidate_crawl else 0
         diagnostics["revize_fallback_to_generic"] = 0 if skip_generic_candidate_crawl else 1
 
+        source_type_counts = revize_result.get("source_type_counts") or revize_result.get("extraction_source_counts") or {}
         revize_signal_payload = {
             "municipality_id": municipality_id,
             "seed_url": entry_url,
@@ -1008,6 +1010,12 @@ def crawl_single_municipality(
             "contacts_by_url": revize_result.get("contacts_by_url") or [],
             "contacts_total": diagnostics["revize_contacts_extracted"],
             "extraction_source_counts": revize_result.get("extraction_source_counts") or {},
+            "source_type_counts": source_type_counts,
+            "sidebar_staff_blocks_found": _coerce_int(revize_result.get("sidebar_staff_blocks_found")),
+            "sidebar_staff_contacts_extracted": _coerce_int(revize_result.get("sidebar_staff_contacts_extracted")),
+            "department_contact_blocks_found": _coerce_int(revize_result.get("department_contact_blocks_found")),
+            "department_contact_rows_extracted": _coerce_int(revize_result.get("department_contact_rows_extracted")),
+            "suppressed_vacancy_rows": _coerce_int(revize_result.get("suppressed_vacancy_rows")),
             "suspicious_reduction_counts": reduction_counts,
             "outcome_counts": revize_result.get("outcome_counts") or {},
             "revize_pass_produced_contacts_before_fallback": diagnostics[

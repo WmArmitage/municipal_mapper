@@ -1,0 +1,15 @@
+municipality_id,town_name,county,batch_id,priority,status,notes
+ct_avon,Avon,Hartford County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_fairfield,Fairfield,Fairfield County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_griswold,Griswold,New London County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_groton,Groton,New London County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_guilford,Guilford,New Haven County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_killingly,Killingly,Windham County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_marlborough,Marlborough,Hartford County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_new_canaan,New Canaan,Fairfield County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_north_haven,North Haven,New Haven County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_plainfield,Plainfield,Windham County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_ridgefield,Ridgefield,Fairfield County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_southington,Southington,Hartford County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_stafford,Stafford,Tolland County,batch_revize_refinement,1,pending,vendor_target=Revize
+ct_watertown,Watertown,Litchfield County,batch_revize_refinement,1,pending,vendor_target=Revize
