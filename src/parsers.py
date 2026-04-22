@@ -236,6 +236,13 @@ NAME_ARTIFACT_TOKENS = {
     "read more",
     "details",
 }
+NORMALIZE_NAME_REJECTS = {
+    "email",
+    "phone",
+    "contact",
+    "staff directory",
+    "vacant",
+}
 TITLE_NEAR_NAME_HINTS = {
     "assistant",
     "director",
@@ -259,6 +266,12 @@ STAFF_FRIENDLY_PAGE_TYPES = {
     "directory_page",
     "directory_category_page",
     "contact_page",
+}
+
+_NORMALIZATION_COUNTERS: dict[str, int] = {
+    "rows_seen": 0,
+    "rows_kept": 0,
+    "rows_rejected": 0,
 }
 
 SERVICE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
@@ -288,6 +301,19 @@ SERVICE_RULES: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 PERMIT_NEGATIVE_TOKENS = ("calendar", "agenda", "minutes", "meeting", "event")
+
+
+def reset_normalization_counters() -> None:
+    for key in ("rows_seen", "rows_kept", "rows_rejected"):
+        _NORMALIZATION_COUNTERS[key] = 0
+
+
+def get_normalization_counters() -> dict[str, int]:
+    return {
+        "rows_seen": int(_NORMALIZATION_COUNTERS.get("rows_seen") or 0),
+        "rows_kept": int(_NORMALIZATION_COUNTERS.get("rows_kept") or 0),
+        "rows_rejected": int(_NORMALIZATION_COUNTERS.get("rows_rejected") or 0),
+    }
 
 
 def extract_emails(text: str) -> list[str]:
@@ -600,7 +626,9 @@ def _upsert_contact_candidate(
     candidate: dict[str, str | float | None],
     source_url: str,
 ) -> None:
-    normalized = _normalize_contact_candidate(candidate, source_url)
+    normalized = normalize_contact_row(candidate, source_url)
+    if normalized is None:
+        return
     email = str(normalized.get("email") or "").strip().lower()
     phone = str(normalized.get("phone") or "").strip()
     if not email and not phone:
@@ -614,21 +642,21 @@ def _upsert_contact_candidate(
     store[key] = _merge_contact_candidates(existing, normalized)
 
 
-def _normalize_contact_candidate(
+def normalize_contact_row(
     candidate: dict[str, str | float | None],
     source_url: str,
-) -> dict[str, str | float | None]:
-    name = _normalize_contact_name(candidate.get("name"))
+) -> dict[str, str | float | None] | None:
+    _NORMALIZATION_COUNTERS["rows_seen"] = int(_NORMALIZATION_COUNTERS.get("rows_seen") or 0) + 1
+
+    name = normalize_whitespace(str(candidate.get("name") or ""))
+    if not _is_valid_name_for_normalization(name):
+        _NORMALIZATION_COUNTERS["rows_rejected"] = int(_NORMALIZATION_COUNTERS.get("rows_rejected") or 0) + 1
+        return None
+
     title = _strip_email_label_prefix(normalize_whitespace(str(candidate.get("title") or "")) or None)
     department = _strip_email_label_prefix(normalize_whitespace(str(candidate.get("department") or "")) or None)
-    if name and _is_role_label(name):
-        if not title:
-            title = name
-        name = None
-    if title and _looks_like_person_name(title):
-        title = None
-    if not title and department and _is_role_label(department):
-        title = department
+
+    _NORMALIZATION_COUNTERS["rows_kept"] = int(_NORMALIZATION_COUNTERS.get("rows_kept") or 0) + 1
 
     return {
         "name": name,
@@ -644,6 +672,29 @@ def _normalize_contact_candidate(
         "source_url": source_url,
         "confidence": float(candidate.get("confidence") or 0.45),
     }
+
+
+def _normalize_contact_candidate(
+    candidate: dict[str, str | float | None],
+    source_url: str,
+) -> dict[str, str | float | None]:
+    normalized = normalize_contact_row(candidate, source_url)
+    if normalized is None:
+        return {
+            "name": None,
+            "title": None,
+            "department": None,
+            "email": None,
+            "email_type": "unknown",
+            "phone": None,
+            "phone_ext": None,
+            "address": None,
+            "hours": None,
+            "source_context": None,
+            "source_url": source_url,
+            "confidence": float(candidate.get("confidence") or 0.0),
+        }
+    return normalized
 
 
 def _contact_candidate_key(
@@ -876,6 +927,22 @@ def _is_name_candidate(candidate: str) -> bool:
     if re.search(r"\d", normalized):
         return False
     if lowered in GENERIC_NAV_TEXT:
+        return False
+    return True
+
+
+def _is_valid_name_for_normalization(value: str | None) -> bool:
+    candidate = normalize_whitespace(value or "")
+    if not candidate:
+        return False
+    lowered = candidate.lower()
+    if not re.search(r"[a-z]", lowered):
+        return False
+    if "staff directory" in lowered:
+        return False
+    if re.search(r"\b(email|phone|contact|vacant)\b", lowered):
+        return False
+    if lowered in NORMALIZE_NAME_REJECTS:
         return False
     return True
 

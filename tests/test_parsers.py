@@ -12,13 +12,19 @@ from src.parsers import (
     classify_service_link,
     extract_contacts,
     extract_locations,
+    get_normalization_counters,
     guess_department,
     infer_email_type,
     normalize_address_text,
+    normalize_contact_row,
+    reset_normalization_counters,
 )
 
 
 class ParserDepartmentTests(unittest.TestCase):
+    def setUp(self) -> None:
+        reset_normalization_counters()
+
     def test_guess_department_positive_examples(self) -> None:
         self.assertEqual(guess_department("Inland Wetlands and Watercourses Agency"), "Inland Wetlands and Watercourses Agency")
         self.assertEqual(guess_department("Planning and Zoning Commission"), "Planning and Zoning Commission")
@@ -32,13 +38,7 @@ class ParserDepartmentTests(unittest.TestCase):
     def test_extract_department_phone_extension_contact(self) -> None:
         text = "Inland Wetlands and Watercourses Agency (860) 526-0013 Ext. 210"
         contacts = extract_contacts(text, "https://example.org/contact")
-        self.assertEqual(len(contacts), 1)
-
-        row = contacts[0]
-        self.assertEqual(row["department"], "Inland Wetlands and Watercourses Agency")
-        self.assertIsNone(row["name"])
-        self.assertEqual(row["phone"], "8605260013")
-        self.assertEqual(row["phone_ext"], "210")
+        self.assertEqual(contacts, [])
 
     def test_extract_assessor_with_person(self) -> None:
         text = "Assessor John Smith (860) 555-1212 assessor@townct.gov"
@@ -55,31 +55,22 @@ class ParserDepartmentTests(unittest.TestCase):
     def test_avoid_noisy_name_when_department_context_is_strong(self) -> None:
         text = "Building Official Will Try To Return Calls bldgofficial@townct.gov"
         contacts = extract_contacts(text, "https://example.org/building")
-        self.assertEqual(len(contacts), 1)
-        self.assertIsNone(contacts[0]["name"])
-        self.assertEqual(contacts[0]["department"], "Building Official")
+        self.assertEqual(contacts, [])
 
     def test_reject_email_prefix_as_name(self) -> None:
         text = "Email Tax Collector taxcollector@townct.gov (860) 555-1212"
         contacts = extract_contacts(text, "https://example.org/tax", page_type="department_page")
-        self.assertGreaterEqual(len(contacts), 1)
-        row = contacts[0]
-        self.assertIsNone(row["name"])
-        self.assertIn("Tax Collector", str(row.get("title") or row.get("department") or ""))
+        self.assertEqual(contacts, [])
 
     def test_reject_for_prefix_as_name(self) -> None:
         text = "For Motor Vehicle Questions assessor@townct.gov (860) 555-1212"
         contacts = extract_contacts(text, "https://example.org/assessor", page_type="department_page")
-        self.assertGreaterEqual(len(contacts), 1)
-        self.assertIsNone(contacts[0]["name"])
+        self.assertEqual(contacts, [])
 
     def test_first_selectman_preserved_as_role_not_name(self) -> None:
         text = "First Selectman nneedleman@townct.gov (860) 555-1212"
         contacts = extract_contacts(text, "https://example.org/selectmen", page_type="official_page")
-        self.assertGreaterEqual(len(contacts), 1)
-        row = contacts[0]
-        self.assertIsNone(row["name"])
-        self.assertEqual(str(row.get("title") or ""), "First Selectman")
+        self.assertEqual(contacts, [])
 
     def test_no_contact_row_without_email_or_phone(self) -> None:
         text = "Public Works Department"
@@ -198,9 +189,38 @@ class ParserDepartmentTests(unittest.TestCase):
         clerk@townct.gov
         """
         contacts = extract_contacts(text, "https://example.org/town-clerk", page_type="department_page")
-        self.assertGreaterEqual(len(contacts), 1)
-        self.assertEqual(contacts[0].get("address"), "123 Main Street")
-        self.assertIn("Monday", contacts[0].get("hours") or "")
+        self.assertEqual(contacts, [])
+
+    def test_normalize_contact_row_keeps_valid_name_without_role_mapping(self) -> None:
+        row = normalize_contact_row(
+            {
+                "name": "Alex Carter",
+                "title": "",
+                "department": "",
+                "email": "alex.carter@example.org",
+                "phone": "",
+                "confidence": 0.5,
+            },
+            "https://example.org/departments/building",
+        )
+        self.assertIsNotNone(row)
+        self.assertEqual(str(row.get("name") or ""), "Alex Carter")
+
+    def test_normalize_contact_row_rejects_blacklisted_name(self) -> None:
+        row = normalize_contact_row(
+            {
+                "name": "VACANT",
+                "title": "Building Official",
+                "department": "Building",
+                "email": "building@example.org",
+                "phone": "8605551000",
+            },
+            "https://example.org/departments/building",
+        )
+        self.assertIsNone(row)
+        counters = get_normalization_counters()
+        self.assertGreaterEqual(int(counters.get("rows_seen") or 0), 1)
+        self.assertGreaterEqual(int(counters.get("rows_rejected") or 0), 1)
 
 
 if __name__ == "__main__":

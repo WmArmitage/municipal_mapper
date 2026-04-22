@@ -33,8 +33,10 @@ from src.normalize import get_domain, make_id, normalize_url, normalize_whitespa
 from src.parsers import (
     classify_service_link,
     extract_contacts,
+    get_normalization_counters,
     extract_locations,
     location_dedupe_key,
+    reset_normalization_counters,
 )
 from src.vendors import detect_vendor
 
@@ -416,6 +418,7 @@ def crawl_single_municipality(
     timeout: int = 20,
     granicus_debug: bool = False,
 ) -> dict[str, int | str]:
+    reset_normalization_counters()
     municipality_id = municipality["municipality_id"]
     website_url = municipality.get("website_url")
     municipality_domain = (municipality.get("domain") or get_domain(website_url) or "").lower()
@@ -482,6 +485,12 @@ def crawl_single_municipality(
         "diagnostic_class": "ok",
     }
 
+    def emit_normalization_summary() -> None:
+        counters = get_normalization_counters()
+        seen = int(counters.get("rows_seen") or 0)
+        kept = int(counters.get("rows_kept") or 0)
+        print(f"[Normalize] kept {kept} / {seen} rows")
+
     if not website_url:
         print(f"Fallback triggered for {municipality_id}")
         upsert_signal(conn, municipality_id, "crawl_status", "missing_website_url", 1.0, "")
@@ -489,6 +498,7 @@ def crawl_single_municipality(
         diagnostics["diagnostic_class"] = "discovery_failure"
         upsert_crawl_diagnostics_signal(conn, municipality_id, diagnostics, confidence=1.0)
         stats["diagnostic_class"] = str(diagnostics["diagnostic_class"])
+        emit_normalization_summary()
         db.commit(conn)
         return stats
 
@@ -747,6 +757,7 @@ def crawl_single_municipality(
                 upsert_signal(conn, municipality_id, "alternate_seed_recovered", "false", 0.95, website_url)
             print(f"Fallback triggered for {municipality_id}")
             finalize_and_store_diagnostics(entry_url or website_url)
+            emit_normalization_summary()
             db.commit(conn)
             return stats
     elif home_text:
@@ -1274,6 +1285,7 @@ def crawl_single_municipality(
     upsert_signal(conn, municipality_id, "fetched_pages_count", str(stats["fetched_pages"]), 1.0, entry_url)
     upsert_signal(conn, municipality_id, "high_value_links_count", str(len(high_value_links)), 0.95, entry_url)
     finalize_and_store_diagnostics(entry_url)
+    emit_normalization_summary()
     if (stats["fetched_pages"] == 0 or stats["contacts"] == 0 or stats["service_links"] == 0) and not fallback_logged:
         print(f"Fallback triggered for {municipality_id}")
     db.commit(conn)

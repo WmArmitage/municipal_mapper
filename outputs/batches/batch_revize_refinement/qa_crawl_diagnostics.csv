@@ -1,15 +1,15 @@
 municipality_id,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class
-ct_avon,batch_revize_refinement,https://www.avonct.gov/,https://www.avonct.gov/,0,200,0,text/html,"Avon, CT",113834,1046,0,0,69,1,1,ok
-ct_fairfield,batch_revize_refinement,https://www.fairfieldct.org/,https://fairfieldct.gov/,0,200,1,text/html,"Home - Town of Fairfield, Connecticut",77286,242,0,0,22,1,1,ok
-ct_griswold,batch_revize_refinement,https://www.griswold-ct.org/,https://www.griswold-ct.org/,0,200,0,text/html,"Welcome to Griswold, CT",90955,269,0,0,58,1,1,ok
+ct_avon,batch_revize_refinement,https://www.avonct.gov/,https://www.avonct.gov/,0,200,0,text/html,"Avon, CT",113802,1046,0,0,108,1,1,ok
+ct_fairfield,batch_revize_refinement,https://www.fairfieldct.org/,https://fairfieldct.gov/,0,200,1,text/html,"Home - Town of Fairfield, Connecticut",77286,242,0,0,24,1,1,ok
+ct_griswold,batch_revize_refinement,https://www.griswold-ct.org/,https://www.griswold-ct.org/,0,200,0,text/html,"Welcome to Griswold, CT",90955,269,0,0,51,1,1,ok
 ct_groton,batch_revize_refinement,https://www.groton-ct.gov/,https://www.groton-ct.gov/,0,200,0,text/html,"Welcome to the Town of Groton, Connecticut",108915,382,50,75,68,0,1,ok
-ct_guilford,batch_revize_refinement,https://www.guilfordct.gov/,https://www.guilfordct.gov/,0,200,0,text/html,Guilford,94872,317,0,0,63,1,1,ok
-ct_killingly,batch_revize_refinement,https://www.killinglyct.gov/,https://www.killinglyct.gov/,0,200,0,text/html,"Killingly, CT",112910,355,0,0,158,1,1,ok
+ct_guilford,batch_revize_refinement,https://www.guilfordct.gov/,https://www.guilfordct.gov/,0,200,0,text/html,Guilford,94872,317,0,0,76,1,1,ok
+ct_killingly,batch_revize_refinement,https://www.killinglyct.gov/,https://www.killinglyct.gov/,0,200,0,text/html,"Killingly, CT",112910,355,0,0,169,1,1,ok
 ct_marlborough,batch_revize_refinement,https://www.marlboroughct.net/,https://www.marlboroughct.net/,0,200,0,text/html,"Marlborough, CT",60128,187,24,20,173,1,1,ok
-ct_new_canaan,batch_revize_refinement,https://www.newcanaan.info/,https://www.newcanaan.info/,0,200,0,text/html,Welcome to New Canaan CT,76641,287,0,0,24,1,1,ok
-ct_north_haven,batch_revize_refinement,https://www.northhaven-ct.gov/,https://www.northhaven-ct.gov/,0,200,0,text/html,"Town of North Haven, CT 06473",86868,292,0,0,17,1,1,ok
+ct_new_canaan,batch_revize_refinement,https://www.newcanaan.info/,https://www.newcanaan.info/,0,200,0,text/html,Welcome to New Canaan CT,76641,287,0,0,11,1,1,ok
+ct_north_haven,batch_revize_refinement,https://www.northhaven-ct.gov/,https://www.northhaven-ct.gov/,0,200,0,text/html,"Town of North Haven, CT 06473",86868,292,0,0,20,1,1,ok
 ct_plainfield,batch_revize_refinement,https://www.plainfieldct.org/,https://www.plainfieldct.org/,0,200,0,text/html,"Town of Plainfield, Connecticut",86560,279,0,0,18,0,1,ok
-ct_ridgefield,batch_revize_refinement,https://www.ridgefieldct.gov/,https://www.ridgefieldct.gov/,0,200,0,text/html,Ridgefield CT,109264,397,0,0,60,1,1,ok
-ct_southington,batch_revize_refinement,https://www.southington.org/,https://www.southingtonct.gov/,0,200,1,text/html,"Southington, CT",93116,192,0,0,350,1,1,ok
-ct_stafford,batch_revize_refinement,https://www.staffordct.org/,https://www.staffordct.org/,0,200,0,text/html,"Town of Stafford, CT",115619,321,0,0,3,1,1,ok
-ct_watertown,batch_revize_refinement,https://www.watertownct.org/,https://www.watertownct.org/,0,200,0,text/html,"Watertown, CT",98825,363,0,0,21,1,1,ok
+ct_ridgefield,batch_revize_refinement,https://www.ridgefieldct.gov/,https://www.ridgefieldct.gov/,0,200,0,text/html,Ridgefield CT,109264,397,0,0,67,1,1,ok
+ct_southington,batch_revize_refinement,https://www.southington.org/,https://www.southingtonct.gov/,0,200,1,text/html,"Southington, CT",93116,192,0,0,328,1,1,ok
+ct_stafford,batch_revize_refinement,https://www.staffordct.org/,https://www.staffordct.org/,0,200,0,text/html,"Town of Stafford, CT",115619,321,0,0,2,1,1,ok
+ct_watertown,batch_revize_refinement,https://www.watertownct.org/,https://www.watertownct.org/,0,200,0,text/html,"Watertown, CT",98825,363,0,0,27,1,1,ok
