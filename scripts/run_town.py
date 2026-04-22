@@ -27,6 +27,7 @@ from src.discover import (
     select_high_value_links,
 )
 from src.granicus import run_granicus_strategy_for_municipality
+from src.revize import run_revize_strategy_for_municipality
 from src.http_client import FetchResult, candidate_sitemap_urls, create_session, fetch_url
 from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace, safe_phone_str
 from src.parsers import (
@@ -83,6 +84,7 @@ DIRECTORY_CANDIDATE_PAGE_TYPES = {
     "official_page",
 }
 GRANICUS_VENDOR_NAME = "granicus"
+REVIZE_VENDOR_NAME = "revize"
 
 
 def extract_title(html: str) -> str | None:
@@ -430,6 +432,12 @@ def crawl_single_municipality(
         "granicus_pages_blocked": 0,
         "granicus_pages_js_shell": 0,
         "granicus_pages_parseable_directory": 0,
+        "revize_candidates_generated": 0,
+        "revize_candidates_attempted": 0,
+        "revize_http_responses_received": 0,
+        "revize_pages_with_body": 0,
+        "revize_pages_detected": 0,
+        "revize_contacts_extracted": 0,
     }
     diagnostics: dict[str, object] = {
         "municipality_id": municipality_id,
@@ -461,6 +469,16 @@ def crawl_single_municipality(
         "granicus_directory_match_count": 0,
         "granicus_contacts_extracted": 0,
         "granicus_fallback_to_generic": 0,
+        "revize_attempted": 0,
+        "revize_candidates_generated": 0,
+        "revize_candidates_attempted": 0,
+        "revize_http_responses_received": 0,
+        "revize_pages_with_body": 0,
+        "revize_detected_page_count": 0,
+        "revize_contacts_extracted": 0,
+        "revize_fallback_to_generic": 0,
+        "revize_suspicious_reduction_count": 0,
+        "revize_pass_produced_contacts_before_fallback": 0,
         "diagnostic_class": "ok",
     }
 
@@ -759,9 +777,12 @@ def crawl_single_municipality(
 
     platform_hint = str(municipality.get("platform") or "").strip().lower()
     granicus_vendor_detected = GRANICUS_VENDOR_NAME in {vendor.lower() for vendor in vendor_best}
+    revize_vendor_detected = REVIZE_VENDOR_NAME in {vendor.lower() for vendor in vendor_best}
     should_try_granicus = platform_hint == GRANICUS_VENDOR_NAME or granicus_vendor_detected
+    should_try_revize = (platform_hint == REVIZE_VENDOR_NAME or revize_vendor_detected) and not should_try_granicus
     skip_generic_candidate_crawl = False
     granicus_result: dict[str, object] | None = None
+    revize_result: dict[str, object] | None = None
     diagnostics["extracted_link_count"] = len(discovered_links)
     diagnostics["candidate_service_link_count"] = 0
     diagnostics["candidate_directory_link_count"] = 0
@@ -905,6 +926,106 @@ def crawl_single_municipality(
                         sort_keys=True,
                     )
                 )
+
+    if should_try_revize and entry_url:
+        diagnostics["revize_attempted"] = 1
+        revize_result = run_revize_strategy_for_municipality(
+            municipality_homepage=entry_url,
+            harvested_links=discovered_links,
+            timeout=timeout,
+            session=session,
+        )
+        attempted_rows = list(revize_result.get("attempted_rows") or [])
+        stats["revize_candidates_generated"] = _coerce_int(revize_result.get("candidate_urls_generated_count"))
+        stats["revize_candidates_attempted"] = _coerce_int(revize_result.get("candidate_urls_attempted_count"))
+        stats["revize_http_responses_received"] = _coerce_int(revize_result.get("http_responses_received_count"))
+        stats["revize_pages_with_body"] = _coerce_int(revize_result.get("pages_fetched_with_body_count"))
+        stats["revize_pages_detected"] = _coerce_int(revize_result.get("pages_classified_detected_count"))
+        stats["revize_contacts_extracted"] = _coerce_int(revize_result.get("contacts_total"))
+
+        for row in attempted_rows:
+            final_url = str(row.get("final_url") or "")
+            if not final_url:
+                continue
+            status_code = _coerce_int(row.get("status_code")) or None
+            if status_code is None or status_code < 200 or status_code >= 400:
+                continue
+            if final_url in seen_fetched_urls:
+                continue
+            seen_fetched_urls.add(final_url)
+            extraction_source_type = str(row.get("extraction_source_type") or "unknown")
+            if extraction_source_type in {"table_directory", "department_section"}:
+                page_type = "directory_page"
+            elif extraction_source_type in {"profile_block", "single_profile_page"}:
+                page_type = "contact_page"
+            else:
+                page_type = classify_page_type(final_url, "")
+            page_id = make_id("page", municipality_id, final_url)
+            db.upsert_page(
+                conn,
+                {
+                    "page_id": page_id,
+                    "municipality_id": municipality_id,
+                    "url": final_url,
+                    "page_type": page_type,
+                    "title": str(row.get("page_title") or ""),
+                    "discovered_from": f"revize:{row.get('source_kind') or 'candidate'}",
+                },
+            )
+            stats["fetched_pages"] += 1
+
+        revize_contacts = list(revize_result.get("contacts") or [])
+        stats["contacts"] += persist_contact_rows(
+            conn=conn,
+            municipality_id=municipality_id,
+            source_url=entry_url,
+            contacts=revize_contacts,
+        )
+
+        diagnostics["revize_candidates_generated"] = _coerce_int(revize_result.get("candidate_urls_generated_count"))
+        diagnostics["revize_candidates_attempted"] = _coerce_int(revize_result.get("candidate_urls_attempted_count"))
+        diagnostics["revize_http_responses_received"] = _coerce_int(revize_result.get("http_responses_received_count"))
+        diagnostics["revize_pages_with_body"] = _coerce_int(revize_result.get("pages_fetched_with_body_count"))
+        diagnostics["revize_detected_page_count"] = _coerce_int(revize_result.get("pages_classified_detected_count"))
+        diagnostics["revize_contacts_extracted"] = _coerce_int(revize_result.get("contacts_total"))
+        reduction_counts = dict(revize_result.get("suspicious_reduction_counts") or {})
+        diagnostics["revize_suspicious_reduction_count"] = sum(
+            _coerce_int(value) for value in reduction_counts.values()
+        )
+        skip_generic_candidate_crawl = _coerce_int(revize_result.get("contacts_total")) > 0
+        diagnostics["revize_pass_produced_contacts_before_fallback"] = 1 if skip_generic_candidate_crawl else 0
+        diagnostics["revize_fallback_to_generic"] = 0 if skip_generic_candidate_crawl else 1
+
+        revize_signal_payload = {
+            "municipality_id": municipality_id,
+            "seed_url": entry_url,
+            "candidate_urls_generated": revize_result.get("candidate_urls_generated") or [],
+            "candidate_urls_generated_count": diagnostics["revize_candidates_generated"],
+            "candidate_urls_attempted": revize_result.get("candidate_urls_attempted") or [],
+            "candidate_urls_attempted_count": diagnostics["revize_candidates_attempted"],
+            "matched_urls": revize_result.get("matched_urls") or [],
+            "attempted_rows": revize_result.get("attempted_rows") or [],
+            "contacts_by_url": revize_result.get("contacts_by_url") or [],
+            "contacts_total": diagnostics["revize_contacts_extracted"],
+            "extraction_source_counts": revize_result.get("extraction_source_counts") or {},
+            "suspicious_reduction_counts": reduction_counts,
+            "outcome_counts": revize_result.get("outcome_counts") or {},
+            "revize_pass_produced_contacts_before_fallback": diagnostics[
+                "revize_pass_produced_contacts_before_fallback"
+            ],
+            "fallback_to_generic": diagnostics["revize_fallback_to_generic"],
+        }
+        upsert_signal(
+            conn,
+            municipality_id,
+            "revize_diagnostics",
+            json.dumps(revize_signal_payload, sort_keys=True),
+            1.0,
+            entry_url,
+        )
+        revize_outcome = "contacts_found" if skip_generic_candidate_crawl else "no_contacts"
+        upsert_signal(conn, municipality_id, "revize_strategy", revize_outcome, 0.95, entry_url)
+        register_vendor_signal("Revize", 0.96 if platform_hint == REVIZE_VENDOR_NAME else 0.82, entry_url)
 
     high_value_links: list[dict[str, str | float]] = []
     fallback_triggered = False
