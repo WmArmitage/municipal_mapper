@@ -10,7 +10,7 @@ try:
 except ImportError:  # pragma: no cover - fallback for minimal environments
     BeautifulSoup = None
 
-from src.http_client import FetchResult, fetch_url
+from src.http_client import FetchResult, create_session
 from src.normalize import ensure_url_has_scheme, normalize_url, normalize_whitespace
 from src.parsers import (
     extract_contacts,
@@ -23,24 +23,72 @@ from src.parsers import (
 GRANICUS_DIRECTORY_PATHS = (
     "/Directory.aspx",
     "/directory.aspx",
+    "/Government/Directory.aspx",
+    "/government/Directory.aspx",
+    "/government/directory.aspx",
+    "/TownHall/Directory.aspx",
+    "/townhall/Directory.aspx",
+    "/town-hall/directory.aspx",
 )
 GRANICUS_DIRECT_PATHS = (
     "/Directory.aspx",
     "/directory.aspx",
+    "/Government/Directory.aspx",
+    "/government/Directory.aspx",
+    "/government/directory.aspx",
+    "/TownHall/Directory.aspx",
+    "/townhall/Directory.aspx",
+    "/town-hall/directory.aspx",
     "/staff-directory",
     "/directory",
-    "/departments",
+    "/TownHall",
+    "/townhall",
     "/government",
     "/town-hall",
+    "/departments",
 )
 GRANICUS_DID_MIN = 1
 GRANICUS_DID_MAX = 25
 GRANICUS_BLOCKED_STATUS_CODES = {401, 403, 429}
+GRANICUS_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 GRANICUS_MAX_DISCOVERED_ENTRY_PAGES = 40
 GRANICUS_MAX_TOTAL_CANDIDATES = 140
+GRANICUS_MAX_GENERATED_CANDIDATES = 220
 GRANICUS_REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
+GRANICUS_DEBUG_OUTCOME_LABELS = (
+    "ok_directory",
+    "ok_js_shell",
+    "blocked_or_forbidden",
+    "redirect_only",
+    "not_found",
+    "empty_response",
+    "other_http_error",
+)
+GRANICUS_JS_SHELL_HINTS = (
+    "enter search terms to display a list of entries in the staff directory",
+    "javascript is required",
+    "enable javascript",
+    "please enable javascript",
+    "categories",
+)
+GRANICUS_BLOCK_TEXT_HINTS = (
+    "access denied",
+    "forbidden",
+    "request blocked",
+    "attention required",
+    "cloudflare",
+    "bot verification",
+)
 
 CONTACT_COLUMN_HINTS: dict[str, tuple[str, ...]] = {
     "name": ("name", "employee", "staff"),
@@ -82,17 +130,20 @@ FetchFn = Callable[[str, str | None, dict[str, str] | None], FetchResult]
 def build_granicus_candidate_urls(
     municipality_homepage: str,
     did_max: int = GRANICUS_DID_MAX,
+    max_candidates: int = GRANICUS_MAX_GENERATED_CANDIDATES,
 ) -> list[dict[str, str | int]]:
     base = normalize_url(ensure_url_has_scheme(municipality_homepage))
     if not base:
         return []
 
-    root = base.rstrip("/")
+    base_roots = _candidate_base_roots(base)
     max_did = max(GRANICUS_DID_MIN, int(did_max))
     out: list[dict[str, str | int]] = []
     seen: set[str] = set()
 
     def add_candidate(url: str, source_kind: str, candidate_origin: str) -> None:
+        if len(out) >= max_candidates:
+            return
         normalized = normalize_url(url)
         if not normalized or normalized in seen:
             return
@@ -105,15 +156,33 @@ def build_granicus_candidate_urls(
             }
         )
 
-    for path in GRANICUS_DIRECT_PATHS:
-        source_kind = "direct_directory_page" if "directory" in path.lower() else "landing_page"
-        add_candidate(f"{root}{path}", source_kind, "direct_path")
+    for root in base_roots:
+        for path in GRANICUS_DIRECT_PATHS:
+            source_kind = "direct_directory_page" if "directory" in path.lower() else "unknown"
+            add_candidate(_join_candidate_url(root, path), source_kind, "direct_path")
+            if len(out) >= max_candidates:
+                break
+        if len(out) >= max_candidates:
+            break
 
-    for path in GRANICUS_DIRECTORY_PATHS:
-        for did in range(GRANICUS_DID_MIN, max_did + 1):
-            for param in ("did", "DID"):
-                candidate = _replace_or_add_query_param(f"{root}{path}", param, str(did))
-                add_candidate(candidate, "did_page", "did_enumeration")
+    for root in base_roots:
+        for path in GRANICUS_DIRECTORY_PATHS:
+            did_base = _join_candidate_url(root, path)
+            for did in range(GRANICUS_DID_MIN, max_did + 1):
+                for param in ("did", "DID"):
+                    add_candidate(
+                        _replace_or_add_query_param(did_base, param, str(did)),
+                        "did_page",
+                        "did_enumeration",
+                    )
+                    if len(out) >= max_candidates:
+                        break
+                if len(out) >= max_candidates:
+                    break
+            if len(out) >= max_candidates:
+                break
+        if len(out) >= max_candidates:
+            break
 
     return out
 
@@ -129,54 +198,61 @@ def fetch_granicus_candidates(
     referer = normalize_url(ensure_url_has_scheme(municipality_homepage)) or municipality_homepage
     headers = {**GRANICUS_REQUEST_HEADERS, **(request_headers or {})}
     out: list[dict[str, object]] = []
+    client = session or create_session()
     for candidate in candidates:
         request_url = str(candidate.get("url") or "")
         if not request_url:
             continue
         if fetch_fn:
             result = fetch_fn(request_url, referer, headers)
+            fetch_row = _coerce_fetch_result(result, request_url)
         else:
-            result = fetch_url(
-                request_url,
+            fetch_row = _fetch_granicus_http(
+                url=request_url,
+                session=client,
                 timeout=timeout,
-                session=session,
                 referer=referer,
                 request_headers=headers,
             )
-        final_url = normalize_url(result.final_url or request_url) or (result.final_url or request_url)
-        status_code = result.status_code
+        final_url = normalize_url(str(fetch_row.get("final_url") or request_url)) or (str(fetch_row.get("final_url") or request_url))
+        status_code = _coerce_int(fetch_row.get("status_code"))
         blocked = status_code in GRANICUS_BLOCKED_STATUS_CODES
+        text = str(fetch_row.get("text") or "")
         out.append(
             {
                 "request_url": request_url,
                 "final_url": final_url,
-                "status_code": status_code,
+                "status_code": status_code if status_code > 0 else None,
                 "blocked": blocked,
-                "fetch_outcome": _classify_fetch_outcome(result),
-                "redirect_count": int(result.redirect_count or 0),
-                "content_type": result.content_type or "",
-                "response_headers": result.response_headers or {},
-                "error": result.error or "",
+                "redirect_count": _coerce_int(fetch_row.get("redirect_count")),
+                "redirect_status_chain": list(fetch_row.get("redirect_status_chain") or []),
+                "content_type": str(fetch_row.get("content_type") or ""),
+                "response_headers": dict(fetch_row.get("response_headers") or {}),
+                "error": str(fetch_row.get("error") or ""),
+                "http_response_received": bool(fetch_row.get("http_response_received")),
+                "has_body": bool((text or "").strip()),
                 "source_kind": str(candidate.get("source_kind") or "unknown"),
                 "candidate_origin": str(candidate.get("candidate_origin") or ""),
-                "text": result.text or "",
-                "page_title": _extract_html_title(result.text or ""),
+                "text": text,
+                "page_title": _extract_html_title(text),
             }
         )
     return out
 
 
-def is_granicus_directory_page(
+def classify_granicus_page(
     html_text: str,
     url: str,
-) -> tuple[bool, list[str]]:
+    status_code: int | None = None,
+    response_headers: dict[str, str] | None = None,
+) -> dict[str, object]:
     blob = _extract_text_blob(html_text)
-    if not blob:
-        return False, []
-
-    lowered_url = (url or "").lower()
     lowered_blob = blob.lower()
+    lowered_url = (url or "").lower()
     signals: list[str] = []
+    categories = _extract_granicus_categories(html_text)
+    if categories:
+        signals.append("text:categories_present")
 
     if "directory.aspx" in lowered_url:
         signals.append("url:directory.aspx")
@@ -189,23 +265,71 @@ def is_granicus_directory_page(
     if "civicengage" in lowered_blob or "granicus" in lowered_blob:
         signals.append("text:civicengage")
 
+    header_hits = _count_contact_header_hits(html_text)
+    if header_hits >= 2:
+        signals.append("table:contact_headers")
+    person_row_hits = _count_person_row_signals(html_text)
+    if person_row_hits > 0:
+        signals.append("row:person_like")
+    key_value_hits = _count_staff_key_value_hits(lowered_blob)
+    if key_value_hits >= 3:
+        signals.append("text:staff_detail_fields")
     directory_label_hits = sum(1 for token in DIRECTORY_LABEL_TOKENS if token in lowered_blob)
     if directory_label_hits >= 4:
         signals.append("text:directory_labels")
 
-    header_hits = _count_contact_header_hits(html_text)
-    if header_hits >= 2:
-        signals.append("table:contact_headers")
+    js_shell_hits = [token for token in GRANICUS_JS_SHELL_HINTS if token in lowered_blob]
+    if js_shell_hits:
+        signals.append("text:js_shell_marker")
 
-    strong_signal = (
-        "table:contact_headers" in signals
-        or "text:staff_directory" in signals
-        or ("url:directory.aspx" in signals and "text:return_to_directory" in signals)
-    )
-    if not strong_signal and "url:directory.aspx" in signals and "text:directory_labels" in signals:
-        strong_signal = True
+    block_hits = [token for token in GRANICUS_BLOCK_TEXT_HINTS if token in lowered_blob]
+    if status_code in GRANICUS_BLOCKED_STATUS_CODES:
+        signals.append("http:blocked_status")
+    if block_hits:
+        signals.append("text:block_marker")
+    if _has_cloudflare_server(response_headers):
+        signals.append("header:cloudflare")
 
-    return strong_signal, signals
+    page_kind = "unknown"
+    if status_code in GRANICUS_BLOCKED_STATUS_CODES or block_hits:
+        page_kind = "blocked"
+    elif js_shell_hits and person_row_hits == 0 and key_value_hits < 3:
+        page_kind = "js_shell"
+    elif (
+        person_row_hits > 0
+        or header_hits >= 2
+        or key_value_hits >= 3
+        or (
+            "text:staff_directory" in signals
+            and "text:return_to_directory" in signals
+            and directory_label_hits >= 4
+        )
+        or (
+            directory_label_hits >= 5
+            and ("url:directory.aspx" in signals or "url:directory_path" in signals)
+        )
+    ):
+        page_kind = "directory"
+
+    return {
+        "page_kind": page_kind,
+        "signals": sorted(set(signals)),
+        "category_labels": categories,
+        "header_hits": header_hits,
+        "person_row_hits": person_row_hits,
+        "key_value_hits": key_value_hits,
+        "directory_label_hits": directory_label_hits,
+        "js_shell_marker_count": len(js_shell_hits),
+        "blocked_marker_count": len(block_hits),
+    }
+
+
+def is_granicus_directory_page(
+    html_text: str,
+    url: str,
+) -> tuple[bool, list[str]]:
+    classified = classify_granicus_page(html_text=html_text, url=url)
+    return str(classified.get("page_kind") or "") == "directory", list(classified.get("signals") or [])
 
 
 def extract_granicus_contacts(
@@ -249,15 +373,31 @@ def run_granicus_strategy_for_municipality(
     request_headers: dict[str, str] | None = None,
     fetch_fn: FetchFn | None = None,
     max_total_candidates: int = GRANICUS_MAX_TOTAL_CANDIDATES,
+    max_generated_candidates: int = GRANICUS_MAX_GENERATED_CANDIDATES,
 ) -> dict[str, object]:
-    initial_candidates = build_granicus_candidate_urls(municipality_homepage, did_max=did_max)
+    initial_candidates = build_granicus_candidate_urls(
+        municipality_homepage=municipality_homepage,
+        did_max=did_max,
+        max_candidates=max_generated_candidates,
+    )
     queue: deque[dict[str, str | int]] = deque(initial_candidates)
     seen_urls: set[str] = set()
     attempted_rows: list[dict[str, object]] = []
     blocked_urls: list[str] = []
     matched_urls: list[str] = []
+    js_shell_urls: list[str] = []
     contacts_by_url: list[dict[str, object]] = []
     all_contacts: list[dict[str, str | float | None]] = []
+    outcome_counts = {label: 0 for label in GRANICUS_DEBUG_OUTCOME_LABELS}
+    counters = {
+        "candidate_urls_generated_count": len(initial_candidates),
+        "candidate_urls_attempted_count": 0,
+        "http_responses_received_count": 0,
+        "pages_fetched_with_body_count": 0,
+        "pages_classified_blocked_count": 0,
+        "pages_classified_js_shell_count": 0,
+        "pages_classified_parseable_directory_count": 0,
+    }
 
     while queue and len(attempted_rows) < max_total_candidates:
         candidate = queue.popleft()
@@ -276,18 +416,53 @@ def run_granicus_strategy_for_municipality(
         )
         if not fetch_rows:
             continue
+        counters["candidate_urls_attempted_count"] += 1
         fetch_row = fetch_rows[0]
         text = str(fetch_row.get("text") or "")
         final_url = str(fetch_row.get("final_url") or url)
+        status_code = _coerce_int(fetch_row.get("status_code")) or None
+        has_body = bool(fetch_row.get("has_body"))
+        redirect_count = _coerce_int(fetch_row.get("redirect_count"))
         source_kind = str(fetch_row.get("source_kind") or "unknown")
-        matched, detection_signals = (False, [])
+        page_classification = classify_granicus_page(
+            html_text=text,
+            url=final_url,
+            status_code=status_code,
+            response_headers=dict(fetch_row.get("response_headers") or {}),
+        )
+        page_kind = str(page_classification.get("page_kind") or "unknown")
+        detection_signals = list(page_classification.get("signals") or [])
+        extraction_source_type = _resolve_extraction_source_type(source_kind, page_kind)
+        fetch_outcome = _classify_attempt_outcome(
+            status_code=status_code,
+            page_kind=page_kind,
+            has_body=has_body,
+            redirect_count=redirect_count,
+            final_url=final_url,
+            request_url=str(fetch_row.get("request_url") or url),
+            http_response_received=bool(fetch_row.get("http_response_received")),
+        )
+        outcome_counts[fetch_outcome] = outcome_counts.get(fetch_outcome, 0) + 1
+        if bool(fetch_row.get("http_response_received")):
+            counters["http_responses_received_count"] += 1
+        if has_body:
+            counters["pages_fetched_with_body_count"] += 1
+        if fetch_outcome == "blocked_or_forbidden":
+            counters["pages_classified_blocked_count"] += 1
+        elif fetch_outcome == "ok_js_shell":
+            counters["pages_classified_js_shell_count"] += 1
+        elif fetch_outcome == "ok_directory":
+            counters["pages_classified_parseable_directory_count"] += 1
+
+        matched = fetch_outcome == "ok_directory"
         extracted_rows: list[dict[str, str | float | None]] = []
 
-        if fetch_row.get("blocked"):
+        if fetch_outcome == "blocked_or_forbidden":
             blocked_urls.append(final_url)
+        if fetch_outcome == "ok_js_shell":
+            js_shell_urls.append(final_url)
 
-        if fetch_row.get("fetch_outcome") == "fetched_parseable" and text:
-            matched, detection_signals = is_granicus_directory_page(text, final_url)
+        if fetch_outcome == "ok_directory" and text:
             if matched or source_kind == "single_staff_entry_page":
                 extracted_rows = extract_granicus_contacts(
                     text,
@@ -299,36 +474,48 @@ def run_granicus_strategy_for_municipality(
                         {
                             "url": final_url,
                             "source_kind": source_kind,
+                            "extraction_source_type": extraction_source_type,
                             "contacts_extracted": len(extracted_rows),
                         }
                     )
                     all_contacts.extend(extracted_rows)
 
-            if matched:
-                matched_urls.append(final_url)
-                for entry_candidate in discover_granicus_entry_candidates(
-                    text,
-                    base_url=final_url,
-                    max_candidates=GRANICUS_MAX_DISCOVERED_ENTRY_PAGES,
-                ):
-                    entry_url = normalize_url(str(entry_candidate.get("url") or "")) or str(entry_candidate.get("url") or "")
-                    if not entry_url or entry_url in seen_urls:
-                        continue
-                    queue.append(entry_candidate)
+        if matched and text:
+            matched_urls.append(final_url)
+            for entry_candidate in discover_granicus_entry_candidates(
+                text,
+                base_url=final_url,
+                max_candidates=GRANICUS_MAX_DISCOVERED_ENTRY_PAGES,
+            ):
+                entry_url = normalize_url(str(entry_candidate.get("url") or "")) or str(entry_candidate.get("url") or "")
+                if not entry_url or entry_url in seen_urls:
+                    continue
+                queue.append(entry_candidate)
 
         attempted_rows.append(
             {
+                "attempt_order": len(attempted_rows) + 1,
+                "candidate_url_generated": str(fetch_row.get("request_url") or url),
                 "request_url": str(fetch_row.get("request_url") or url),
                 "final_url": final_url,
-                "status_code": fetch_row.get("status_code"),
-                "fetch_outcome": fetch_row.get("fetch_outcome"),
-                "blocked": bool(fetch_row.get("blocked")),
+                "status_code": status_code,
+                "fetch_outcome": fetch_outcome,
+                "http_response_received": bool(fetch_row.get("http_response_received")),
+                "blocked": fetch_outcome == "blocked_or_forbidden",
+                "redirect_count": redirect_count,
+                "redirect_status_chain": list(fetch_row.get("redirect_status_chain") or []),
+                "content_type": str(fetch_row.get("content_type") or ""),
                 "source_kind": source_kind,
+                "extraction_source_type": extraction_source_type,
                 "candidate_origin": str(fetch_row.get("candidate_origin") or ""),
+                "page_kind": page_kind,
                 "directory_match": matched,
-                "detection_signals": ",".join(detection_signals),
+                "detection_signals": sorted(set(detection_signals)),
+                "category_labels": list(page_classification.get("category_labels") or []),
+                "response_body_length": len(text),
                 "contacts_extracted": len(extracted_rows),
                 "page_title": str(fetch_row.get("page_title") or ""),
+                "error": str(fetch_row.get("error") or ""),
             }
         )
 
@@ -337,12 +524,18 @@ def run_granicus_strategy_for_municipality(
     attempted_urls = [str(row.get("request_url") or "") for row in attempted_rows if str(row.get("request_url") or "")]
     unique_blocked = sorted({url for url in blocked_urls if url})
     unique_matched = sorted({url for url in matched_urls if url})
+    unique_js_shell = sorted({url for url in js_shell_urls if url})
 
     return {
+        "candidate_urls_generated": [str(item.get("url") or "") for item in initial_candidates],
+        **counters,
         "attempted_count": len(attempted_rows),
+        "candidate_urls_attempted_count": counters["candidate_urls_attempted_count"],
         "candidate_urls_attempted": attempted_urls,
         "blocked_urls": unique_blocked,
+        "js_shell_urls": unique_js_shell,
         "matched_directory_urls": unique_matched,
+        "outcome_counts": outcome_counts,
         "attempted_rows": attempted_rows,
         "contacts_by_url": contacts_by_url,
         "contacts": deduped_contacts,
@@ -374,13 +567,11 @@ def discover_granicus_entry_candidates(
         if not path.endswith("directory.aspx"):
             continue
         query = {str(k).lower(): str(v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)}
-        source_kind = ""
+        source_kind = "direct_directory_page"
         if "did" in query:
             source_kind = "did_page"
         elif "eid" in query:
             source_kind = "single_staff_entry_page"
-        if not source_kind:
-            continue
         seen.add(href)
         out.append(
             {
@@ -401,16 +592,171 @@ def _replace_or_add_query_param(url: str, key: str, value: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(filtered, doseq=True)))
 
 
-def _classify_fetch_outcome(result: FetchResult) -> str:
-    if result.status_code in GRANICUS_BLOCKED_STATUS_CODES:
-        return "blocked"
-    if not result.ok:
-        if result.error == "http_error":
-            return "http_error"
-        return "fetch_error"
-    if not (result.text or "").strip():
-        return "fetched_empty"
-    return "fetched_parseable"
+def _candidate_base_roots(base_url: str) -> list[str]:
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    out: list[str] = [origin]
+    path = (parsed.path or "").strip()
+    if path and path != "/":
+        if "." in path.rsplit("/", 1)[-1]:
+            parent = path.rsplit("/", 1)[0]
+        else:
+            parent = path
+        parent = parent.strip("/")
+        if parent:
+            out.append(f"{origin}/{parent}")
+    return list(dict.fromkeys(out))
+
+
+def _join_candidate_url(base_root: str, path: str) -> str:
+    normalized_root = (base_root or "").rstrip("/")
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return normalize_url(f"{normalized_root}{normalized_path}") or f"{normalized_root}{normalized_path}"
+
+
+def _coerce_fetch_result(result: FetchResult, request_url: str) -> dict[str, object]:
+    status_code = result.status_code
+    final_url = normalize_url(result.final_url or request_url) or (result.final_url or request_url)
+    text = result.text or ""
+    return {
+        "request_url": request_url,
+        "final_url": final_url,
+        "status_code": status_code,
+        "redirect_count": int(result.redirect_count or 0),
+        "redirect_status_chain": [],
+        "content_type": str(result.content_type or ""),
+        "response_headers": dict(result.response_headers or {}),
+        "error": str(result.error or ""),
+        "text": text,
+        "http_response_received": status_code is not None,
+    }
+
+
+def _fetch_granicus_http(
+    url: str,
+    session,
+    timeout: int,
+    referer: str | None,
+    request_headers: dict[str, str],
+) -> dict[str, object]:
+    headers = dict(request_headers or {})
+    if referer:
+        headers["Referer"] = referer
+    try:
+        response = session.get(
+            url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=True,
+        )
+    except Exception as exc:
+        return {
+            "request_url": url,
+            "final_url": None,
+            "status_code": None,
+            "redirect_count": 0,
+            "redirect_status_chain": [],
+            "content_type": "",
+            "response_headers": {},
+            "error": f"request_error:{exc}",
+            "text": "",
+            "http_response_received": False,
+        }
+
+    content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    can_read_text = (
+        "text/" in content_type
+        or "html" in content_type
+        or "xml" in content_type
+        or "json" in content_type
+        or content_type == ""
+    )
+    text = response.text if can_read_text else ""
+    return {
+        "request_url": url,
+        "final_url": normalize_url(response.url) or response.url,
+        "status_code": int(response.status_code),
+        "redirect_count": len(response.history or []),
+        "redirect_status_chain": [int(item.status_code) for item in (response.history or [])],
+        "content_type": content_type,
+        "response_headers": dict(response.headers or {}),
+        "error": "",
+        "text": text or "",
+        "http_response_received": True,
+    }
+
+
+def _resolve_extraction_source_type(source_kind: str, page_kind: str) -> str:
+    normalized_source = str(source_kind or "").strip().lower()
+    if page_kind == "js_shell":
+        return "js_shell"
+    if normalized_source == "direct_directory_page":
+        return "direct_directory_page"
+    if normalized_source == "did_page":
+        return "did_page"
+    if normalized_source == "single_staff_entry_page":
+        return "single_staff_entry_page"
+    return "unknown"
+
+
+def _classify_attempt_outcome(
+    status_code: int | None,
+    page_kind: str,
+    has_body: bool,
+    redirect_count: int,
+    final_url: str,
+    request_url: str,
+    http_response_received: bool,
+) -> str:
+    if page_kind == "blocked" or status_code in GRANICUS_BLOCKED_STATUS_CODES:
+        return "blocked_or_forbidden"
+    if status_code == 404:
+        return "not_found"
+    if not http_response_received:
+        return "other_http_error"
+    if status_code in GRANICUS_REDIRECT_STATUS_CODES:
+        return "redirect_only"
+    if status_code is not None and status_code >= 500:
+        return "other_http_error"
+    if not has_body:
+        return "empty_response"
+    if page_kind == "js_shell":
+        return "ok_js_shell"
+    if page_kind == "directory":
+        return "ok_directory"
+    if redirect_count > 0 and final_url and request_url and final_url != request_url:
+        return "redirect_only"
+    if status_code is not None and status_code >= 400:
+        return "other_http_error"
+    return "other_http_error"
+
+
+def _has_cloudflare_server(response_headers: dict[str, str] | None) -> bool:
+    if not response_headers:
+        return False
+    lowered = {str(key).lower(): str(value).lower() for key, value in response_headers.items()}
+    if "cf-ray" in lowered:
+        return True
+    server = lowered.get("server", "")
+    return "cloudflare" in server
+
+
+def _coerce_int(value: object) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return 0
+    try:
+        return int(float(text))
+    except ValueError:
+        return 0
 
 
 def _extract_html_title(html_text: str) -> str:
@@ -448,6 +794,79 @@ def _count_contact_header_hits(html_text: str) -> int:
             if any(token in header for header in normalized_headers):
                 hits += 1
     return hits
+
+
+def _count_person_row_signals(html_text: str) -> int:
+    if BeautifulSoup is None:
+        return 0
+    try:
+        soup = BeautifulSoup(html_text or "", "html.parser")
+    except Exception:
+        return 0
+    hits = 0
+    for row in soup.find_all("tr"):
+        row_text = normalize_whitespace(row.get_text(" ", strip=True)) or ""
+        if not row_text:
+            continue
+        emails = extract_emails(row_text)
+        phones = extract_phone_candidates(row_text)
+        name = _extract_person_name_from_text(row_text)
+        if (emails or phones) and name:
+            hits += 1
+    if hits > 0:
+        return hits
+    for block in soup.find_all(["li", "div", "section", "article", "p"]):
+        block_text = normalize_whitespace(block.get_text(" ", strip=True)) or ""
+        if len(block_text) < 18:
+            continue
+        emails = extract_emails(block_text)
+        phones = extract_phone_candidates(block_text)
+        if not emails and not phones:
+            continue
+        if _extract_person_name_from_text(block_text):
+            hits += 1
+            if hits >= 3:
+                break
+    return hits
+
+
+def _count_staff_key_value_hits(lowered_blob: str) -> int:
+    if not lowered_blob:
+        return 0
+    hits = 0
+    for key in ("name", "title", "email", "phone", "additional phone"):
+        if re.search(rf"\b{re.escape(key)}\s*[:\-]", lowered_blob):
+            hits += 1
+    return hits
+
+
+def _extract_granicus_categories(html_text: str) -> list[str]:
+    if BeautifulSoup is None:
+        return []
+    try:
+        soup = BeautifulSoup(html_text or "", "html.parser")
+    except Exception:
+        return []
+    labels: list[str] = []
+    seen: set[str] = set()
+    for node in soup.find_all(["li", "option", "a"]):
+        text = normalize_whitespace(node.get_text(" ", strip=True)) or ""
+        lowered = text.lower()
+        if not text or len(text) < 3 or len(text) > 70:
+            continue
+        if lowered in {"categories", "staff directory", "return to staff directory"}:
+            continue
+        if any(token in lowered for token in ("javascript required", "search terms", "return to")):
+            continue
+        if _looks_like_department(text):
+            key = lowered
+            if key in seen:
+                continue
+            seen.add(key)
+            labels.append(text)
+            if len(labels) >= 12:
+                break
+    return labels
 
 
 def _extract_table_contacts(html_text: str, source_url: str) -> list[dict[str, str | float | None]]:
@@ -873,12 +1292,13 @@ def _count_extraction_sources(
         "direct_directory_page": 0,
         "did_page": 0,
         "single_staff_entry_page": 0,
-        "other": 0,
+        "js_shell": 0,
+        "unknown": 0,
     }
     for row in contacts:
         source_kind = str(row.get("granicus_source_kind") or "")
         if source_kind in counts:
             counts[source_kind] += 1
         else:
-            counts["other"] += 1
+            counts["unknown"] += 1
     return counts

@@ -1,0 +1,10 @@
+municipality_id,town_name,county,batch_id,priority,status,notes
+ct_farmington,Farmington,Hartford County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_glastonbury,Glastonbury,Hartford County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_hartford,Hartford,Hartford County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_manchester,Manchester,Hartford County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_new_fairfield,New Fairfield,Fairfield County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_new_haven,New Haven,New Haven County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_stamford,Stamford,Fairfield County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_weston,Weston,Fairfield County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus
+ct_westport,Westport,Fairfield County,batch_granicus_vendor_probe,1,pending,vendor_target=Granicus

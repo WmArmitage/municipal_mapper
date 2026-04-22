@@ -1,0 +1,10 @@
+municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason,coverage_interpretation
+ct_farmington,Farmington,crawl_diagnostic_zero_yield,,,,,,,https://www.farmington-ct.org/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_glastonbury,Glastonbury,crawl_diagnostic_zero_yield,,,,,,,https://www.glastonburyct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_hartford,Hartford,crawl_diagnostic_zero_yield,,,,,,,https://www.hartfordct.gov/Home,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_manchester,Manchester,crawl_diagnostic_zero_yield,,,,,,,https://www.manchesterct.gov/Home,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_new_fairfield,New Fairfield,crawl_diagnostic_zero_yield,,,,,,,https://www.newfairfield.org/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_new_haven,New Haven,crawl_diagnostic_zero_yield,,,,,,,https://www.newhavenct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_stamford,Stamford,crawl_diagnostic_zero_yield,,,,,,,https://www.stamfordct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_weston,Weston,crawl_diagnostic_zero_yield,,,,,,,https://www.westonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_westport,Westport,crawl_diagnostic_zero_yield,,,,,,,https://www.westportct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town

@@ -412,6 +412,7 @@ def crawl_single_municipality(
     raw_dir: Path,
     max_candidate_pages: int = 25,
     timeout: int = 20,
+    granicus_debug: bool = False,
 ) -> dict[str, int | str]:
     municipality_id = municipality["municipality_id"]
     website_url = municipality.get("website_url")
@@ -422,6 +423,13 @@ def crawl_single_municipality(
         "service_links": 0,
         "contacts": 0,
         "locations": 0,
+        "granicus_candidates_generated": 0,
+        "granicus_candidates_attempted": 0,
+        "granicus_http_responses_received": 0,
+        "granicus_pages_with_body": 0,
+        "granicus_pages_blocked": 0,
+        "granicus_pages_js_shell": 0,
+        "granicus_pages_parseable_directory": 0,
     }
     diagnostics: dict[str, object] = {
         "municipality_id": municipality_id,
@@ -440,8 +448,16 @@ def crawl_single_municipality(
         "detected_block_signal": 0,
         "detected_js_shell_signal": 0,
         "granicus_attempted": 0,
+        "granicus_candidates_generated": 0,
         "granicus_candidates_attempted": 0,
+        "granicus_http_responses_received": 0,
+        "granicus_pages_with_body": 0,
         "granicus_blocked_candidate_count": 0,
+        "granicus_js_shell_count": 0,
+        "granicus_not_found_count": 0,
+        "granicus_redirect_only_count": 0,
+        "granicus_empty_response_count": 0,
+        "granicus_other_http_error_count": 0,
         "granicus_directory_match_count": 0,
         "granicus_contacts_extracted": 0,
         "granicus_fallback_to_generic": 0,
@@ -758,6 +774,16 @@ def crawl_single_municipality(
             session=session,
         )
         attempted_rows = list(granicus_result.get("attempted_rows") or [])
+        stats["granicus_candidates_generated"] = _coerce_int(granicus_result.get("candidate_urls_generated_count"))
+        stats["granicus_candidates_attempted"] = _coerce_int(granicus_result.get("candidate_urls_attempted_count"))
+        stats["granicus_http_responses_received"] = _coerce_int(granicus_result.get("http_responses_received_count"))
+        stats["granicus_pages_with_body"] = _coerce_int(granicus_result.get("pages_fetched_with_body_count"))
+        stats["granicus_pages_blocked"] = _coerce_int(granicus_result.get("pages_classified_blocked_count"))
+        stats["granicus_pages_js_shell"] = _coerce_int(granicus_result.get("pages_classified_js_shell_count"))
+        stats["granicus_pages_parseable_directory"] = _coerce_int(
+            granicus_result.get("pages_classified_parseable_directory_count")
+        )
+
         for row in attempted_rows:
             final_url = str(row.get("final_url") or "")
             if not final_url:
@@ -792,18 +818,44 @@ def crawl_single_municipality(
         )
 
         diagnostics["granicus_candidates_attempted"] = _coerce_int(granicus_result.get("attempted_count"))
-        diagnostics["granicus_blocked_candidate_count"] = len(list(granicus_result.get("blocked_urls") or []))
+        diagnostics["granicus_candidates_generated"] = _coerce_int(granicus_result.get("candidate_urls_generated_count"))
+        diagnostics["granicus_http_responses_received"] = _coerce_int(granicus_result.get("http_responses_received_count"))
+        diagnostics["granicus_pages_with_body"] = _coerce_int(granicus_result.get("pages_fetched_with_body_count"))
+        diagnostics["granicus_blocked_candidate_count"] = _coerce_int(
+            granicus_result.get("pages_classified_blocked_count")
+        )
+        diagnostics["granicus_js_shell_count"] = _coerce_int(
+            granicus_result.get("pages_classified_js_shell_count")
+        )
         diagnostics["granicus_directory_match_count"] = len(list(granicus_result.get("matched_directory_urls") or []))
         diagnostics["granicus_contacts_extracted"] = _coerce_int(granicus_result.get("contacts_total"))
+        outcome_counts = dict(granicus_result.get("outcome_counts") or {})
+        diagnostics["granicus_not_found_count"] = _coerce_int(outcome_counts.get("not_found"))
+        diagnostics["granicus_redirect_only_count"] = _coerce_int(outcome_counts.get("redirect_only"))
+        diagnostics["granicus_empty_response_count"] = _coerce_int(outcome_counts.get("empty_response"))
+        diagnostics["granicus_other_http_error_count"] = _coerce_int(outcome_counts.get("other_http_error"))
         skip_generic_candidate_crawl = _coerce_int(granicus_result.get("contacts_total")) > 0
         diagnostics["granicus_fallback_to_generic"] = 0 if skip_generic_candidate_crawl else 1
         granicus_signal_payload = {
             "municipality_id": municipality_id,
             "seed_url": entry_url,
+            "candidate_urls_generated": granicus_result.get("candidate_urls_generated") or [],
+            "candidate_urls_generated_count": diagnostics["granicus_candidates_generated"],
             "attempted_count": diagnostics["granicus_candidates_attempted"],
+            "candidate_urls_attempted_count": _coerce_int(granicus_result.get("candidate_urls_attempted_count")),
+            "http_responses_received_count": diagnostics["granicus_http_responses_received"],
+            "pages_fetched_with_body_count": diagnostics["granicus_pages_with_body"],
+            "pages_classified_blocked_count": _coerce_int(granicus_result.get("pages_classified_blocked_count")),
+            "pages_classified_js_shell_count": _coerce_int(granicus_result.get("pages_classified_js_shell_count")),
+            "pages_classified_parseable_directory_count": _coerce_int(
+                granicus_result.get("pages_classified_parseable_directory_count")
+            ),
+            "outcome_counts": outcome_counts,
             "candidate_urls_attempted": granicus_result.get("candidate_urls_attempted") or [],
             "blocked_urls": granicus_result.get("blocked_urls") or [],
+            "js_shell_urls": granicus_result.get("js_shell_urls") or [],
             "matched_directory_urls": granicus_result.get("matched_directory_urls") or [],
+            "attempted_rows": granicus_result.get("attempted_rows") or [],
             "contacts_by_url": granicus_result.get("contacts_by_url") or [],
             "contacts_total": diagnostics["granicus_contacts_extracted"],
             "extraction_source_counts": granicus_result.get("extraction_source_counts") or {},
@@ -818,10 +870,41 @@ def crawl_single_municipality(
             entry_url,
         )
         granicus_outcome = "contacts_found" if skip_generic_candidate_crawl else "no_contacts"
-        if diagnostics["granicus_blocked_candidate_count"] == diagnostics["granicus_candidates_attempted"]:
+        if (
+            diagnostics["granicus_candidates_attempted"] > 0
+            and diagnostics["granicus_blocked_candidate_count"] == diagnostics["granicus_candidates_attempted"]
+        ):
             granicus_outcome = "blocked"
         upsert_signal(conn, municipality_id, "granicus_strategy", granicus_outcome, 0.95, entry_url)
         register_vendor_signal("Granicus", 0.96 if platform_hint == GRANICUS_VENDOR_NAME else 0.82, entry_url)
+        if granicus_debug:
+            print(
+                f"Granicus debug {municipality_id}: "
+                f"generated={diagnostics['granicus_candidates_generated']}, "
+                f"attempted={diagnostics['granicus_candidates_attempted']}, "
+                f"http_responses={diagnostics['granicus_http_responses_received']}, "
+                f"blocked={diagnostics['granicus_blocked_candidate_count']}, "
+                f"js_shell={diagnostics['granicus_js_shell_count']}, "
+                f"parseable={diagnostics['granicus_directory_match_count']}, "
+                f"contacts={diagnostics['granicus_contacts_extracted']}"
+            )
+            for row in attempted_rows:
+                print(
+                    "  "
+                    + json.dumps(
+                        {
+                            "attempt_order": row.get("attempt_order"),
+                            "candidate_url_generated": row.get("candidate_url_generated"),
+                            "status_code": row.get("status_code"),
+                            "final_url": row.get("final_url"),
+                            "fetch_outcome": row.get("fetch_outcome"),
+                            "source_kind": row.get("source_kind"),
+                            "extraction_source_type": row.get("extraction_source_type"),
+                            "contacts_extracted": row.get("contacts_extracted"),
+                        },
+                        sort_keys=True,
+                    )
+                )
 
     high_value_links: list[dict[str, str | float]] = []
     fallback_triggered = False
@@ -1073,6 +1156,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("municipality_id", help="e.g. ct_chester")
     parser.add_argument("--max-candidate-pages", type=int, default=25)
     parser.add_argument("--db", default=str(ROOT / "database" / "master.sqlite"))
+    parser.add_argument(
+        "--granicus-debug",
+        action="store_true",
+        help="Print per-attempt Granicus diagnostics when Granicus strategy runs.",
+    )
     parser.add_argument("--qa", action="store_true", help="Print municipality row counts by table after run.")
     return parser.parse_args()
 
@@ -1090,6 +1178,7 @@ def main() -> None:
             municipality=municipality,
             raw_dir=ROOT / "data" / "raw",
             max_candidate_pages=args.max_candidate_pages,
+            granicus_debug=args.granicus_debug,
         )
     finally:
         conn.close()

@@ -1,0 +1,10 @@
+municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
+ct_farmington,Farmington,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_glastonbury,Glastonbury,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_hartford,Hartford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_manchester,Manchester,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_new_fairfield,New Fairfield,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_new_haven,New Haven,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_stamford,Stamford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_weston,Weston,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_westport,Westport,executive; assessment; tax; clerk; building; planning; finance,7,,

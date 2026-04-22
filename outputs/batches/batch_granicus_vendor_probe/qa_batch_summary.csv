@@ -1,0 +1,10 @@
+municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
+ct_farmington,Farmington,Hartford County,0,0,0,0
+ct_glastonbury,Glastonbury,Hartford County,0,0,0,1
+ct_hartford,Hartford,Hartford County,0,0,0,1
+ct_manchester,Manchester,Hartford County,0,0,0,0
+ct_new_fairfield,New Fairfield,Fairfield County,0,0,0,1
+ct_new_haven,New Haven,New Haven County,0,0,0,1
+ct_stamford,Stamford,Fairfield County,0,0,0,1
+ct_weston,Weston,Fairfield County,0,0,0,0
+ct_westport,Westport,Fairfield County,0,0,0,0
