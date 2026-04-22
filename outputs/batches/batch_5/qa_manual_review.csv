@@ -1,0 +1,17 @@
+municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason,coverage_interpretation
+ct_east_hampton,East Hampton,suspicious_winner,Finance Director,,,8602677548,,other,https://www.easthamptonct.gov/1216/Finance,,,low_context,suspicious_winner
+ct_east_hampton,East Hampton,suspicious_winner,Town Manager,Executive Assistant,csirois@easthamptonct.gov,8602674468,,other,https://www.easthamptonct.gov/1204/Town-Manager,,,chief_role_assistant_contamination,suspicious_winner
+ct_east_windsor,East Windsor,crawl_diagnostic_zero_yield,,,,,,,https://www.eastwindsor-ct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_greenwich,Greenwich,missing_role_groups_2plus,,,,,,,,building; finance,2,,normal_coverage_gap
+ct_kent,Kent,crawl_diagnostic_zero_yield,,,,,,,https://www.townofkentct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_lebanon,Lebanon,crawl_diagnostic_zero_yield,,,,,,,https://www.lebanonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_mansfield,Mansfield,suspicious_winner,Building Official,Housing Inspection,,8604874440,Housing Inspection,staff_directory,https://www.mansfieldct.gov/1899/Phone-Directory-Contacts,,,role_department_mismatch,suspicious_winner
+ct_mansfield,Mansfield,suspicious_winner,Finance Director,Mansfield Elementary School,mesoffice@mansfieldct.org,8604296316,Mansfield Elementary School,staff_directory,https://www.mansfieldct.gov/1899/Phone-Directory-Contacts,,,role_department_mismatch,suspicious_winner
+ct_oxford,Oxford,suspicious_winner,Assessor,,,2038882543,Tax Collector,department_page,https://www.oxford-ct.gov/1494/Tax-Collectors-Office-Advisory-Committee,,,role_department_mismatch,suspicious_winner
+ct_oxford,Oxford,suspicious_winner,Finance Director,,,2038286513,,other,https://www.oxford-ct.gov/1235/Finance,,,low_context,suspicious_winner
+ct_pomfret,Pomfret,crawl_diagnostic_zero_yield,,,,,,,https://www.pomfretct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_rocky_hill,Rocky Hill,suspicious_winner,Assessor,,,8602582700,,staff_directory,https://www.rockyhillct.gov/157/Departments,,,role_department_mismatch,suspicious_winner
+ct_warren,Warren,missing_role_groups_2plus,,,,,,,,executive; building; planning; finance,4,,normal_coverage_gap
+ct_warren,Warren,suspicious_winner,Assessor,,,8608687881,Tax Collector,department_page,https://www.warrenct.gov/tax-collector,,,role_department_mismatch,suspicious_winner
+ct_wilton,Wilton,crawl_diagnostic_zero_yield,,,,,,,https://www.wiltonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
+ct_woodstock,Woodstock,crawl_diagnostic_zero_yield,,,,,,,https://www.woodstockct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town

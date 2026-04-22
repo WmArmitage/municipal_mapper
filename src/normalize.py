@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import hashlib
 import re
 from urllib.parse import urljoin, urlparse, urlunparse
+
+_SCIENTIFIC_NOTATION_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
+_TRAILING_ZERO_DECIMAL_RE = re.compile(r"^[+-]?\d+\.0+$")
 
 
 def make_id(prefix: str, *parts: str, length: int = 20) -> str:
@@ -61,3 +65,27 @@ def normalize_whitespace(value: str | None) -> str | None:
     cleaned = re.sub(r"\s+", " ", value).strip()
     return cleaned or None
 
+
+def safe_phone_str(value: object | None) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    if lowered in {"nan", "none", "null", "inf", "+inf", "-inf"}:
+        return ""
+    if _SCIENTIFIC_NOTATION_RE.fullmatch(text) or _TRAILING_ZERO_DECIMAL_RE.fullmatch(text):
+        return _numeric_text_to_plain(text) or ""
+    return text
+
+
+def _numeric_text_to_plain(text: str) -> str:
+    try:
+        decimal_value = Decimal(text)
+    except InvalidOperation:
+        return text
+    if not decimal_value.is_finite():
+        return ""
+    plain = format(decimal_value, "f")
+    if "." in plain:
+        plain = plain.rstrip("0").rstrip(".")
+    return plain

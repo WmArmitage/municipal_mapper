@@ -74,8 +74,9 @@ WITH ranked AS (
     ROW_NUMBER() OVER (
       PARTITION BY v.municipality_id, v.role_normalized
       ORDER BY
-        CASE WHEN v.email IS NOT NULL AND TRIM(v.email) <> '' THEN 1 ELSE 0 END DESC,
         CASE
+          WHEN COALESCE(c.suspicious_reason, '') = 'role_department_mismatch'
+          THEN 1
           WHEN v.role_normalized = 'Assessor'
                AND (
                    LOWER(COALESCE(v.source_url, '')) LIKE '%tax%'
@@ -97,8 +98,25 @@ WITH ranked AS (
                    OR LOWER(COALESCE(v.source_url, '')) LIKE '%building%'
                )
           THEN 1
+          WHEN v.role_normalized IN ('Finance Director', 'Treasurer')
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%school%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%finance%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%treasurer%'
+          THEN 1
+          WHEN v.role_normalized = 'Building Official'
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%school%'
+          THEN 1
+          WHEN v.role_normalized IN ('First Selectman', 'Mayor', 'Town Manager', 'Town Administrator')
+               AND LOWER(COALESCE(v.source_url, '')) LIKE '%board%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%selectmen%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%first-selectman%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%mayor%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%town-manager%'
+               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%administrator%'
+          THEN 1
           ELSE 0
         END ASC,
+        CASE WHEN v.email IS NOT NULL AND TRIM(v.email) <> '' THEN 1 ELSE 0 END DESC,
         CASE
           WHEN (v.email IS NULL OR TRIM(v.email) = '')
                AND LOWER(COALESCE(v.source_url, '')) LIKE '%directory.aspx%'

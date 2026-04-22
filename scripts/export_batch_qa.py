@@ -16,6 +16,7 @@ from src.batch_manifest import (
     load_manifest_rows,
     load_seed_platform_map,
 )
+from src.normalize import safe_phone_str
 
 ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "executive": (
@@ -281,8 +282,14 @@ def write_csv(path: Path, rows: list[dict], fieldnames: tuple[str, ...] | list[s
         writer = csv.DictWriter(handle, fieldnames=list(fieldnames))
         writer.writeheader()
         for row in rows:
-            writer.writerow({key: row.get(key) for key in fieldnames})
+            writer.writerow({key: _format_csv_value(key, row.get(key)) for key in fieldnames})
     return len(rows)
+
+
+def _format_csv_value(key: str, value: object) -> object:
+    if key in {"phone", "phone_ext"}:
+        return safe_phone_str(value)
+    return value
 
 
 def object_exists(conn, name: str, object_type: str) -> bool:
@@ -339,6 +346,7 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
           COALESCE(is_likely_noise, 0) AS is_likely_noise,
           CASE
             WHEN (email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = '') THEN 'missing_email_and_phone'
+            WHEN NULLIF(TRIM(COALESCE(suspicious_reason, '')), '') IS NOT NULL THEN TRIM(suspicious_reason)
             WHEN (
                 role_normalized = 'Assessor'
                 AND LOWER(COALESCE(department, '')) NOT LIKE '%assessor%'
@@ -402,6 +410,7 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
         WHERE municipality_id IN ({placeholders(len(municipality_ids))})
           AND (
             ((email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = ''))
+            OR NULLIF(TRIM(COALESCE(suspicious_reason, '')), '') IS NOT NULL
             OR (
                 (
                     role_normalized = 'Assessor'

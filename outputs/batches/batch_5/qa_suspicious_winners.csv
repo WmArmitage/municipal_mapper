@@ -1,0 +1,9 @@
+municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
+ct_east_hampton,Finance Director,,,8602677548,,other,https://www.easthamptonct.gov/1216/Finance,0,low_context
+ct_east_hampton,Town Manager,Executive Assistant,csirois@easthamptonct.gov,8602674468,,other,https://www.easthamptonct.gov/1204/Town-Manager,0,chief_role_assistant_contamination
+ct_mansfield,Building Official,Housing Inspection,,8604874440,Housing Inspection,staff_directory,https://www.mansfieldct.gov/1899/Phone-Directory-Contacts,0,role_department_mismatch
+ct_mansfield,Finance Director,Mansfield Elementary School,mesoffice@mansfieldct.org,8604296316,Mansfield Elementary School,staff_directory,https://www.mansfieldct.gov/1899/Phone-Directory-Contacts,0,role_department_mismatch
+ct_oxford,Assessor,,,2038882543,Tax Collector,department_page,https://www.oxford-ct.gov/1494/Tax-Collectors-Office-Advisory-Committee,0,role_department_mismatch
+ct_oxford,Finance Director,,,2038286513,,other,https://www.oxford-ct.gov/1235/Finance,0,low_context
+ct_rocky_hill,Assessor,,,8602582700,,staff_directory,https://www.rockyhillct.gov/157/Departments,0,role_department_mismatch
+ct_warren,Assessor,,,8608687881,Tax Collector,department_page,https://www.warrenct.gov/tax-collector,0,role_department_mismatch

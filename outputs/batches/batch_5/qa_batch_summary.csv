@@ -1,0 +1,16 @@
+municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
+ct_greenwich,Greenwich,Fairfield County,143,71,6,11
+ct_wilton,Wilton,Fairfield County,0,0,0,0
+ct_east_windsor,East Windsor,Hartford County,0,0,0,0
+ct_rocky_hill,Rocky Hill,Hartford County,147,60,6,4
+ct_kent,Kent,Litchfield County,0,0,0,0
+ct_warren,Warren,Litchfield County,30,4,3,18
+ct_east_hampton,East Hampton,Middlesex County,73,37,7,2
+ct_madison,Madison,New Haven County,159,91,7,5
+ct_oxford,Oxford,New Haven County,99,40,7,7
+ct_lebanon,Lebanon,New London County,0,0,0,0
+ct_norwich,Norwich,New London County,188,90,6,3
+ct_voluntown,Voluntown,New London County,88,43,7,6
+ct_mansfield,Mansfield,Tolland County,199,81,7,2
+ct_pomfret,Pomfret,Windham County,0,0,0,0
+ct_woodstock,Woodstock,Windham County,0,0,0,0

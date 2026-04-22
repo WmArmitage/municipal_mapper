@@ -1,0 +1,16 @@
+municipality_id,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class
+ct_greenwich,batch_5,https://www.greenwichct.gov/,https://www.greenwichct.gov/,0,200,0,text/html,"Greenwich, CT | Official Website",120106,3149,50,9,171,0,1,ok
+ct_wilton,batch_5,https://www.wiltonct.gov/,https://www.wiltonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_east_windsor,batch_5,https://www.eastwindsor-ct.gov/,https://www.eastwindsor-ct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_rocky_hill,batch_5,https://www.rockyhillct.gov/,https://www.rockyhillct.gov/,0,200,0,text/html,"Rocky Hill, CT | Official Website",116938,709,50,5,183,0,1,ok
+ct_kent,batch_5,https://www.townofkentct.gov/,https://www.townofkentct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_warren,batch_5,https://www.warrenct.gov/,https://www.warrenct.gov/,0,200,0,text/html,Town of Warren CT |,132054,1113,50,75,30,1,1,ok
+ct_east_hampton,batch_5,https://www.easthamptonct.gov/,https://www.easthamptonct.gov/,0,200,0,text/html,"East Hampton, CT | Official Website",79301,927,50,2,97,0,1,ok
+ct_madison,batch_5,https://www.madisonct.org/,https://www.madisonct.org/,0,200,0,text/html,"Madison, CT | Official Website",103437,1600,50,3,274,0,1,ok
+ct_oxford,batch_5,https://www.oxford-ct.gov/,https://www.oxford-ct.gov/,0,200,0,text/html,"Oxford, CT | Official Website",78161,745,50,2,142,0,1,ok
+ct_lebanon,batch_5,https://www.lebanonct.gov/,https://www.lebanonct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_norwich,batch_5,https://www.norwichct.gov/,https://www.norwichct.gov/,0,200,0,text/html,"Norwich, CT - Official Website | Official Website",116407,927,50,3,237,0,1,ok
+ct_voluntown,batch_5,https://www.voluntown.gov/,https://www.voluntown.gov/,0,200,0,text/html,"Voluntown, CT | Official Website",89136,263,31,5,112,0,1,ok
+ct_mansfield,batch_5,https://www.mansfieldct.gov/,https://www.mansfieldct.gov/,0,200,0,text/html,"Mansfield, CT | Official Website",155783,915,50,12,268,0,1,ok
+ct_pomfret,batch_5,https://www.pomfretct.gov/,https://www.pomfretct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
+ct_woodstock,batch_5,https://www.woodstockct.gov/,https://www.woodstockct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden

@@ -27,7 +27,7 @@ from src.discover import (
     select_high_value_links,
 )
 from src.http_client import FetchResult, candidate_sitemap_urls, create_session, fetch_url
-from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace
+from src.normalize import get_domain, make_id, normalize_url, normalize_whitespace, safe_phone_str
 from src.parsers import (
     classify_service_link,
     extract_contacts,
@@ -303,7 +303,8 @@ def process_text_extractions(
     merged_contacts: dict[tuple[str, ...], dict[str, str | float | None]] = {}
     for contact in extract_contacts(text, source_url, page_type=page_type):
         email = str(contact.get("email") or "").strip().lower()
-        phone = str(contact.get("phone") or "").strip()
+        phone = safe_phone_str(contact.get("phone"))
+        phone_ext = safe_phone_str(contact.get("phone_ext"))
         if not email and not phone:
             continue
 
@@ -320,7 +321,7 @@ def process_text_extractions(
             "email": email or None,
             "email_type": contact.get("email_type") or "unknown",
             "phone": phone or None,
-            "phone_ext": contact.get("phone_ext"),
+            "phone_ext": phone_ext or None,
             "address": address,
             "hours": hours,
             "source_context": source_context or None,

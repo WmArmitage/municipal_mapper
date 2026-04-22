@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.db import get_connection
+from src.normalize import safe_phone_str
 
 PUBLIC_SIGNAL_EXCLUDE_TYPES = {
     "crawl_error",
@@ -53,8 +54,18 @@ def export_query(conn, query: str, params: tuple, out_path: Path) -> int:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
-            writer.writerow(dict(row))
+            writer.writerow(_format_csv_row(dict(row)))
     return len(rows)
+
+
+def _format_csv_row(row: dict[str, object]) -> dict[str, object]:
+    out: dict[str, object] = {}
+    for key, value in row.items():
+        if key in {"phone", "phone_ext"}:
+            out[key] = safe_phone_str(value)
+        else:
+            out[key] = value
+    return out
 
 
 def export_table(conn, table_name: str, out_path: Path) -> int:
