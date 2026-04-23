@@ -29,12 +29,39 @@ REVIZE_DIRECT_PATHS = (
     "/staff-directory",
     "/directory",
 )
+REVIZE_PRIORITY_PATHS = (
+    "/staff_directory/index.php",
+    "/staff_directory_.php",
+    "/government/directory_of_services/index.php",
+    "/departments/index.php",
+    "/contact_us/index.php",
+)
 REVIZE_SECTION_ROOTS = (
     "/government/",
     "/departments/",
     "/town_hall/",
     "/city_hall/",
     "/administration/",
+)
+REVIZE_ROLE_DISCOVERY_TERMS = (
+    "assessor",
+    "tax collector",
+    "collector of revenue",
+    "town clerk",
+    "city clerk",
+    "building",
+    "zoning",
+    "inspection",
+    "planning",
+    "land use",
+    "finance",
+    "accounting",
+    "treasurer",
+    "town manager",
+    "town administrator",
+    "first selectman",
+    "selectmen",
+    "mayor",
 )
 REVIZE_SECTION_DIRECTORY_SUFFIXES = (
     "staff_directory.php",
@@ -252,6 +279,27 @@ REVIZE_REQUEST_HEADERS = {
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
 }
+REVIZE_PAGE_CLASS_ROUTE_ORDER = {
+    "staff_directory": 0,
+    "department_page": 1,
+    "contact_hub": 2,
+    "generic": 3,
+}
+REVIZE_PAGE_CLASS_PRIORITY_SCORE = {
+    "staff_directory": 120,
+    "department_page": 85,
+    "contact_hub": 45,
+    "generic": 15,
+}
+REVIZE_CANDIDATE_ORIGIN_BOOST = {
+    "priority_path": 25,
+    "harvested_link": 15,
+    "department_index_discovery": 12,
+    "direct_path": 10,
+    "section_enumeration": 8,
+    "section_root": 6,
+    "discovered_link": 5,
+}
 
 FetchFn = Callable[[str, str | None, dict[str, str] | None], FetchResult]
 
@@ -260,12 +308,12 @@ def build_revize_candidate_urls(
     municipality_homepage: str,
     harvested_links: Iterable[dict[str, str] | str] | None = None,
     max_candidates: int = REVIZE_MAX_GENERATED_CANDIDATES,
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     base = normalize_url(ensure_url_has_scheme(municipality_homepage))
     if not base:
         return []
     roots = _candidate_base_roots(base)
-    out: list[dict[str, str]] = []
+    out: list[dict[str, object]] = []
     seen: set[str] = set()
     base_domain = (get_domain(base) or "").lower()
 
@@ -279,16 +327,44 @@ def build_revize_candidate_urls(
             return
         if base_domain and not _is_internal_url(normalized, base_domain):
             return
+        candidate_page_class = classify_revize_page_class_for_url(
+            normalized,
+            source_kind=source_kind,
+            label="",
+            html_text="",
+        )
+        route_order = _revize_page_class_route_order(candidate_page_class)
+        priority_score = _revize_candidate_priority_score(
+            candidate_page_class,
+            source_kind=source_kind,
+            candidate_origin=candidate_origin,
+            url=normalized,
+            label="",
+        )
         seen.add(normalized)
         out.append(
             {
                 "url": normalized,
                 "source_kind": source_kind,
                 "candidate_origin": candidate_origin,
+                "candidate_page_class": candidate_page_class,
+                "candidate_route_order": route_order,
+                "candidate_priority_score": priority_score,
+                "priority_candidate": 1 if candidate_origin == "priority_path" else 0,
             }
         )
 
     for root in roots:
+        for path in REVIZE_PRIORITY_PATHS:
+            add(
+                _join_candidate_url(root, path),
+                _source_kind_from_path(path),
+                "priority_path",
+            )
+            if len(out) >= max_candidates:
+                break
+        if len(out) >= max_candidates:
+            break
         for path in REVIZE_DIRECT_PATHS:
             add(
                 _join_candidate_url(root, path),
@@ -333,7 +409,146 @@ def build_revize_candidate_urls(
                 continue
             add(normalized, _source_kind_from_link(normalized, label), "harvested_link")
 
+    return order_revize_candidates(out, max_candidates=max_candidates)
+
+
+def order_revize_candidates(
+    candidates: Iterable[dict[str, object]],
+    max_candidates: int = REVIZE_MAX_GENERATED_CANDIDATES,
+) -> list[dict[str, object]]:
+    indexed: list[tuple[int, dict[str, object]]] = [(idx, dict(candidate)) for idx, candidate in enumerate(candidates)]
+    indexed.sort(key=lambda item: _revize_candidate_sort_key(item[1], item[0]))
+    out: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for _, candidate in indexed:
+        normalized = normalize_url(str(candidate.get("url") or "")) or str(candidate.get("url") or "")
+        if not normalized or normalized in seen:
+            continue
+        candidate["url"] = normalized
+        if not candidate.get("candidate_page_class"):
+            candidate["candidate_page_class"] = classify_revize_page_class_for_url(
+                normalized,
+                source_kind=str(candidate.get("source_kind") or ""),
+                label=str(candidate.get("label") or ""),
+                html_text="",
+            )
+        if "candidate_route_order" not in candidate:
+            candidate["candidate_route_order"] = _revize_page_class_route_order(
+                str(candidate.get("candidate_page_class") or "generic")
+            )
+        if "candidate_priority_score" not in candidate:
+            candidate["candidate_priority_score"] = _revize_candidate_priority_score(
+                str(candidate.get("candidate_page_class") or "generic"),
+                source_kind=str(candidate.get("source_kind") or ""),
+                candidate_origin=str(candidate.get("candidate_origin") or ""),
+                url=normalized,
+                label=str(candidate.get("label") or ""),
+            )
+        seen.add(normalized)
+        out.append(candidate)
+        if len(out) >= max_candidates:
+            break
     return out
+
+
+def classify_revize_page_class_for_url(
+    url: str,
+    source_kind: str = "",
+    label: str = "",
+    html_text: str = "",
+) -> str:
+    lowered_url = (url or "").lower()
+    lowered_blob = (normalize_whitespace(_extract_text_blob(html_text)) or "").lower()
+    lowered_label = (normalize_whitespace(label) or "").lower()
+    lowered_source_kind = (source_kind or "").lower()
+    combined = " ".join(part for part in (lowered_url, lowered_blob, lowered_label, lowered_source_kind) if part)
+
+    if any(token in combined for token in ("staff_directory", "staff-directory", "staff contacts", "staff directory")):
+        return "staff_directory"
+    if (
+        "/departments/" in lowered_url
+        or "/departments/index" in lowered_url
+        or "department_page" in lowered_source_kind
+        or "breadcrumb" in lowered_blob and "departments" in lowered_blob
+    ):
+        return "department_page"
+    if any(token in combined for token in ("contact_us", "directory_of_services", "/contact", "contact us", "services")):
+        return "contact_hub"
+    return "generic"
+
+
+def score_revize_page_class(page_class: str) -> float:
+    normalized = (page_class or "").strip().lower()
+    if normalized == "staff_directory":
+        return 1.0
+    if normalized == "department_page":
+        return 0.75
+    if normalized == "contact_hub":
+        return 0.4
+    return 0.2
+
+
+def _revize_page_class_route_order(page_class: str) -> int:
+    normalized = (page_class or "").strip().lower()
+    return int(REVIZE_PAGE_CLASS_ROUTE_ORDER.get(normalized, REVIZE_PAGE_CLASS_ROUTE_ORDER["generic"]))
+
+
+def _revize_candidate_priority_score(
+    page_class: str,
+    source_kind: str,
+    candidate_origin: str,
+    url: str,
+    label: str,
+) -> int:
+    normalized_page_class = (page_class or "").strip().lower() or "generic"
+    base_score = int(REVIZE_PAGE_CLASS_PRIORITY_SCORE.get(normalized_page_class, REVIZE_PAGE_CLASS_PRIORITY_SCORE["generic"]))
+    origin_boost = int(REVIZE_CANDIDATE_ORIGIN_BOOST.get((candidate_origin or "").strip().lower(), 0))
+    source_kind_lower = (source_kind or "").lower()
+    label_blob = f"{(url or '').lower()} {(label or '').lower()} {source_kind_lower}"
+    keyword_boost = 0
+    if normalized_page_class == "staff_directory":
+        keyword_boost += 6
+    if any(token in label_blob for token in REVIZE_ROLE_DISCOVERY_TERMS):
+        keyword_boost += 10
+    return base_score + origin_boost + keyword_boost
+
+
+def _revize_candidate_sort_key(candidate: dict[str, object], index: int) -> tuple[int, int, int]:
+    page_class = str(candidate.get("candidate_page_class") or "")
+    route_order = _revize_page_class_route_order(page_class)
+    priority_score = _coerce_int(candidate.get("candidate_priority_score"))
+    return (route_order, -priority_score, index)
+
+
+def _enqueue_revize_candidate(
+    queue: deque[dict[str, object]],
+    candidate: dict[str, object],
+) -> None:
+    candidate_row = dict(candidate)
+    candidate_row["candidate_page_class"] = candidate_row.get("candidate_page_class") or classify_revize_page_class_for_url(
+        str(candidate_row.get("url") or ""),
+        source_kind=str(candidate_row.get("source_kind") or ""),
+        label=str(candidate_row.get("label") or ""),
+        html_text="",
+    )
+    candidate_row["candidate_route_order"] = _revize_page_class_route_order(str(candidate_row.get("candidate_page_class") or "generic"))
+    candidate_row["candidate_priority_score"] = _coerce_int(candidate_row.get("candidate_priority_score")) or _revize_candidate_priority_score(
+        str(candidate_row.get("candidate_page_class") or "generic"),
+        source_kind=str(candidate_row.get("source_kind") or ""),
+        candidate_origin=str(candidate_row.get("candidate_origin") or ""),
+        url=str(candidate_row.get("url") or ""),
+        label=str(candidate_row.get("label") or ""),
+    )
+    candidate_key = _revize_candidate_sort_key(candidate_row, -1)
+    inserted = False
+    for idx, existing in enumerate(queue):
+        existing_key = _revize_candidate_sort_key(existing, idx)
+        if candidate_key < existing_key:
+            queue.insert(idx, candidate_row)
+            inserted = True
+            break
+    if not inserted:
+        queue.append(candidate_row)
 
 
 def classify_revize_page(
@@ -388,6 +603,19 @@ def classify_revize_page(
     read_more_hits = lowered_blob.count("read more")
     if read_more_hits:
         signals.append("text:read_more")
+    breadcrumb_department_hits = 1 if "departments" in lowered_blob and (" > " in lowered_blob or "breadcrumb" in lowered_blob) else 0
+    if breadcrumb_department_hits:
+        signals.append("context:department_breadcrumb")
+    contact_hub_hits = 0
+    if any(token in lowered_url for token in ("contact_us", "directory_of_services")):
+        contact_hub_hits += 2
+        signals.append("url:contact_hub")
+    if "contact us" in lowered_blob:
+        contact_hub_hits += 1
+        signals.append("text:contact_us")
+    if "directory of services" in lowered_blob:
+        contact_hub_hits += 1
+        signals.append("text:directory_of_services")
 
     source_type = "unknown"
     if sidebar_staff_hits >= 1:
@@ -427,10 +655,35 @@ def classify_revize_page(
             )
         )
 
+    page_class = classify_revize_page_class_for_url(
+        url=url,
+        source_kind=source_type,
+        label="",
+        html_text=html_text,
+    )
+    if header_hits >= 2 or sidebar_staff_hits >= 1:
+        page_class = "staff_directory"
+    elif page_class != "staff_directory" and (
+        "/departments/" in lowered_url
+        or breadcrumb_department_hits >= 1
+        or (department_section_hits >= 1 and (contact_card_hits >= 1 or inline_staff_hits >= 1 or labeled_staff_hits >= 1))
+    ):
+        page_class = "department_page"
+    elif page_class not in {"staff_directory", "department_page"} and (
+        contact_hub_hits >= 2
+        or ("contact" in lowered_url and profile_block_hits <= 1 and header_hits <= 1 and sidebar_staff_hits == 0)
+    ):
+        page_class = "contact_hub"
+    elif not matched:
+        page_class = "generic"
+    page_priority_score = score_revize_page_class(page_class)
+
     return {
         "page_kind": "staff_directory_or_profile" if matched else "unknown",
         "signals": sorted(set(signals)),
         "source_type": source_type,
+        "page_class": page_class,
+        "page_priority_score": page_priority_score,
         "sidebar_staff_hits": sidebar_staff_hits,
         "contact_card_hits": contact_card_hits,
         "inline_staff_hits": inline_staff_hits,
@@ -438,6 +691,8 @@ def classify_revize_page(
         "header_hits": header_hits,
         "profile_block_hits": profile_block_hits,
         "department_section_hits": department_section_hits,
+        "breadcrumb_department_hits": breadcrumb_department_hits,
+        "contact_hub_hits": contact_hub_hits,
         "key_value_hits": key_value_hits,
         "read_more_hits": read_more_hits,
     }
@@ -1070,7 +1325,7 @@ def run_revize_strategy_for_municipality(
         harvested_links=harvested_links,
         max_candidates=max_generated_candidates,
     )
-    queue: deque[dict[str, str]] = deque(initial_candidates)
+    queue: deque[dict[str, object]] = deque(initial_candidates)
     seen_urls: set[str] = set()
     attempted_rows: list[dict[str, object]] = []
     matched_urls: list[str] = []
@@ -1081,13 +1336,24 @@ def run_revize_strategy_for_municipality(
     counters = {
         "candidate_urls_generated_count": len(initial_candidates),
         "candidate_urls_attempted_count": 0,
+        "revize_priority_candidates_generated": sum(
+            1 for candidate in initial_candidates if _coerce_int(candidate.get("priority_candidate")) == 1
+        ),
+        "revize_priority_candidates_fetched": 0,
         "http_responses_received_count": 0,
         "pages_fetched_with_body_count": 0,
         "pages_classified_detected_count": 0,
+        "revize_staff_directory_pages_found": 0,
+        "revize_department_pages_found": 0,
+        "revize_contact_hub_pages_found": 0,
+        "revize_generic_pages_used": 0,
         "rows_extracted_total": 0,
         "rows_normalized_seen": 0,
         "rows_normalized_kept": 0,
         "rows_normalized_rejected": 0,
+        "revize_rows_from_staff_directory": 0,
+        "revize_rows_from_department_pages": 0,
+        "revize_rows_from_contact_hubs": 0,
         "sidebar_staff_blocks_found": 0,
         "sidebar_staff_contacts_extracted": 0,
         "department_contact_blocks_found": 0,
@@ -1128,6 +1394,8 @@ def run_revize_strategy_for_municipality(
         if not fetch_row:
             continue
         counters["candidate_urls_attempted_count"] += 1
+        if _coerce_int(candidate.get("priority_candidate")) == 1:
+            counters["revize_priority_candidates_fetched"] += 1
         text = str(fetch_row.get("text") or "")
         final_url = str(fetch_row.get("final_url") or request_url)
         status_code = _coerce_int(fetch_row.get("status_code")) or None
@@ -1143,6 +1411,16 @@ def run_revize_strategy_for_municipality(
             status_code=status_code,
         )
         page_kind = str(page_classification.get("page_kind") or "unknown")
+        page_class = str(page_classification.get("page_class") or "generic")
+        page_priority_score = float(page_classification.get("page_priority_score") or 0.0)
+        if page_class == "staff_directory":
+            counters["revize_staff_directory_pages_found"] += 1
+        elif page_class == "department_page":
+            counters["revize_department_pages_found"] += 1
+        elif page_class == "contact_hub":
+            counters["revize_contact_hub_pages_found"] += 1
+        else:
+            counters["revize_generic_pages_used"] += 1
         detected = page_kind == "staff_directory_or_profile"
         if detected:
             counters["pages_classified_detected_count"] += 1
@@ -1156,6 +1434,8 @@ def run_revize_strategy_for_municipality(
                 html_text=text,
                 source_url=final_url,
                 source_kind=str(fetch_row.get("source_kind") or "unknown"),
+                page_class=page_class,
+                page_priority_score=page_priority_score,
             )
             suppression_reasons.update(local_suppression)
             counters["sidebar_staff_blocks_found"] += _coerce_int(per_page_metrics.get("sidebar_staff_blocks_found"))
@@ -1211,6 +1491,15 @@ def run_revize_strategy_for_municipality(
             counters["rows_normalized_seen"] += _coerce_int(per_page_metrics.get("rows_normalized_seen"))
             counters["rows_normalized_kept"] += _coerce_int(per_page_metrics.get("rows_normalized_kept"))
             counters["rows_normalized_rejected"] += _coerce_int(per_page_metrics.get("rows_normalized_rejected"))
+            counters["revize_rows_from_staff_directory"] += _coerce_int(
+                per_page_metrics.get("revize_rows_from_staff_directory")
+            )
+            counters["revize_rows_from_department_pages"] += _coerce_int(
+                per_page_metrics.get("revize_rows_from_department_pages")
+            )
+            counters["revize_rows_from_contact_hubs"] += _coerce_int(
+                per_page_metrics.get("revize_rows_from_contact_hubs")
+            )
             for row in list(per_page_metrics.get("extracted_rows_sample") or []):
                 if len(extracted_rows_sample) >= 25:
                     break
@@ -1229,6 +1518,8 @@ def run_revize_strategy_for_municipality(
                         "url": final_url,
                         "source_kind": str(fetch_row.get("source_kind") or "unknown"),
                         "extraction_source_type": str(page_classification.get("source_type") or "unknown"),
+                        "page_class": page_class,
+                        "page_priority_score": page_priority_score,
                         "contacts_extracted": len(extracted_rows),
                         "source_type_counts": source_type_counts,
                         "metrics": per_page_metrics,
@@ -1244,7 +1535,18 @@ def run_revize_strategy_for_municipality(
                 discovered_url = normalize_url(str(discovered.get("url") or "")) or str(discovered.get("url") or "")
                 if not discovered_url or discovered_url in seen_urls:
                     continue
-                queue.append(discovered)
+                _enqueue_revize_candidate(queue, discovered)
+
+            if page_class == "department_page" and _is_revize_department_index_url(final_url):
+                for discovered in discover_revize_department_candidates(
+                    html_text=text,
+                    base_url=final_url,
+                    max_candidates=REVIZE_MAX_DISCOVERED_PROFILE_PAGES,
+                ):
+                    discovered_url = normalize_url(str(discovered.get("url") or "")) or str(discovered.get("url") or "")
+                    if not discovered_url or discovered_url in seen_urls:
+                        continue
+                    _enqueue_revize_candidate(queue, discovered)
 
         fetch_outcome = _classify_attempt_outcome(
             status_code=status_code,
@@ -1264,8 +1566,13 @@ def run_revize_strategy_for_municipality(
                 "http_response_received": bool(fetch_row.get("http_response_received")),
                 "source_kind": str(fetch_row.get("source_kind") or "unknown"),
                 "candidate_origin": str(fetch_row.get("candidate_origin") or ""),
+                "candidate_page_class": str(candidate.get("candidate_page_class") or ""),
+                "candidate_priority_score": _coerce_int(candidate.get("candidate_priority_score")),
+                "priority_candidate": _coerce_int(candidate.get("priority_candidate")),
                 "directory_match": detected,
                 "page_kind": page_kind,
+                "page_class": page_class,
+                "page_priority_score": page_priority_score,
                 "detection_signals": list(page_classification.get("signals") or []),
                 "extraction_source_type": str(page_classification.get("source_type") or "unknown"),
                 "response_body_length": len(text),
@@ -1315,6 +1622,7 @@ def run_revize_strategy_for_municipality(
 
     deduped_contacts = _dedupe_contact_list(all_contacts)
     extraction_source_counts = _count_extraction_sources(deduped_contacts)
+    page_class_source_counts = _count_page_class_sources(deduped_contacts)
     attempted_urls = [
         str(row.get("request_url") or "")
         for row in attempted_rows
@@ -1324,6 +1632,7 @@ def run_revize_strategy_for_municipality(
 
     return {
         "candidate_urls_generated": [str(item.get("url") or "") for item in initial_candidates],
+        "candidate_rows_generated": initial_candidates,
         **counters,
         "attempted_count": len(attempted_rows),
         "candidate_urls_attempted_count": counters["candidate_urls_attempted_count"],
@@ -1335,6 +1644,7 @@ def run_revize_strategy_for_municipality(
         "contacts": deduped_contacts,
         "contacts_total": len(deduped_contacts),
         "extraction_source_counts": extraction_source_counts,
+        "page_class_source_counts": page_class_source_counts,
         "source_type_counts": extraction_source_counts,
         "suspicious_reduction_counts": dict(sorted(suppression_reasons.items())),
         "suppressed_vacancy_rows": _coerce_int(suppression_reasons.get("suppressed_vacancy_rows")),
@@ -1349,7 +1659,7 @@ def discover_revize_profile_candidates(
     html_text: str,
     base_url: str,
     max_candidates: int = REVIZE_MAX_DISCOVERED_PROFILE_PAGES,
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     if BeautifulSoup is None:
         return []
     try:
@@ -1357,7 +1667,7 @@ def discover_revize_profile_candidates(
     except Exception:
         return []
 
-    out: list[dict[str, str]] = []
+    out: list[dict[str, object]] = []
     seen: set[str] = set()
     for anchor in soup.find_all("a", href=True):
         href = normalize_url(str(anchor.get("href") or ""), base_url=base_url)
@@ -1367,22 +1677,115 @@ def discover_revize_profile_candidates(
         if not _looks_revize_contact_like(href, label):
             continue
         seen.add(href)
+        source_kind = _source_kind_from_link(href, label)
+        page_class = classify_revize_page_class_for_url(
+            url=href,
+            source_kind=source_kind,
+            label=label,
+            html_text="",
+        )
         out.append(
             {
                 "url": href,
-                "source_kind": _source_kind_from_link(href, label),
+                "source_kind": source_kind,
                 "candidate_origin": "discovered_link",
+                "candidate_page_class": page_class,
+                "candidate_route_order": _revize_page_class_route_order(page_class),
+                "candidate_priority_score": _revize_candidate_priority_score(
+                    page_class=page_class,
+                    source_kind=source_kind,
+                    candidate_origin="discovered_link",
+                    url=href,
+                    label=label,
+                ),
+                "priority_candidate": 0,
             }
         )
         if len(out) >= max_candidates:
             break
-    return out
+    return order_revize_candidates(out, max_candidates=max_candidates)
+
+
+def discover_revize_department_candidates(
+    html_text: str,
+    base_url: str,
+    max_candidates: int = REVIZE_MAX_DISCOVERED_PROFILE_PAGES,
+) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def add_candidate(href: str, label: str) -> None:
+        nonlocal out
+        if len(out) >= max_candidates:
+            return
+        normalized_href = normalize_url(href, base_url=base_url)
+        if not normalized_href or normalized_href in seen:
+            return
+        lowered_blob = f"{normalized_href.lower()} {label.lower()}"
+        role_keyword_hit = any(term in lowered_blob for term in REVIZE_ROLE_DISCOVERY_TERMS)
+        department_like_url = "/departments/" in normalized_href.lower() or "/government/" in normalized_href.lower()
+        if not role_keyword_hit and not department_like_url:
+            return
+        source_kind = _source_kind_from_link(normalized_href, label) or "department_page"
+        page_class = classify_revize_page_class_for_url(
+            url=normalized_href,
+            source_kind=source_kind,
+            label=label,
+            html_text="",
+        )
+        if page_class == "generic":
+            page_class = "department_page"
+        seen.add(normalized_href)
+        score = _revize_candidate_priority_score(
+            page_class=page_class,
+            source_kind=source_kind,
+            candidate_origin="department_index_discovery",
+            url=normalized_href,
+            label=label,
+        )
+        if role_keyword_hit:
+            score += 8
+        out.append(
+            {
+                "url": normalized_href,
+                "source_kind": source_kind,
+                "candidate_origin": "department_index_discovery",
+                "candidate_page_class": page_class,
+                "candidate_route_order": _revize_page_class_route_order(page_class),
+                "candidate_priority_score": score,
+                "priority_candidate": 0,
+            }
+        )
+
+    if BeautifulSoup is None:
+        for anchor_match in re.finditer(
+            r"(?is)<a[^>]*href\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))[^>]*>(.*?)</a>",
+            html_text or "",
+        ):
+            href_value = anchor_match.group(1) or anchor_match.group(2) or anchor_match.group(3) or ""
+            label_value = normalize_whitespace(_strip_tags(anchor_match.group(4) or "")) or ""
+            add_candidate(href_value, label_value)
+            if len(out) >= max_candidates:
+                break
+        return order_revize_candidates(out, max_candidates=max_candidates)
+
+    try:
+        soup = BeautifulSoup(html_text or "", "html.parser")
+    except Exception:
+        return []
+    for anchor in soup.find_all("a", href=True):
+        add_candidate(str(anchor.get("href") or ""), normalize_whitespace(anchor.get_text(" ", strip=True)) or "")
+        if len(out) >= max_candidates:
+            break
+    return order_revize_candidates(out, max_candidates=max_candidates)
 
 
 def _extract_revize_contacts_with_diagnostics(
     html_text: str,
     source_url: str,
     source_kind: str,
+    page_class: str = "generic",
+    page_priority_score: float = 0.0,
 ) -> tuple[list[dict[str, str | float | None]], Counter[str], dict[str, int], dict[str, object]]:
     sanitized_html_text, soup, structural_counts = _sanitize_revize_html(html_text)
     page_context = _build_page_context(html_text=sanitized_html_text, source_url=source_url, soup=soup)
@@ -1425,6 +1828,8 @@ def _extract_revize_contacts_with_diagnostics(
         for row in extracted:
             if not normalize_whitespace(str(row.get("department") or "")):
                 row["department"] = inferred_department
+            row["revize_page_class"] = page_class
+            row["revize_page_priority_score"] = page_priority_score
 
     if not extracted:
         classified = classify_revize_page(html_text=sanitized_html_text, url=source_url)
@@ -1432,7 +1837,15 @@ def _extract_revize_contacts_with_diagnostics(
         for row in extract_contacts(sanitized_html_text, source_url, page_type="directory_page"):
             candidate = dict(row)
             candidate["revize_source_type"] = fallback_source_type
+            candidate["revize_page_class"] = page_class
+            candidate["revize_page_priority_score"] = page_priority_score
             extracted.append(candidate)
+
+    for row in extracted:
+        if not row.get("revize_page_class"):
+            row["revize_page_class"] = page_class
+        if row.get("revize_page_priority_score") in (None, ""):
+            row["revize_page_priority_score"] = page_priority_score
 
     block_classification_counts = {
         "person_block": 0,
@@ -1519,6 +1932,11 @@ def _extract_revize_contacts_with_diagnostics(
         "revize_split_text_merged": _coerce_int(reduction_counts.get("revize_split_text_merged")),
         "revize_phone_extensions_parsed": _coerce_int(reduction_counts.get("revize_phone_extensions_parsed")),
         "revize_phone_string_preserved": _coerce_int(reduction_counts.get("revize_phone_string_preserved")),
+        "revize_rows_from_staff_directory": normalized_kept_count if page_class == "staff_directory" else 0,
+        "revize_rows_from_department_pages": normalized_kept_count if page_class == "department_page" else 0,
+        "revize_rows_from_contact_hubs": normalized_kept_count if page_class == "contact_hub" else 0,
+        "revize_page_class": page_class,
+        "revize_page_priority_score": page_priority_score,
         "extracted_rows_sample": extracted_rows_sample,
         "normalized_rows_sample": normalized_rows_sample,
         "rejected_rows_sample": rejected_rows_sample,
@@ -1528,7 +1946,7 @@ def _extract_revize_contacts_with_diagnostics(
 
 def _fetch_revize_candidate(
     municipality_homepage: str,
-    candidate: dict[str, str],
+    candidate: dict[str, object],
     timeout: int,
     session,
     request_headers: dict[str, str] | None,
@@ -1565,6 +1983,9 @@ def _fetch_revize_candidate(
         "has_body": bool(text.strip()),
         "source_kind": str(candidate.get("source_kind") or "unknown"),
         "candidate_origin": str(candidate.get("candidate_origin") or ""),
+        "candidate_page_class": str(candidate.get("candidate_page_class") or ""),
+        "candidate_priority_score": _coerce_int(candidate.get("candidate_priority_score")),
+        "priority_candidate": _coerce_int(candidate.get("priority_candidate")),
         "text": text,
         "page_title": _extract_html_title(text),
     }
@@ -1591,12 +2012,20 @@ def _join_candidate_url(base_root: str, path: str) -> str:
 
 def _source_kind_from_path(path: str) -> str:
     lowered = (path or "").lower()
+    if "directory_of_services" in lowered:
+        return "directory_of_services"
+    if "departments/index" in lowered:
+        return "department_index_page"
     if "staff_directory.php" in lowered:
         return "staff_directory_php"
+    if "staff_directory_.php" in lowered:
+        return "staff_directory_underscore_php"
     if "staff-directory" in lowered:
         return "staff_directory_path"
     if "directory" in lowered:
         return "directory_path"
+    if "contact_us" in lowered:
+        return "contact_hub_path"
     if "contact" in lowered:
         return "contact_path"
     return "unknown"
@@ -1607,6 +2036,17 @@ def _source_kind_from_link(url: str, label: str) -> str:
     if "read more" in lowered or "profile" in lowered:
         return "single_profile_page"
     return _source_kind_from_path(lowered)
+
+
+def _is_revize_department_index_url(url: str) -> bool:
+    lowered = (url or "").lower()
+    if not lowered:
+        return False
+    return (
+        "/departments/index" in lowered
+        or lowered.rstrip("/").endswith("/departments")
+        or "/departments/" in lowered and lowered.endswith("/index.php")
+    )
 
 
 def _looks_revize_contact_like(url: str, label: str) -> bool:
@@ -3130,7 +3570,14 @@ def _normalize_revize_contact_row(
     if department:
         department, _ = normalize_revize_fragmented_text(department)
     source_type = str(row.get("revize_source_type") or "unknown").strip() or "unknown"
-    source_context = _tag_revize_source_context(source_context, source_type)
+    page_class = str(row.get("revize_page_class") or "generic").strip().lower() or "generic"
+    page_priority_score = float(row.get("revize_page_priority_score") or score_revize_page_class(page_class))
+    source_context = _tag_revize_source_context(
+        source_context,
+        source_type,
+        page_class=page_class,
+        page_priority_score=page_priority_score,
+    )
     block_class = str(row.get("revize_block_class") or _classify_revize_row_block(row))
 
     if name and _is_vacancy_name(name):
@@ -3269,6 +3716,8 @@ def _normalize_revize_contact_row(
         "confidence": confidence,
         "revize_source_kind": source_kind,
         "revize_source_type": source_type or "unknown",
+        "revize_page_class": page_class,
+        "revize_page_priority_score": page_priority_score,
     }
     return normalized
 
@@ -3329,6 +3778,12 @@ def _merge_contacts(
         merged["email_type"] = right.get("email_type")
     if str(merged.get("revize_source_type") or "").strip().lower() in {"", "unknown"}:
         merged["revize_source_type"] = right.get("revize_source_type")
+    if str(merged.get("revize_page_class") or "").strip().lower() in {"", "generic"}:
+        merged["revize_page_class"] = right.get("revize_page_class")
+    merged["revize_page_priority_score"] = max(
+        float(left.get("revize_page_priority_score") or 0.0),
+        float(right.get("revize_page_priority_score") or 0.0),
+    )
     merged["confidence"] = max(float(left.get("confidence") or 0.0), float(right.get("confidence") or 0.0))
     return merged
 
@@ -3372,6 +3827,23 @@ def _count_extraction_sources(
             counts[source] += 1
         else:
             counts["unknown"] += 1
+    return counts
+
+
+def _count_page_class_sources(
+    contacts: list[dict[str, str | float | None]],
+) -> dict[str, int]:
+    counts = {
+        "staff_directory": 0,
+        "department_page": 0,
+        "contact_hub": 0,
+        "generic": 0,
+    }
+    for row in contacts:
+        page_class = str(row.get("revize_page_class") or "generic").strip().lower() or "generic"
+        if page_class not in counts:
+            page_class = "generic"
+        counts[page_class] += 1
     return counts
 
 
@@ -3540,9 +4012,20 @@ def _normalize_phone_ext_string(value: object) -> str:
     return digits[:6] if digits else ""
 
 
-def _tag_revize_source_context(source_context: str, source_type: str) -> str:
+def _tag_revize_source_context(
+    source_context: str,
+    source_type: str,
+    page_class: str = "generic",
+    page_priority_score: float = 0.0,
+) -> str:
     cleaned_context = normalize_whitespace(source_context) or ""
-    prefix = f"revize:{(source_type or 'unknown').strip().lower()}"
+    normalized_source_type = (source_type or "unknown").strip().lower()
+    normalized_page_class = (page_class or "generic").strip().lower()
+    prefix = (
+        f"revize:{normalized_source_type}"
+        f"|page_class={normalized_page_class}"
+        f"|page_priority={round(float(page_priority_score or 0.0), 2):.2f}"
+    )
     if cleaned_context:
         return f"{prefix} | {cleaned_context}"[:240]
     return prefix
@@ -3581,6 +4064,8 @@ def _trace_row_payload(row: dict[str, object]) -> dict[str, object]:
         "source_url": normalize_whitespace(str(row.get("source_url") or "")) or None,
         "source_context": normalize_whitespace(str(row.get("source_context") or "")) or None,
         "revize_source_type": normalize_whitespace(str(row.get("revize_source_type") or "")) or None,
+        "revize_page_class": normalize_whitespace(str(row.get("revize_page_class") or "")) or None,
+        "revize_page_priority_score": float(row.get("revize_page_priority_score") or 0.0),
         "confidence": float(row.get("confidence") or 0.0),
     }
 

@@ -187,6 +187,50 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "dir_tax")
 
+    def test_staff_directory_page_type_beats_contact_hub_for_same_role(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="staff_winner",
+            municipality_id="ct_revize",
+            role_normalized="Town Clerk",
+            role_family="town_clerk",
+            department="Town Clerk",
+            department_normalized="Town Clerk",
+            email="clerk@town.org",
+            phone="8601002000",
+            page_type="staff_directory",
+            source_url="https://town.example.org/staff_directory/index.php",
+            display_confidence=0.71,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="hub_candidate",
+            municipality_id="ct_revize",
+            role_normalized="Town Clerk",
+            role_family="town_clerk",
+            department="General Contact",
+            department_normalized="",
+            email="contact@town.org",
+            phone="8601002001",
+            page_type="contact_hub",
+            source_url="https://town.example.org/contact_us/index.php",
+            display_confidence=0.96,
+            suspicious_reason="contact_hub_candidate",
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_revize", "Town Clerk"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "staff_winner")
+
     def _build_postprocess_test_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

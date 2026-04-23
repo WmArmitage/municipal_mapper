@@ -154,6 +154,13 @@ WITH ranked AS (
           THEN 1
           ELSE 0
         END ASC,
+        CASE
+          WHEN LOWER(COALESCE(v.page_type, '')) = 'staff_directory' THEN 3
+          WHEN LOWER(COALESCE(v.page_type, '')) = 'department_page' THEN 2
+          WHEN LOWER(COALESCE(v.page_type, '')) = 'contact_hub' THEN 0
+          WHEN LOWER(COALESCE(v.page_type, '')) IN ('homepage', 'generic', 'other') THEN -1
+          ELSE 1
+        END DESC,
         CASE WHEN v.email IS NOT NULL AND TRIM(v.email) <> '' THEN 1 ELSE 0 END DESC,
         CASE
           WHEN (v.email IS NULL OR TRIM(v.email) = '')
@@ -362,6 +369,9 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
         ).fetchone()[0],
         "rows_in_vw_contacts_clean": 0,
         "rows_in_vw_best_role_per_town": 0,
+        "revize_winner_rows_from_staff_directory": 0,
+        "revize_winner_rows_from_department_pages": 0,
+        "revize_winner_rows_from_contact_hubs": 0,
         "revize_winner_penalty_non_person_name": conn.execute(
             f"""
             SELECT COUNT(*)
@@ -402,6 +412,48 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
     if view_exists(conn, "vw_best_role_per_town"):
         metrics["rows_in_vw_best_role_per_town"] = conn.execute(
             f"SELECT COUNT(*) FROM vw_best_role_per_town WHERE municipality_id IN ({where_in})",
+            params,
+        ).fetchone()[0]
+        metrics["revize_winner_rows_from_staff_directory"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_best_role_per_town v
+            JOIN contacts c ON c.contact_id = v.contact_id
+            WHERE v.municipality_id IN ({where_in})
+              AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+              AND (
+                LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=staff_directory%'
+                OR LOWER(COALESCE(c.page_type, '')) = 'staff_directory'
+              )
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_winner_rows_from_department_pages"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_best_role_per_town v
+            JOIN contacts c ON c.contact_id = v.contact_id
+            WHERE v.municipality_id IN ({where_in})
+              AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+              AND (
+                LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=department_page%'
+                OR LOWER(COALESCE(c.page_type, '')) = 'department_page'
+              )
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_winner_rows_from_contact_hubs"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_best_role_per_town v
+            JOIN contacts c ON c.contact_id = v.contact_id
+            WHERE v.municipality_id IN ({where_in})
+              AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+              AND (
+                LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=contact_hub%'
+                OR LOWER(COALESCE(c.page_type, '')) = 'contact_hub'
+              )
+            """,
             params,
         ).fetchone()[0]
     return {key: int(value) for key, value in metrics.items()}
@@ -588,6 +640,14 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
         f"""
         UPDATE contacts
         SET page_type = CASE
+            WHEN LOWER(COALESCE(source_context, '')) LIKE '%page_class=staff_directory%'
+            THEN 'staff_directory'
+            WHEN LOWER(COALESCE(source_context, '')) LIKE '%page_class=department_page%'
+            THEN 'department_page'
+            WHEN LOWER(COALESCE(source_context, '')) LIKE '%page_class=contact_hub%'
+            THEN 'contact_hub'
+            WHEN LOWER(COALESCE(source_context, '')) LIKE '%page_class=generic%'
+            THEN 'generic'
             WHEN LOWER(COALESCE(source_url, '')) LIKE '%staff%'
                  OR LOWER(COALESCE(source_url, '')) LIKE '%directory%'
                  OR LOWER(COALESCE(source_url, '')) LIKE '%departments%'
@@ -947,6 +1007,18 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
             THEN 'invalid_person_name'
             WHEN COALESCE(entity_type, '') <> 'person'
             THEN 'non_person_role_candidate'
+            WHEN LOWER(COALESCE(page_type, '')) = 'contact_hub'
+                 AND (
+                    COALESCE(entity_type, '') <> 'person'
+                    OR NULLIF(TRIM(COALESCE(name, '')), '') IS NULL
+                    OR NULLIF(TRIM(COALESCE(title, '')), '') IS NULL
+                    OR NULLIF(TRIM(COALESCE(department_normalized, '')), '') IS NULL
+                    OR (
+                        NULLIF(TRIM(COALESCE(email, '')), '') IS NULL
+                        AND NULLIF(TRIM(COALESCE(phone, '')), '') IS NULL
+                    )
+                 )
+            THEN 'contact_hub_candidate'
             WHEN LOWER(COALESCE(source_url, '')) LIKE '%contact%'
                  AND (
                     LOWER(COALESCE(title, '')) LIKE '%contact%'
@@ -981,6 +1053,13 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                 + CASE WHEN has_phone = 1 THEN 0.05 ELSE 0.0 END
                 + CASE WHEN NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL THEN 0.10 ELSE 0.0 END
                 + CASE WHEN NULLIF(TRIM(COALESCE(department_normalized, '')), '') IS NOT NULL THEN 0.05 ELSE 0.0 END
+                + CASE
+                    WHEN LOWER(COALESCE(page_type, '')) = 'staff_directory' THEN 0.12
+                    WHEN LOWER(COALESCE(page_type, '')) = 'department_page' THEN 0.06
+                    WHEN LOWER(COALESCE(page_type, '')) = 'contact_hub' THEN -0.10
+                    WHEN LOWER(COALESCE(page_type, '')) IN ('homepage', 'generic', 'other') THEN -0.12
+                    ELSE 0.0
+                  END
                 - CASE WHEN is_likely_noise = 1 THEN 0.25 ELSE 0.0 END
                 - CASE WHEN entity_type = 'unknown' THEN 0.10 ELSE 0.0 END
             )
@@ -1249,6 +1328,9 @@ def print_metrics(title: str, metrics: dict[str, int]) -> None:
     print(f"  contacts with role_normalized: {metrics['contacts_with_role_normalized']}")
     print(f"  rows in vw_contacts_clean: {metrics['rows_in_vw_contacts_clean']}")
     print(f"  rows in vw_best_role_per_town: {metrics['rows_in_vw_best_role_per_town']}")
+    print(f"  revize winner rows (staff_directory): {metrics['revize_winner_rows_from_staff_directory']}")
+    print(f"  revize winner rows (department_page): {metrics['revize_winner_rows_from_department_pages']}")
+    print(f"  revize winner rows (contact_hub): {metrics['revize_winner_rows_from_contact_hubs']}")
     print(f"  revize winner penalty (non-person name): {metrics['revize_winner_penalty_non_person_name']}")
     print(
         f"  revize winner penalty (role/department mismatch): {metrics['revize_winner_penalty_role_department_mismatch']}"

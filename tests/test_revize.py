@@ -31,8 +31,11 @@ from src.http_client import FetchResult
 from src.revize import (
     build_revize_candidate_urls,
     classify_revize_page,
+    classify_revize_page_class_for_url,
+    discover_revize_department_candidates,
     extract_revize_contacts,
     is_revize_staff_page,
+    score_revize_page_class,
     run_revize_strategy_for_municipality,
 )
 
@@ -696,6 +699,124 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertGreaterEqual(int(result.get("revize_office_contact_rows_classified") or 0), 1)
         self.assertGreaterEqual(int(result.get("revize_person_rows_classified") or 0), 1)
         self.assertGreaterEqual(int(result.get("revize_role_only_rows_demoted") or 0), 1)
+
+    def test_revize_page_classification_by_url_and_content(self) -> None:
+        staff_html = """
+        <html><body><h1>Staff Contacts</h1>
+        <table><tr><th>Name</th><th>Title</th><th>Phone</th><th>Email</th></tr></table>
+        </body></html>
+        """
+        staff_classified = classify_revize_page(
+            html_text=staff_html,
+            url="https://www.example.gov/staff_directory/index.php",
+            status_code=200,
+        )
+        self.assertEqual(str(staff_classified.get("page_class") or ""), "staff_directory")
+        self.assertGreater(float(staff_classified.get("page_priority_score") or 0.0), 0.9)
+
+        hub_html = """
+        <html><body><h1>Contact Us</h1><p>Directory of Services and office contacts.</p></body></html>
+        """
+        hub_classified = classify_revize_page(
+            html_text=hub_html,
+            url="https://www.example.gov/contact_us/index.php",
+            status_code=200,
+        )
+        self.assertEqual(str(hub_classified.get("page_class") or ""), "contact_hub")
+
+        dept_html = """
+        <html><body>
+        <nav class="breadcrumb">Home > Departments > Finance</nav>
+        <div class="contact-name">Jane Doe</div><div class="contact-position">Finance Director</div>
+        </body></html>
+        """
+        dept_classified = classify_revize_page(
+            html_text=dept_html,
+            url="https://www.example.gov/departments/finance/index.php",
+            status_code=200,
+        )
+        self.assertEqual(str(dept_classified.get("page_class") or ""), "department_page")
+
+    def test_revize_priority_candidate_ordering_prefers_staff_directory(self) -> None:
+        candidates = build_revize_candidate_urls(
+            municipality_homepage="https://www.example.gov",
+            harvested_links=[
+                {"url": "https://www.example.gov/contact_us/index.php", "label": "Contact Us"},
+                {"url": "https://www.example.gov/government/directory_of_services/index.php", "label": "Directory of Services"},
+                {"url": "https://www.example.gov/departments/finance/index.php", "label": "Finance Department"},
+            ],
+            max_candidates=40,
+        )
+        urls = [str(candidate.get("url") or "") for candidate in candidates]
+        staff_idx = urls.index("https://www.example.gov/staff_directory/index.php")
+        contact_idx = urls.index("https://www.example.gov/contact_us/index.php")
+        services_idx = urls.index("https://www.example.gov/government/directory_of_services/index.php")
+        self.assertLess(staff_idx, contact_idx)
+        self.assertLess(staff_idx, services_idx)
+        self.assertGreaterEqual(
+            sum(1 for candidate in candidates if int(candidate.get("priority_candidate") or 0) == 1),
+            3,
+        )
+
+    def test_department_index_discovery_finds_role_pages(self) -> None:
+        html = """
+        <html><body>
+          <a href="/departments/assessor/index.php">Assessor</a>
+          <a href="/departments/finance/index.php">Finance Department</a>
+          <a href="/parks/index.php">Parks</a>
+        </body></html>
+        """
+        discovered = discover_revize_department_candidates(
+            html_text=html,
+            base_url="https://www.example.gov/departments/index.php",
+            max_candidates=10,
+        )
+        urls = {str(row.get("url") or "") for row in discovered}
+        self.assertIn("https://www.example.gov/departments/assessor/index.php", urls)
+        self.assertIn("https://www.example.gov/departments/finance/index.php", urls)
+        self.assertTrue(all(str(row.get("candidate_page_class") or "") == "department_page" for row in discovered))
+
+    def test_page_class_scoring_order(self) -> None:
+        self.assertGreater(score_revize_page_class("staff_directory"), score_revize_page_class("department_page"))
+        self.assertGreater(score_revize_page_class("department_page"), score_revize_page_class("contact_hub"))
+        self.assertGreater(score_revize_page_class("contact_hub"), score_revize_page_class("generic"))
+
+    def test_revize_result_tracks_page_class_diagnostics(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Staff Contacts</h1>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Email</th></tr>
+              <tr><td>Jane Doe</td><td>Town Clerk</td><td>jane@example.gov</td></tr>
+            </table>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov",
+            harvested_links=["https://www.example.gov/staff_directory/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=10,
+        )
+        self.assertGreaterEqual(int(result.get("revize_staff_directory_pages_found") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_rows_from_staff_directory") or 0), 1)
+        self.assertIn("staff_directory", dict(result.get("page_class_source_counts") or {}))
+
+    def test_classify_revize_page_class_for_url_helper(self) -> None:
+        self.assertEqual(
+            classify_revize_page_class_for_url("https://www.example.gov/staff_directory/index.php"),
+            "staff_directory",
+        )
+        self.assertEqual(
+            classify_revize_page_class_for_url("https://www.example.gov/departments/finance/index.php"),
+            "department_page",
+        )
+        self.assertEqual(
+            classify_revize_page_class_for_url("https://www.example.gov/contact_us/index.php"),
+            "contact_hub",
+        )
 
 
 if __name__ == "__main__":

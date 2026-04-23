@@ -1068,6 +1068,24 @@ def crawl_single_municipality(
             "contacts_total": diagnostics["revize_contacts_extracted"],
             "extraction_source_counts": revize_result.get("extraction_source_counts") or {},
             "source_type_counts": source_type_counts,
+            "page_class_source_counts": revize_result.get("page_class_source_counts") or {},
+            "revize_priority_candidates_generated": _coerce_int(
+                revize_result.get("revize_priority_candidates_generated")
+            ),
+            "revize_priority_candidates_fetched": _coerce_int(
+                revize_result.get("revize_priority_candidates_fetched")
+            ),
+            "revize_staff_directory_pages_found": _coerce_int(
+                revize_result.get("revize_staff_directory_pages_found")
+            ),
+            "revize_department_pages_found": _coerce_int(revize_result.get("revize_department_pages_found")),
+            "revize_contact_hub_pages_found": _coerce_int(revize_result.get("revize_contact_hub_pages_found")),
+            "revize_generic_pages_used": _coerce_int(revize_result.get("revize_generic_pages_used")),
+            "revize_rows_from_staff_directory": _coerce_int(revize_result.get("revize_rows_from_staff_directory")),
+            "revize_rows_from_department_pages": _coerce_int(
+                revize_result.get("revize_rows_from_department_pages")
+            ),
+            "revize_rows_from_contact_hubs": _coerce_int(revize_result.get("revize_rows_from_contact_hubs")),
             "sidebar_staff_blocks_found": _coerce_int(revize_result.get("sidebar_staff_blocks_found")),
             "sidebar_staff_contacts_extracted": _coerce_int(revize_result.get("sidebar_staff_contacts_extracted")),
             "department_contact_blocks_found": _coerce_int(revize_result.get("department_contact_blocks_found")),
