@@ -247,6 +247,7 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "partial_deep_path_recovery",
     "deep_path_present_no_extract",
 }
+REQUIRED_POSTPROCESS_VIEWS = ("vw_contacts_clean", "vw_best_role_per_town")
 
 
 def parse_args() -> argparse.Namespace:
@@ -273,6 +274,11 @@ def parse_args() -> argparse.Namespace:
         default=str(ROOT / "outputs" / "batches"),
         help="Batch output base folder.",
     )
+    parser.add_argument(
+        "--allow-missing-postprocess",
+        action="store_true",
+        help="Allow QA export without required postprocess views (debug only).",
+    )
     return parser.parse_args()
 
 
@@ -298,6 +304,21 @@ def object_exists(conn, name: str, object_type: str) -> bool:
         (object_type, name),
     ).fetchone()
     return row is not None
+
+
+def ensure_required_postprocess_views(conn, strict: bool = True) -> list[str]:
+    missing = [
+        view_name
+        for view_name in REQUIRED_POSTPROCESS_VIEWS
+        if not object_exists(conn, view_name, "view")
+    ]
+    if missing and strict:
+        raise RuntimeError(
+            "Required postprocess views missing: "
+            + ", ".join(missing)
+            + ". Run scripts/postprocess_batch.py before exporting QA."
+        )
+    return missing
 
 
 def placeholders(size: int) -> str:
@@ -1264,6 +1285,15 @@ def main() -> None:
 
     conn = get_connection(args.db)
     try:
+        missing_postprocess_views = ensure_required_postprocess_views(
+            conn,
+            strict=not args.allow_missing_postprocess,
+        )
+        if missing_postprocess_views:
+            print(
+                "Warning: exporting QA with missing postprocess views: "
+                + ", ".join(missing_postprocess_views)
+            )
         raw_counts = fetch_count_map(conn, "contacts", municipality_ids)
         clean_counts = (
             fetch_count_map(conn, "vw_contacts_clean", municipality_ids)

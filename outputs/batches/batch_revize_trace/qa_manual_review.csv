@@ -1,15 +1,15 @@
 municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason,coverage_interpretation
-ct_avon,Avon,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_groton,Groton,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_guilford,Guilford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_killingly,Killingly,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_marlborough,Marlborough,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_avon,Avon,suspicious_winner,Finance Director,Tom DiStasio,,8604094344,"Avon, Ct",staff_directory,https://www.avonct.gov/departments/finance/index.php,,,role_department_mismatch,suspicious_winner
+ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,executive; assessment; clerk; planning; finance,5,,normal_coverage_gap
+ct_groton,Groton,missing_role_groups_2plus,,,,,,,,clerk; building; planning,3,,normal_coverage_gap
+ct_groton,Groton,suspicious_winner,Finance Director,Richard Freeman,rfreeman@groton-ct.gov,8604416690,,staff_directory,https://www.groton-ct.gov/departments/finance/index.php,,,role_department_mismatch,suspicious_winner
+ct_groton,Groton,suspicious_winner,Tax Collector,to request,,8604416660,Assessor,staff_directory,https://www.groton-ct.gov/departments/finance/tax.php,,,role_department_mismatch,suspicious_winner
+ct_groton,Groton,suspicious_winner,Town Manager,Lisa Hylton,lhylton@groton-ct.gov,8604416630,,staff_directory,https://www.groton-ct.gov/departments/twnmgr/index.php,,,chief_role_assistant_contamination,suspicious_winner
+ct_killingly,Killingly,suspicious_winner,Tax Collector,Main Street Killingly,,8607795331,Revenue Collector,staff_directory,https://www.killinglyct.gov/departments/,,,role_department_mismatch,suspicious_winner
 ct_new_canaan,New Canaan,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_north_haven,North Haven,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_plainfield,Plainfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_ridgefield,Ridgefield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_southington,Southington,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_north_haven,North Haven,missing_role_groups_2plus,,,,,,,,clerk; finance,2,,normal_coverage_gap
+ct_north_haven,North Haven,suspicious_winner,Assessor,,assessor@northhaven-ct.gov,2032395321,Education,homepage,https://www.northhaven-ct.gov/contact_us/index.php,,,role_department_mismatch,suspicious_winner
+ct_north_haven,North Haven,suspicious_winner,Building Official,,floriano.elio@northhaven-ct.gov,2032395321,Education,homepage,https://www.northhaven-ct.gov/contact_us/index.php,,,role_department_mismatch,suspicious_winner
+ct_plainfield,Plainfield,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; building; planning; finance,6,,normal_coverage_gap
 ct_stafford,Stafford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_watertown,Watertown,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_watertown,Watertown,missing_role_groups_2plus,,,,,,,,assessment; tax; clerk; building; finance,5,,normal_coverage_gap

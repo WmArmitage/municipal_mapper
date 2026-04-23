@@ -1,1 +1,8 @@
 municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
+ct_avon,Finance Director,Tom DiStasio,,8604094344,"Avon, Ct",staff_directory,https://www.avonct.gov/departments/finance/index.php,0,role_department_mismatch
+ct_groton,Finance Director,Richard Freeman,rfreeman@groton-ct.gov,8604416690,,staff_directory,https://www.groton-ct.gov/departments/finance/index.php,0,role_department_mismatch
+ct_groton,Tax Collector,to request,,8604416660,Assessor,staff_directory,https://www.groton-ct.gov/departments/finance/tax.php,0,role_department_mismatch
+ct_groton,Town Manager,Lisa Hylton,lhylton@groton-ct.gov,8604416630,,staff_directory,https://www.groton-ct.gov/departments/twnmgr/index.php,0,chief_role_assistant_contamination
+ct_killingly,Tax Collector,Main Street Killingly,,8607795331,Revenue Collector,staff_directory,https://www.killinglyct.gov/departments/,0,role_department_mismatch
+ct_north_haven,Assessor,,assessor@northhaven-ct.gov,2032395321,Education,homepage,https://www.northhaven-ct.gov/contact_us/index.php,0,role_department_mismatch
+ct_north_haven,Building Official,,floriano.elio@northhaven-ct.gov,2032395321,Education,homepage,https://www.northhaven-ct.gov/contact_us/index.php,0,role_department_mismatch

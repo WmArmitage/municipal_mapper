@@ -11,6 +11,38 @@ if str(ROOT) not in sys.path:
 
 from src.batch_manifest import load_manifest_rows, load_seed_platform_map
 
+REQUIRED_POSTPROCESS_OBJECTS = (
+    ("view", "vw_contacts_clean"),
+    ("view", "vw_best_role_per_town"),
+)
+
+REQUIRED_CONTACT_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("entity_type", "TEXT"),
+    ("role_normalized", "TEXT"),
+    ("role_family", "TEXT"),
+    ("department_normalized", "TEXT"),
+    ("has_name", "INTEGER DEFAULT 0"),
+    ("has_email", "INTEGER DEFAULT 0"),
+    ("has_phone", "INTEGER DEFAULT 0"),
+    ("has_department", "INTEGER DEFAULT 0"),
+    ("is_role_only", "INTEGER DEFAULT 0"),
+    ("page_type", "TEXT"),
+    ("is_likely_noise", "INTEGER DEFAULT 0"),
+    ("dedupe_key", "TEXT"),
+    ("record_rank", "INTEGER"),
+    ("semantic_confidence", "REAL"),
+    ("display_confidence", "REAL"),
+    ("suspicious_reason", "TEXT"),
+)
+
+REQUIRED_SERVICE_LINK_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("service_type", "TEXT"),
+    ("service_type_normalized", "TEXT"),
+    ("provider_normalized", "TEXT"),
+    ("is_external", "INTEGER DEFAULT 0"),
+    ("display_confidence", "REAL"),
+)
+
 
 FALLBACK_VW_CONTACTS_CLEAN_SQL = """
 CREATE VIEW vw_contacts_clean AS
@@ -210,6 +242,11 @@ def parse_args() -> argparse.Namespace:
         help="Seed CSV path containing municipality_id + platform columns.",
     )
     parser.add_argument("--db", default=str(ROOT / "database" / "master.sqlite"), help="SQLite DB path.")
+    parser.add_argument(
+        "--allow-missing-required-objects",
+        action="store_true",
+        help="Do not fail when required postprocess views are missing after refresh (debug only).",
+    )
     return parser.parse_args()
 
 
@@ -268,8 +305,25 @@ def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, 
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
 
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def ensure_postprocess_columns(conn: sqlite3.Connection) -> None:
+    if _table_exists(conn, "contacts"):
+        for column_name, column_type in REQUIRED_CONTACT_COLUMNS:
+            _ensure_column(conn, "contacts", column_name, column_type)
+    if _table_exists(conn, "service_links"):
+        for column_name, column_type in REQUIRED_SERVICE_LINK_COLUMNS:
+            _ensure_column(conn, "service_links", column_name, column_type)
+
+
 def ensure_hygiene_columns(conn: sqlite3.Connection) -> None:
-    _ensure_column(conn, "contacts", "suspicious_reason", "TEXT")
+    ensure_postprocess_columns(conn)
 
 
 def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict[str, int]:
@@ -1058,6 +1112,54 @@ def refresh_views(conn: sqlite3.Connection) -> None:
     conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
 
 
+def _count_rows_for_scope(conn: sqlite3.Connection, object_name: str, municipality_ids: list[str]) -> int:
+    if not municipality_ids:
+        return 0
+    where_in = placeholders(len(municipality_ids))
+    row = conn.execute(
+        f"SELECT COUNT(*) FROM {object_name} WHERE municipality_id IN ({where_in})",
+        tuple(municipality_ids),
+    ).fetchone()
+    return int(row[0] if row else 0)
+
+
+def verify_required_postprocess_objects(
+    conn: sqlite3.Connection,
+    municipality_ids: list[str],
+    strict: bool = True,
+) -> dict[str, int]:
+    missing: list[str] = []
+    for object_type, name in REQUIRED_POSTPROCESS_OBJECTS:
+        if not view_exists(conn, name):
+            missing.append(f"{object_type}:{name}")
+    if missing and strict:
+        missing_str = ", ".join(missing)
+        raise RuntimeError(
+            "Required postprocess objects missing after refresh: "
+            f"{missing_str}. Run postprocess against a DB with base tables and enrichment columns."
+        )
+
+    summary = {
+        "vw_contacts_clean_exists": 1 if view_exists(conn, "vw_contacts_clean") else 0,
+        "vw_best_role_per_town_exists": 1 if view_exists(conn, "vw_best_role_per_town") else 0,
+        "rows_in_vw_contacts_clean_scope": 0,
+        "rows_in_vw_best_role_per_town_scope": 0,
+    }
+    if summary["vw_contacts_clean_exists"]:
+        summary["rows_in_vw_contacts_clean_scope"] = _count_rows_for_scope(
+            conn,
+            "vw_contacts_clean",
+            municipality_ids,
+        )
+    if summary["vw_best_role_per_town_exists"]:
+        summary["rows_in_vw_best_role_per_town_scope"] = _count_rows_for_scope(
+            conn,
+            "vw_best_role_per_town",
+            municipality_ids,
+        )
+    return summary
+
+
 def print_metrics(title: str, metrics: dict[str, int]) -> None:
     print(title)
     print(f"  raw contacts: {metrics['raw_contacts']}")
@@ -1078,11 +1180,17 @@ def main() -> None:
 
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
+    verification: dict[str, int] = {}
     try:
-        ensure_hygiene_columns(conn)
+        ensure_postprocess_columns(conn)
         before = count_metrics(conn, municipality_ids)
         run_batch_enrichment(conn, municipality_ids)
         refresh_views(conn)
+        verification = verify_required_postprocess_objects(
+            conn,
+            municipality_ids,
+            strict=not args.allow_missing_required_objects,
+        )
         conn.commit()
         after = count_metrics(conn, municipality_ids)
     finally:
@@ -1090,6 +1198,11 @@ def main() -> None:
 
     print(f"Batch post-processing complete for {args.batch_id}")
     print(f"Municipalities in scope: {len(municipality_ids)}")
+    print("Postprocess verification:")
+    print(f"  vw_contacts_clean exists: {verification['vw_contacts_clean_exists']}")
+    print(f"  vw_best_role_per_town exists: {verification['vw_best_role_per_town_exists']}")
+    print(f"  vw_contacts_clean rows (scope): {verification['rows_in_vw_contacts_clean_scope']}")
+    print(f"  vw_best_role_per_town rows (scope): {verification['rows_in_vw_best_role_per_town_scope']}")
     print_metrics("Before:", before)
     print_metrics("After:", after)
 
