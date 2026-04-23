@@ -772,11 +772,18 @@ def run_revize_strategy_for_municipality(
         "http_responses_received_count": 0,
         "pages_fetched_with_body_count": 0,
         "pages_classified_detected_count": 0,
+        "rows_extracted_total": 0,
+        "rows_normalized_seen": 0,
+        "rows_normalized_kept": 0,
+        "rows_normalized_rejected": 0,
         "sidebar_staff_blocks_found": 0,
         "sidebar_staff_contacts_extracted": 0,
         "department_contact_blocks_found": 0,
         "department_contact_rows_extracted": 0,
     }
+    extracted_rows_sample: list[dict[str, object]] = []
+    normalized_rows_sample: list[dict[str, object]] = []
+    rejected_rows_sample: list[dict[str, object]] = []
 
     while queue and len(attempted_rows) < max_total_candidates:
         candidate = queue.popleft()
@@ -836,6 +843,22 @@ def run_revize_strategy_for_municipality(
             counters["department_contact_rows_extracted"] += _coerce_int(
                 per_page_metrics.get("department_contact_rows_extracted")
             )
+            counters["rows_extracted_total"] += _coerce_int(per_page_metrics.get("rows_extracted_total"))
+            counters["rows_normalized_seen"] += _coerce_int(per_page_metrics.get("rows_normalized_seen"))
+            counters["rows_normalized_kept"] += _coerce_int(per_page_metrics.get("rows_normalized_kept"))
+            counters["rows_normalized_rejected"] += _coerce_int(per_page_metrics.get("rows_normalized_rejected"))
+            for row in list(per_page_metrics.get("extracted_rows_sample") or []):
+                if len(extracted_rows_sample) >= 25:
+                    break
+                extracted_rows_sample.append(dict(row))
+            for row in list(per_page_metrics.get("normalized_rows_sample") or []):
+                if len(normalized_rows_sample) >= 25:
+                    break
+                normalized_rows_sample.append(dict(row))
+            for row in list(per_page_metrics.get("rejected_rows_sample") or []):
+                if len(rejected_rows_sample) >= 25:
+                    break
+                rejected_rows_sample.append(dict(row))
             if extracted_rows:
                 contacts_by_url.append(
                     {
@@ -922,6 +945,9 @@ def run_revize_strategy_for_municipality(
         "source_type_counts": extraction_source_counts,
         "suspicious_reduction_counts": dict(sorted(suppression_reasons.items())),
         "suppressed_vacancy_rows": _coerce_int(suppression_reasons.get("suppressed_vacancy_rows")),
+        "extracted_rows_sample": extracted_rows_sample,
+        "normalized_rows_sample": normalized_rows_sample,
+        "rejected_rows_sample": rejected_rows_sample,
         "revize_pass_produced_contacts": len(deduped_contacts) > 0,
     }
 
@@ -964,7 +990,7 @@ def _extract_revize_contacts_with_diagnostics(
     html_text: str,
     source_url: str,
     source_kind: str,
-) -> tuple[list[dict[str, str | float | None]], Counter[str], dict[str, int], dict[str, int]]:
+) -> tuple[list[dict[str, str | float | None]], Counter[str], dict[str, int], dict[str, object]]:
     soup = None
     if BeautifulSoup is not None:
         try:
@@ -1013,7 +1039,14 @@ def _extract_revize_contacts_with_diagnostics(
 
     reduction_counts: Counter[str] = Counter()
     deduped: dict[tuple[str, ...], dict[str, str | float | None]] = {}
+    normalized_kept_count = 0
+    extracted_rows_sample: list[dict[str, object]] = []
+    normalized_rows_sample: list[dict[str, object]] = []
+    rejected_rows_sample: list[dict[str, object]] = []
     for row in extracted:
+        if len(extracted_rows_sample) < 12:
+            extracted_rows_sample.append(_trace_row_payload(row))
+        before_reduction = Counter(reduction_counts)
         normalized = _normalize_revize_contact_row(
             row=row,
             source_url=source_url,
@@ -1021,7 +1054,17 @@ def _extract_revize_contacts_with_diagnostics(
             reduction_counts=reduction_counts,
         )
         if normalized is None:
+            if len(rejected_rows_sample) < 12:
+                rejected_rows_sample.append(
+                    {
+                        "row": _trace_row_payload(row),
+                        "drop_reason": _pick_row_drop_reason(before_reduction, reduction_counts),
+                    }
+                )
             continue
+        normalized_kept_count += 1
+        if len(normalized_rows_sample) < 12:
+            normalized_rows_sample.append(_trace_row_payload(normalized))
         key = _contact_dedupe_key(normalized)
         prior = deduped.get(key)
         deduped[key] = _merge_contacts(prior, normalized) if prior else normalized
@@ -1036,10 +1079,17 @@ def _extract_revize_contacts_with_diagnostics(
     )
     source_counts = _count_extraction_sources(contacts)
     metrics = {
+        "rows_extracted_total": len(extracted),
+        "rows_normalized_seen": len(extracted),
+        "rows_normalized_kept": normalized_kept_count,
+        "rows_normalized_rejected": max(0, len(extracted) - normalized_kept_count),
         "sidebar_staff_blocks_found": _count_sidebar_staff_blocks(html_text),
         "sidebar_staff_contacts_extracted": _coerce_int(source_counts.get("sidebar_staff")),
         "department_contact_blocks_found": _count_department_contact_blocks(html_text),
         "department_contact_rows_extracted": _coerce_int(source_counts.get("department_contact_block")),
+        "extracted_rows_sample": extracted_rows_sample,
+        "normalized_rows_sample": normalized_rows_sample,
+        "rejected_rows_sample": rejected_rows_sample,
     }
     return contacts, reduction_counts, source_counts, metrics
 
@@ -2289,6 +2339,33 @@ def _normalize_token(value: str) -> str:
     lowered = (value or "").lower()
     lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
     return re.sub(r"\s+", " ", lowered).strip()
+
+
+def _trace_row_payload(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "name": normalize_whitespace(str(row.get("name") or "")) or None,
+        "title": normalize_whitespace(str(row.get("title") or "")) or None,
+        "department": normalize_whitespace(str(row.get("department") or "")) or None,
+        "email": (str(row.get("email") or "").strip().lower() or None),
+        "phone": (str(row.get("phone") or "").strip() or None),
+        "phone_ext": (str(row.get("phone_ext") or "").strip() or None),
+        "source_url": normalize_whitespace(str(row.get("source_url") or "")) or None,
+        "source_context": normalize_whitespace(str(row.get("source_context") or "")) or None,
+        "revize_source_type": normalize_whitespace(str(row.get("revize_source_type") or "")) or None,
+        "confidence": float(row.get("confidence") or 0.0),
+    }
+
+
+def _pick_row_drop_reason(before: Counter[str], after: Counter[str]) -> str:
+    delta: Counter[str] = Counter()
+    for key, after_count in after.items():
+        increment = int(after_count) - int(before.get(key, 0))
+        if increment > 0:
+            delta[key] = increment
+    if not delta:
+        return "unknown_pipeline_drop"
+    top = sorted(delta.items(), key=lambda item: (-item[1], item[0]))[0][0]
+    return str(top or "unknown_pipeline_drop")
 
 
 def _coerce_int(value: object) -> int:

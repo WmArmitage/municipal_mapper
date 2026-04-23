@@ -296,6 +296,7 @@ def persist_contact_rows(
     contacts: list[dict[str, str | float | None]],
     fallback_address: str | None = None,
     fallback_hours: str | None = None,
+    debug_rows_out: list[dict[str, object]] | None = None,
 ) -> int:
     merged_contacts: dict[tuple[str, ...], dict[str, str | float | None]] = {}
     for contact in contacts:
@@ -303,6 +304,15 @@ def persist_contact_rows(
         phone = safe_phone_str(contact.get("phone"))
         phone_ext = safe_phone_str(contact.get("phone_ext"))
         if not email and not phone:
+            if debug_rows_out is not None:
+                debug_rows_out.append(
+                    {
+                        "stage": "insert_precheck",
+                        "drop_stage": "insert_precheck",
+                        "drop_reason": "missing_contact_fields",
+                        "row": dict(contact),
+                    }
+                )
             continue
 
         name = str(contact.get("name") or "").strip()
@@ -327,6 +337,15 @@ def persist_contact_rows(
         }
         merge_key = build_contact_merge_key(merged_row, source_url)
         prior = merged_contacts.get(merge_key)
+        if prior is not None and debug_rows_out is not None:
+            debug_rows_out.append(
+                {
+                    "stage": "insert_dedup",
+                    "drop_stage": "insert_dedup",
+                    "drop_reason": "deduped_as_duplicate",
+                    "row": dict(merged_row),
+                }
+            )
         merged_contacts[merge_key] = merge_contact_rows(prior, merged_row) if prior else merged_row
 
     persisted_count = 0
@@ -355,6 +374,15 @@ def persist_contact_rows(
                 "confidence": round(effective_confidence, 3),
             },
         )
+        if debug_rows_out is not None:
+            debug_rows_out.append(
+                {
+                    "stage": "insert_upsert",
+                    "drop_stage": "",
+                    "drop_reason": "",
+                    "row": dict(merged),
+                }
+            )
         persisted_count += 1
     return persisted_count
 
@@ -417,6 +445,7 @@ def crawl_single_municipality(
     max_candidate_pages: int = 25,
     timeout: int = 20,
     granicus_debug: bool = False,
+    revize_trace_collector=None,
 ) -> dict[str, int | str]:
     reset_normalization_counters()
     municipality_id = municipality["municipality_id"]
@@ -946,6 +975,11 @@ def crawl_single_municipality(
             timeout=timeout,
             session=session,
         )
+        if revize_trace_collector is not None:
+            try:
+                revize_trace_collector.record_revize_result(municipality_id, revize_result)
+            except Exception:
+                pass
         attempted_rows = list(revize_result.get("attempted_rows") or [])
         stats["revize_candidates_generated"] = _coerce_int(revize_result.get("candidate_urls_generated_count"))
         stats["revize_candidates_attempted"] = _coerce_int(revize_result.get("candidate_urls_attempted_count"))
@@ -986,12 +1020,24 @@ def crawl_single_municipality(
             stats["fetched_pages"] += 1
 
         revize_contacts = list(revize_result.get("contacts") or [])
+        revize_insert_debug_rows: list[dict[str, object]] = []
         persisted_revize_contacts = persist_contact_rows(
             conn=conn,
             municipality_id=municipality_id,
             source_url=entry_url,
             contacts=revize_contacts,
+            debug_rows_out=revize_insert_debug_rows if revize_trace_collector is not None else None,
         )
+        if revize_trace_collector is not None:
+            try:
+                revize_trace_collector.record_insert_debug(
+                    municipality_id=municipality_id,
+                    insert_attempted=len(revize_contacts),
+                    inserted_or_updated=persisted_revize_contacts,
+                    debug_rows=revize_insert_debug_rows,
+                )
+            except Exception:
+                pass
         stats["contacts"] += persisted_revize_contacts
 
         diagnostics["revize_candidates_generated"] = _coerce_int(revize_result.get("candidate_urls_generated_count"))

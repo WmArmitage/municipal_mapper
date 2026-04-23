@@ -18,6 +18,7 @@ from src.batch_manifest import (
 )
 from scripts.blocked_recovery import run_blocked_recovery_pass
 from scripts.run_town import crawl_single_municipality
+from src.revize_trace import RevizeTraceCollector
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,6 +53,22 @@ def parse_args() -> argparse.Namespace:
         "--blocked-recovery",
         action="store_true",
         help="Run a conservative blocked-town recovery pass after normal crawling.",
+    )
+    parser.add_argument(
+        "--revize-trace",
+        action="store_true",
+        help="Enable Revize-only row tracing debug artifacts.",
+    )
+    parser.add_argument(
+        "--revize-trace-sample-size",
+        type=int,
+        default=8,
+        help="Sample size per municipality for Revize row tracing (default: 8).",
+    )
+    parser.add_argument(
+        "--revize-trace-match",
+        default=None,
+        help="Optional name/source/fingerprint substring to force-include in Revize row trace.",
     )
     return parser.parse_args()
 
@@ -117,12 +134,26 @@ def main() -> None:
         summaries: list[dict] = []
         in_scope_municipalities: list[dict] = []
         blocked_recovery_rows: list[dict[str, object]] = []
+        revize_trace_collector: RevizeTraceCollector | None = None
+        if args.revize_trace:
+            trace_batch_id = args.batch_id or "batch_revize_trace"
+            trace_dir = Path(args.outputs_root) / trace_batch_id / "debug"
+            revize_trace_collector = RevizeTraceCollector(
+                output_dir=trace_dir,
+                sample_size=args.revize_trace_sample_size,
+                follow_match=args.revize_trace_match,
+            )
 
         for municipality in municipalities:
             municipality_id = municipality["municipality_id"]
             crawl_municipality = dict(municipality)
             crawl_municipality["platform"] = platform_map.get(municipality_id, "")
             in_scope_municipalities.append(crawl_municipality)
+            if revize_trace_collector is not None:
+                revize_trace_collector.register_municipality(
+                    municipality_id=municipality_id,
+                    platform=str(crawl_municipality.get("platform") or ""),
+                )
             if not args.force and db.municipality_has_pages(conn, municipality_id):
                 skipped += 1
                 continue
@@ -132,6 +163,7 @@ def main() -> None:
                 municipality=crawl_municipality,
                 raw_dir=ROOT / "data" / "raw",
                 max_candidate_pages=args.max_candidate_pages,
+                revize_trace_collector=revize_trace_collector,
             )
             summaries.append(summary)
             processed += 1
@@ -150,6 +182,11 @@ def main() -> None:
                 "Blocked recovery attempted for "
                 f"{len(blocked_recovery_rows)} blocked municipalities"
             )
+        if revize_trace_collector is not None:
+            revize_trace_collector.finalize_from_db(conn)
+            paths = revize_trace_collector.write_outputs()
+            for filename, path in paths.items():
+                print(f"Revize trace artifact: {filename} -> {path}")
     finally:
         conn.close()
 
