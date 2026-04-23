@@ -4,9 +4,9 @@ ct_fairfield,batch_revize_trace,https://www.fairfieldct.org/,https://fairfieldct
 ct_griswold,batch_revize_trace,https://www.griswold-ct.org/,https://www.griswold-ct.org/,0,200,0,text/html,"Welcome to Griswold, CT",90955,269,0,0,43,1,1,ok
 ct_groton,batch_revize_trace,https://www.groton-ct.gov/,https://www.groton-ct.gov/,0,200,0,text/html,"Welcome to the Town of Groton, Connecticut",108915,382,50,75,17,0,1,ok
 ct_guilford,batch_revize_trace,https://www.guilfordct.gov/,https://www.guilfordct.gov/,0,200,0,text/html,Guilford,94872,317,0,0,76,1,1,ok
-ct_killingly,batch_revize_trace,https://www.killinglyct.gov/,https://www.killinglyct.gov/,1,,0,,,0,0,0,0,0,0,0,discovery_failure
-ct_marlborough,batch_revize_trace,https://www.marlboroughct.net/,https://www.marlboroughct.net/,1,,0,,,0,0,0,0,0,0,0,discovery_failure
-ct_new_canaan,batch_revize_trace,https://www.newcanaan.info/,https://www.newcanaan.info/,1,,0,,,0,0,0,0,0,0,0,discovery_failure
+ct_killingly,batch_revize_trace,https://www.killinglyct.gov/,https://www.killinglyct.gov/,0,200,0,text/html,"Killingly, CT",112910,355,0,0,169,1,1,ok
+ct_marlborough,batch_revize_trace,https://www.marlboroughct.net/,https://www.marlboroughct.net/,0,200,0,text/html,"Marlborough, CT",60128,187,24,20,139,1,1,ok
+ct_new_canaan,batch_revize_trace,https://www.newcanaan.info/,https://www.newcanaan.info/,0,200,0,text/html,Welcome to New Canaan CT,76641,287,0,0,10,1,1,ok
 ct_north_haven,batch_revize_trace,https://www.northhaven-ct.gov/,https://www.northhaven-ct.gov/,0,200,0,text/html,"Town of North Haven, CT 06473",86868,292,0,0,19,1,1,ok
 ct_plainfield,batch_revize_trace,https://www.plainfieldct.org/,https://www.plainfieldct.org/,0,200,0,text/html,"Town of Plainfield, Connecticut",86560,279,0,0,17,0,1,ok
 ct_ridgefield,batch_revize_trace,https://www.ridgefieldct.gov/,https://www.ridgefieldct.gov/,0,200,0,text/html,Ridgefield CT,109264,397,0,0,67,1,1,ok
