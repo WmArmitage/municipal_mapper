@@ -303,7 +303,13 @@ def persist_contact_rows(
         email = str(contact.get("email") or "").strip().lower()
         phone = safe_phone_str(contact.get("phone"))
         phone_ext = safe_phone_str(contact.get("phone_ext"))
-        if not email and not phone:
+        name = str(contact.get("name") or "").strip()
+        title = str(contact.get("title") or "").strip()
+        department = str(contact.get("department") or "").strip() or (infer_department_from_url(source_url) or "")
+        source_context = str(contact.get("source_context") or "").strip()
+        soft_keep_marker = bool(contact.get("normalization_soft_keep")) or ("norm_flag=" in source_context.lower())
+        can_keep_without_contact = soft_keep_marker and bool(name or title or department)
+        if not email and not phone and not can_keep_without_contact:
             if debug_rows_out is not None:
                 debug_rows_out.append(
                     {
@@ -314,11 +320,6 @@ def persist_contact_rows(
                     }
                 )
             continue
-
-        name = str(contact.get("name") or "").strip()
-        title = str(contact.get("title") or "").strip()
-        department = str(contact.get("department") or "").strip() or (infer_department_from_url(source_url) or "")
-        source_context = str(contact.get("source_context") or "").strip()
         address = contact.get("address") or fallback_address
         hours = contact.get("hours") or fallback_hours
         merged_row = {
@@ -1086,6 +1087,10 @@ def crawl_single_municipality(
                 revize_result.get("revize_rows_from_department_pages")
             ),
             "revize_rows_from_contact_hubs": _coerce_int(revize_result.get("revize_rows_from_contact_hubs")),
+            "rows_kept_vs_dropped_ratio": float(revize_result.get("rows_kept_vs_dropped_ratio") or 0.0),
+            "rows_flagged_as_noise": _coerce_int(revize_result.get("rows_flagged_as_noise")),
+            "rows_soft_kept": _coerce_int(revize_result.get("rows_soft_kept")),
+            "revize_over_filtering_detected": _coerce_int(revize_result.get("revize_over_filtering_detected")),
             "sidebar_staff_blocks_found": _coerce_int(revize_result.get("sidebar_staff_blocks_found")),
             "sidebar_staff_contacts_extracted": _coerce_int(revize_result.get("sidebar_staff_contacts_extracted")),
             "department_contact_blocks_found": _coerce_int(revize_result.get("department_contact_blocks_found")),

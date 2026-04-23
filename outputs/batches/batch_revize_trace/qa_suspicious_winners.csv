@@ -1,11 +1,5 @@
 municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
-ct_avon,Finance Director,Tom DiStasio,,8604094344,,staff_directory,https://www.avonct.gov/departments/finance/index.php,0,role_department_mismatch
-ct_griswold,Building Official,,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
-ct_griswold,Planner,,planningdepartment@griswoldct.gov,8603767060,Planning & Development,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
-ct_griswold,Treasurer,,treasurer@griswoldct.gov,8603767060,Finance,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
-ct_groton,Assessor,Mary Gardner,mgardner@groton-ct.gov,8604416660,Assessment,staff_directory,https://www.groton-ct.gov/departments/finance/assessment.php,0,role_department_mismatch
-ct_guilford,Building Official,,,2034538038,Building,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,0,invalid_person_name
-ct_guilford,Planner,,,2034538074,Guilford,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,0,invalid_person_name
-ct_killingly,Finance Director,Jennifer Hawkins,,8607795339,Bids And Rfp's,staff_directory,https://www.killinglyct.gov/departments/finance/bids_and_rfps.php,0,role_department_mismatch
-ct_new_canaan,First Selectman,Carlson Phone,firstselectman@newcanaanct.gov,2035943000,,staff_directory,https://www.newcanaan.info/Newsletters/April%202026.html?t=202604100803520,0,non_person_role_candidate
-ct_north_haven,Building Official,Clintonville Elementary,,2032392581,,homepage,https://www.northhaven-ct.gov/contact_us/index.php,0,role_department_mismatch
+ct_fairfield,Assessor,Reddit Close,,2032563000,Assessor,department_page,https://fairfieldct.gov/service/tax_assessor/contact_us.php,0,assessor_tax_mismatch
+ct_fairfield,Tax Collector,Tax Collector,,2032563100,Tax Collector,staff_directory,https://fairfieldct.gov/how_do_i/contact_us/department_directory.php,1,likely_noise_flag
+ct_groton,Assessor,Antique Motor Vehicle Affidavit,mgardner@groton-ct.gov,8604416660,Assessment,department_page,https://www.groton-ct.gov/departments/finance/assessment.php,0,role_department_mismatch
+ct_ridgefield,Assessor,Al Garzi,,2034312706,Tax Assessor,department_page,https://www.ridgefieldct.gov/departments/tax_assessors_office/index.php,0,assessor_tax_mismatch

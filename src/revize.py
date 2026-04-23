@@ -204,6 +204,12 @@ REVIZE_NAME_TOKEN_REJECTS = {
     "links",
     "resource",
 }
+REVIZE_CLEAR_NAME_DROP_PATTERNS = (
+    "email me",
+    "click here",
+    "request",
+    "office hours",
+)
 REVIZE_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
 REVIZE_NAME_PARTICLES = {"de", "del", "de la", "la", "van", "von", "da", "di"}
 REVIZE_VACANCY_TOKENS = {"vacant", "vacancy", "position vacant"}
@@ -1351,6 +1357,10 @@ def run_revize_strategy_for_municipality(
         "rows_normalized_seen": 0,
         "rows_normalized_kept": 0,
         "rows_normalized_rejected": 0,
+        "rows_kept_vs_dropped_ratio": 0.0,
+        "rows_flagged_as_noise": 0,
+        "rows_soft_kept": 0,
+        "revize_over_filtering_detected": 0,
         "revize_rows_from_staff_directory": 0,
         "revize_rows_from_department_pages": 0,
         "revize_rows_from_contact_hubs": 0,
@@ -1491,6 +1501,11 @@ def run_revize_strategy_for_municipality(
             counters["rows_normalized_seen"] += _coerce_int(per_page_metrics.get("rows_normalized_seen"))
             counters["rows_normalized_kept"] += _coerce_int(per_page_metrics.get("rows_normalized_kept"))
             counters["rows_normalized_rejected"] += _coerce_int(per_page_metrics.get("rows_normalized_rejected"))
+            counters["rows_flagged_as_noise"] += _coerce_int(per_page_metrics.get("rows_flagged_as_noise"))
+            counters["rows_soft_kept"] += _coerce_int(per_page_metrics.get("rows_soft_kept"))
+            counters["revize_over_filtering_detected"] += _coerce_int(
+                per_page_metrics.get("revize_over_filtering_detected")
+            )
             counters["revize_rows_from_staff_directory"] += _coerce_int(
                 per_page_metrics.get("revize_rows_from_staff_directory")
             )
@@ -1616,6 +1631,12 @@ def run_revize_strategy_for_municipality(
                 "revize_phone_string_preserved": _coerce_int(
                     per_page_metrics.get("revize_phone_string_preserved")
                 ),
+                "rows_kept_vs_dropped_ratio": float(per_page_metrics.get("rows_kept_vs_dropped_ratio") or 0.0),
+                "rows_flagged_as_noise": _coerce_int(per_page_metrics.get("rows_flagged_as_noise")),
+                "rows_soft_kept": _coerce_int(per_page_metrics.get("rows_soft_kept")),
+                "revize_over_filtering_detected": _coerce_int(
+                    per_page_metrics.get("revize_over_filtering_detected")
+                ),
                 "page_title": str(fetch_row.get("page_title") or ""),
             }
         )
@@ -1629,6 +1650,14 @@ def run_revize_strategy_for_municipality(
         if str(row.get("request_url") or "")
     ]
     matched_urls_unique = sorted({url for url in matched_urls if url})
+    if counters["rows_normalized_seen"] > 0:
+        counters["rows_kept_vs_dropped_ratio"] = round(
+            float(counters["rows_normalized_kept"]) / float(counters["rows_normalized_seen"]),
+            4,
+        )
+    if counters["rows_normalized_seen"] >= 8 and float(counters["rows_kept_vs_dropped_ratio"]) < 0.25:
+        counters["revize_over_filtering_detected"] = max(1, _coerce_int(counters["revize_over_filtering_detected"]))
+        print("[Revize][Warn] revize_over_filtering_detected")
 
     return {
         "candidate_urls_generated": [str(item.get("url") or "") for item in initial_candidates],
@@ -1899,18 +1928,28 @@ def _extract_revize_contacts_with_diagnostics(
     )
     source_counts = _count_extraction_sources(contacts)
     invalid_name_rejections = (
-        _coerce_int(reduction_counts.get("drop_name_literal_reject"))
-        + _coerce_int(reduction_counts.get("drop_name_action_label"))
-        + _coerce_int(reduction_counts.get("drop_name_generic_heading"))
-        + _coerce_int(reduction_counts.get("drop_name_invalid_pattern"))
-        + _coerce_int(reduction_counts.get("drop_name_address_like"))
-        + _coerce_int(reduction_counts.get("drop_name_non_person_label"))
+        _coerce_int(reduction_counts.get("soft_name_clear_reject"))
+        + _coerce_int(reduction_counts.get("soft_name_generic_heading"))
+        + _coerce_int(reduction_counts.get("soft_name_invalid_pattern"))
+        + _coerce_int(reduction_counts.get("soft_name_address_like"))
+        + _coerce_int(reduction_counts.get("soft_name_non_person_label"))
     )
+    rows_kept_vs_dropped_ratio = round(
+        float(normalized_kept_count) / float(len(extracted)) if extracted else 0.0,
+        4,
+    )
+    over_filtering_detected = 1 if extracted and rows_kept_vs_dropped_ratio < 0.25 else 0
+    if over_filtering_detected:
+        reduction_counts["revize_over_filtering_detected"] += 1
     metrics = {
         "rows_extracted_total": len(extracted),
         "rows_normalized_seen": len(extracted),
         "rows_normalized_kept": normalized_kept_count,
         "rows_normalized_rejected": max(0, len(extracted) - normalized_kept_count),
+        "rows_kept_vs_dropped_ratio": rows_kept_vs_dropped_ratio,
+        "rows_flagged_as_noise": _coerce_int(reduction_counts.get("rows_flagged_as_noise")),
+        "rows_soft_kept": _coerce_int(reduction_counts.get("rows_soft_kept")),
+        "revize_over_filtering_detected": over_filtering_detected,
         "sidebar_staff_blocks_found": _count_sidebar_staff_blocks(sanitized_html_text),
         "sidebar_staff_contacts_extracted": _coerce_int(source_counts.get("sidebar_staff")),
         "department_contact_blocks_found": _count_department_contact_blocks(sanitized_html_text),
@@ -3579,58 +3618,83 @@ def _normalize_revize_contact_row(
         page_priority_score=page_priority_score,
     )
     block_class = str(row.get("revize_block_class") or _classify_revize_row_block(row))
+    normalization_flags: list[str] = []
+    is_likely_noise = False
+    soft_kept = False
 
     if name and _is_vacancy_name(name):
         reduction_counts["suppressed_vacancy_rows"] += 1
         return None
-    if name and _is_rejected_name_literal(name):
-        reduction_counts["revize_invalid_name_rejections"] += 1
-        reduction_counts["drop_name_literal_reject"] += 1
-        return None
 
     if name:
         lowered_name = name.lower()
-        if _is_action_text(name):
+        if _is_clear_name_reject(name):
             reduction_counts["revize_invalid_name_rejections"] += 1
-            reduction_counts["drop_name_action_label"] += 1
-            return None
+            reduction_counts["soft_name_clear_reject"] += 1
+            normalization_flags.append("invalid_name")
+            name = None
+            is_likely_noise = True
+            soft_kept = True
         if _looks_like_address_or_location(name):
             reduction_counts["revize_invalid_name_rejections"] += 1
-            reduction_counts["drop_name_address_like"] += 1
-            return None
+            reduction_counts["soft_name_address_like"] += 1
+            normalization_flags.append("weak_person_name")
+            is_likely_noise = True
+            soft_kept = True
         if _is_non_person_label(name):
             reduction_counts["revize_invalid_name_rejections"] += 1
-            reduction_counts["drop_name_non_person_label"] += 1
-            return None
+            reduction_counts["soft_name_non_person_label"] += 1
+            normalization_flags.append("weak_person_name")
+            is_likely_noise = True
+            soft_kept = True
         if _looks_like_department(name):
             if not department:
                 department = name
             name = None
             reduction_counts["converted_name_to_department"] += 1
+            normalization_flags.append("role_only_row")
+            is_likely_noise = True
+            soft_kept = True
         elif _looks_like_title(name):
             if not title:
                 title = name
             name = None
             reduction_counts["converted_name_to_title"] += 1
+            normalization_flags.append("role_only_row")
+            is_likely_noise = True
+            soft_kept = True
         elif lowered_name in REVIZE_GENERIC_HEADING_REJECTS:
             reduction_counts["revize_invalid_name_rejections"] += 1
-            reduction_counts["drop_name_generic_heading"] += 1
-            return None
-        elif not _looks_like_person_name(name):
+            reduction_counts["soft_name_generic_heading"] += 1
+            normalization_flags.append("weak_person_name")
+            is_likely_noise = True
+            soft_kept = True
+        elif not _accept_revize_person_name(name, title):
             reduction_counts["revize_invalid_name_rejections"] += 1
-            reduction_counts["drop_name_invalid_pattern"] += 1
-            name = None
+            reduction_counts["soft_name_invalid_pattern"] += 1
+            normalization_flags.append("weak_person_name")
+            is_likely_noise = True
+            soft_kept = True
 
     if title and _is_action_text(title):
         title = None
-        reduction_counts["drop_title_action_label"] += 1
+        reduction_counts["soft_title_action_label"] += 1
+        normalization_flags.append("weak_person_name")
+        is_likely_noise = True
+        soft_kept = True
     if department and _is_action_text(department):
+        reduction_counts["soft_department_action_label"] += 1
+        reduction_counts["revize_department_contamination_rejections"] += 1
+        normalization_flags.append("department_contamination")
+        is_likely_noise = True
+        soft_kept = True
         department = None
-        reduction_counts["drop_department_action_label"] += 1
-        reduction_counts["revize_department_contamination_rejections"] += 1
     if department and _looks_like_address_or_location(department):
-        reduction_counts["drop_department_address_like"] += 1
+        reduction_counts["soft_department_address_like"] += 1
         reduction_counts["revize_department_contamination_rejections"] += 1
+        normalization_flags.append("department_contamination")
+        is_likely_noise = True
+        soft_kept = True
         department = None
     if (
         department
@@ -3638,22 +3702,30 @@ def _normalize_revize_contact_row(
         and "education" not in (source_url or "").lower()
         and "education department" not in source_context.lower()
     ):
-        reduction_counts["drop_department_ambiguous_education"] += 1
+        reduction_counts["soft_department_ambiguous_education"] += 1
         reduction_counts["revize_department_contamination_rejections"] += 1
+        normalization_flags.append("department_contamination")
+        is_likely_noise = True
+        soft_kept = True
         department = None
     if department and any(token in department.lower() for token in ("bids and rfp", "rfp", ", ct", " main street")):
-        reduction_counts["drop_department_context_noise"] += 1
+        reduction_counts["soft_department_context_noise"] += 1
         reduction_counts["revize_department_contamination_rejections"] += 1
+        normalization_flags.append("department_contamination")
+        is_likely_noise = True
+        soft_kept = True
         department = None
     if department:
         department = _to_department_label(department) or department
 
-    if not name and (email or phone):
+    if not name and (email or phone or title or department):
         source_type = "department_contact_block"
         block_class = "office_contact_block"
         reduction_counts["revize_office_contact_rows_classified"] += 1
-        if title:
-            reduction_counts["revize_role_only_rows_demoted"] += 1
+        reduction_counts["revize_role_only_rows_demoted"] += 1
+        normalization_flags.append("role_only_row")
+        is_likely_noise = True
+        soft_kept = True
         if not title:
             title = "Department Contact"
         elif _looks_like_title(title):
@@ -3667,26 +3739,49 @@ def _normalize_revize_contact_row(
         reduction_counts["revize_person_rows_classified"] += 1
 
     if _count_contacts_in_context(source_context) > 1 and not name and source_type != "department_contact_block":
-        reduction_counts["drop_multi_contact_block_ambiguous"] += 1
-        return None
+        reduction_counts["soft_multi_contact_block_ambiguous"] += 1
+        normalization_flags.append("weak_person_name")
+        is_likely_noise = True
+        soft_kept = True
 
     if name and not (title or email or phone):
-        reduction_counts["drop_person_missing_supporting_fields"] += 1
-        return None
+        # survivability rule: keep person rows with >=2 tokens even without direct contact signals.
+        if _accept_revize_person_name(name, title):
+            normalization_flags.append("missing_contact_method")
+            is_likely_noise = True
+            soft_kept = True
+            reduction_counts["soft_keep_name_without_contact"] += 1
+        else:
+            reduction_counts["soft_person_missing_supporting_fields"] += 1
+            normalization_flags.append("weak_person_name")
+            is_likely_noise = True
+            soft_kept = True
 
     if not name and not title and not department:
         reduction_counts["drop_missing_person_and_context"] += 1
         return None
 
     if not email and not phone:
+        reduction_counts["soft_missing_contact_method"] += 1
+        normalization_flags.append("missing_contact_method")
+        is_likely_noise = True
+        soft_kept = True
         if name and title:
             reduction_counts["keep_name_title_without_contact"] += 1
-        else:
-            reduction_counts["drop_missing_contact_method"] += 1
-            return None
+
+    if name and not _accept_revize_person_name(name, title):
+        normalization_flags.append("weak_person_name")
+        is_likely_noise = True
+        soft_kept = True
 
     if phone:
         reduction_counts["revize_phone_string_preserved"] += 1
+
+    if _looks_like_content_blob(source_context):
+        normalization_flags.append("content_blob")
+        is_likely_noise = True
+        soft_kept = True
+        reduction_counts["soft_content_blob"] += 1
 
     confidence = round(float(row.get("confidence") or 0.58), 3)
     if source_type == "department_contact_block" or block_class == "office_contact_block":
@@ -3700,6 +3795,14 @@ def _normalize_revize_contact_row(
         and "department contact" not in title.lower()
     ):
         confidence = min(confidence, 0.5)
+    if is_likely_noise:
+        confidence = min(confidence, 0.46)
+        reduction_counts["rows_flagged_as_noise"] += 1
+    if soft_kept:
+        reduction_counts["rows_soft_kept"] += 1
+
+    source_context = _append_normalization_tags(source_context, normalization_flags, is_likely_noise)
+    normalization_flag_value = ",".join(sorted(set(normalization_flags))) if normalization_flags else None
 
     normalized = {
         "name": name,
@@ -3718,6 +3821,9 @@ def _normalize_revize_contact_row(
         "revize_source_type": source_type or "unknown",
         "revize_page_class": page_class,
         "revize_page_priority_score": page_priority_score,
+        "is_likely_noise": 1 if is_likely_noise else 0,
+        "normalization_flag": normalization_flag_value,
+        "normalization_soft_keep": 1 if soft_kept else 0,
     }
     return normalized
 
@@ -3728,6 +3834,57 @@ def _count_contacts_in_context(source_context: str) -> int:
     emails = extract_emails(source_context)
     phones = extract_phone_candidates(source_context)
     return max(len(emails), len(phones))
+
+
+def _is_clear_name_reject(value: str) -> bool:
+    lowered = (normalize_whitespace(value) or "").lower()
+    if not lowered:
+        return False
+    if re.search(r"https?://|www\.", lowered):
+        return True
+    return any(token in lowered for token in REVIZE_CLEAR_NAME_DROP_PATTERNS)
+
+
+def _revize_name_token_count(value: str) -> int:
+    cleaned = normalize_whitespace(value) or ""
+    tokens = [token for token in re.split(r"\s+", cleaned) if re.search(r"[A-Za-z]", token)]
+    return len(tokens)
+
+
+def _accept_revize_person_name(name: str | None, title: str | None) -> bool:
+    if not name:
+        return False
+    token_count = _revize_name_token_count(name)
+    if token_count >= 2:
+        return True
+    if normalize_whitespace(name) and normalize_whitespace(title or ""):
+        return True
+    return False
+
+
+def _looks_like_content_blob(value: str) -> bool:
+    text = normalize_whitespace(value) or ""
+    if len(text) <= 300:
+        return False
+    sentence_count = len([segment for segment in re.split(r"[.!?]\s+", text) if segment.strip()])
+    return sentence_count >= 2
+
+
+def _append_normalization_tags(
+    source_context: str,
+    flags: list[str],
+    is_likely_noise: bool,
+) -> str:
+    cleaned = normalize_whitespace(source_context) or ""
+    tags: list[str] = []
+    if is_likely_noise:
+        tags.append("noise=1")
+    if flags:
+        tags.append("norm_flag=" + ",".join(sorted(set(flags))))
+    if not tags:
+        return cleaned
+    suffix = " | " + ";".join(tags)
+    return f"{cleaned}{suffix}"[:240]
 
 
 def _contact_dedupe_key(row: dict[str, str | float | None]) -> tuple[str, ...]:
@@ -4066,6 +4223,8 @@ def _trace_row_payload(row: dict[str, object]) -> dict[str, object]:
         "revize_source_type": normalize_whitespace(str(row.get("revize_source_type") or "")) or None,
         "revize_page_class": normalize_whitespace(str(row.get("revize_page_class") or "")) or None,
         "revize_page_priority_score": float(row.get("revize_page_priority_score") or 0.0),
+        "is_likely_noise": _coerce_int(row.get("is_likely_noise")),
+        "normalization_flag": normalize_whitespace(str(row.get("normalization_flag") or "")) or None,
         "confidence": float(row.get("confidence") or 0.0),
     }
 

@@ -480,7 +480,9 @@ class RevizeStrategyTests(unittest.TestCase):
             source_url="https://www.example.gov/contact-us",
             source_kind="contact_path",
         )
-        self.assertFalse(any("Main Street" in str(row.get("name") or "") for row in rows))
+        self.assertTrue(rows)
+        self.assertTrue(any(str(row.get("is_likely_noise") or "") == "1" for row in rows))
+        self.assertTrue(any("weak_person_name" in str(row.get("normalization_flag") or "") for row in rows))
 
     def test_phone_is_preserved_as_digit_string(self) -> None:
         html = """
@@ -637,8 +639,14 @@ class RevizeStrategyTests(unittest.TestCase):
             source_url="https://www.example.gov/departments/building/index.php",
             source_kind="department_page",
         )
-        names = {str(row.get("name") or "") for row in rows if str(row.get("name") or "")}
-        self.assertEqual(names, {"Carl Brown"})
+        self.assertTrue(rows)
+        self.assertTrue(any(str(row.get("name") or "") == "Carl Brown" for row in rows))
+        suspicious = [
+            row for row in rows
+            if str(row.get("name") or "") in {"TAX PAYMENTS", "Level Ridgefield", "Clintonville Elementary", "Main Level", "Groton Long Point"}
+        ]
+        self.assertTrue(suspicious)
+        self.assertTrue(any(str(row.get("is_likely_noise") or "") == "1" for row in suspicious))
 
     def test_breadcrumb_department_context_is_preferred(self) -> None:
         html = """
@@ -817,6 +825,56 @@ class RevizeStrategyTests(unittest.TestCase):
             classify_revize_page_class_for_url("https://www.example.gov/contact_us/index.php"),
             "contact_hub",
         )
+
+    def test_name_title_without_contact_is_soft_kept(self) -> None:
+        html = """
+        <html>
+          <body>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Alex Carter<span>Building Official</span></h4>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        self.assertTrue(rows)
+        row = rows[0]
+        self.assertEqual(str(row.get("name") or ""), "Alex Carter")
+        self.assertEqual(str(row.get("title") or ""), "Building Official")
+        self.assertEqual(str(row.get("is_likely_noise") or ""), "1")
+        self.assertIn("missing_contact_method", str(row.get("normalization_flag") or ""))
+
+    def test_clear_non_person_name_pattern_is_soft_demoted(self) -> None:
+        html = """
+        <html>
+          <body>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Phone</th></tr>
+              <tr>
+                <td>Click Here</td>
+                <td>Town Clerk</td>
+                <td>(860) 555-1010</td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/contact_us/index.php",
+            source_kind="contact_hub_path",
+        )
+        self.assertTrue(rows)
+        row = rows[0]
+        self.assertFalse(str(row.get("name") or "").strip())
+        self.assertEqual(str(row.get("is_likely_noise") or ""), "1")
+        self.assertIn("invalid_name", str(row.get("normalization_flag") or ""))
 
 
 if __name__ == "__main__":
