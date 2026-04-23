@@ -1,5 +1,5 @@
 municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
-ct_fairfield,Assessor,Reddit Close,,2032563000,Assessor,department_page,https://fairfieldct.gov/service/tax_assessor/contact_us.php,0,assessor_tax_mismatch
-ct_fairfield,Tax Collector,Tax Collector,,2032563100,Tax Collector,staff_directory,https://fairfieldct.gov/how_do_i/contact_us/department_directory.php,1,likely_noise_flag
 ct_groton,Assessor,Antique Motor Vehicle Affidavit,mgardner@groton-ct.gov,8604416660,Assessment,department_page,https://www.groton-ct.gov/departments/finance/assessment.php,0,role_department_mismatch
+ct_marlborough,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,0,role_department_mismatch
 ct_ridgefield,Assessor,Al Garzi,,2034312706,Tax Assessor,department_page,https://www.ridgefieldct.gov/departments/tax_assessors_office/index.php,0,assessor_tax_mismatch
+ct_stafford,Tax Collector,Filling Vacancies,,,Of The First Selectman,department_page,https://www.staffordct.org/departments/first_selectman.php,0,missing_email_and_phone

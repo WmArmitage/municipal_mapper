@@ -1,19 +1,19 @@
 municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason,coverage_interpretation
 ct_avon,Avon,missing_role_groups_2plus,,,,,,,,executive; tax; clerk,3,,normal_coverage_gap
-ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,building; planning; finance,3,,normal_coverage_gap
-ct_fairfield,Fairfield,suspicious_winner,Assessor,Reddit Close,,2032563000,Assessor,department_page,https://fairfieldct.gov/service/tax_assessor/contact_us.php,,,assessor_tax_mismatch,suspicious_winner
-ct_fairfield,Fairfield,suspicious_winner,Tax Collector,Tax Collector,,2032563100,Tax Collector,staff_directory,https://fairfieldct.gov/how_do_i/contact_us/department_directory.php,,,likely_noise_flag,suspicious_winner
-ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; planning; finance,6,,normal_coverage_gap
 ct_groton,Groton,missing_role_groups_2plus,,,,,,,,executive; clerk; building; planning; finance,5,,normal_coverage_gap
 ct_groton,Groton,suspicious_winner,Assessor,Antique Motor Vehicle Affidavit,mgardner@groton-ct.gov,8604416660,Assessment,department_page,https://www.groton-ct.gov/departments/finance/assessment.php,,,role_department_mismatch,suspicious_winner
-ct_guilford,Guilford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_guilford,Guilford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; finance,6,,normal_coverage_gap
 ct_killingly,Killingly,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; planning; finance,5,,normal_coverage_gap
-ct_marlborough,Marlborough,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_new_canaan,New Canaan,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_marlborough,Marlborough,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; finance,5,,normal_coverage_gap
+ct_marlborough,Marlborough,suspicious_winner,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,,,role_department_mismatch,suspicious_winner
+ct_new_canaan,New Canaan,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; finance,4,,normal_coverage_gap
 ct_north_haven,North Haven,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; finance,6,,normal_coverage_gap
 ct_plainfield,Plainfield,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; building; planning; finance,6,,normal_coverage_gap
 ct_ridgefield,Ridgefield,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; finance,4,,normal_coverage_gap
 ct_ridgefield,Ridgefield,suspicious_winner,Assessor,Al Garzi,,2034312706,Tax Assessor,department_page,https://www.ridgefieldct.gov/departments/tax_assessors_office/index.php,,,assessor_tax_mismatch,suspicious_winner
 ct_southington,Southington,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; building; planning; finance,6,,normal_coverage_gap
-ct_stafford,Stafford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_stafford,Stafford,missing_role_groups_2plus,,,,,,,,executive; assessment; clerk; building; planning; finance,6,,normal_coverage_gap
+ct_stafford,Stafford,suspicious_winner,Tax Collector,Filling Vacancies,,,Of The First Selectman,department_page,https://www.staffordct.org/departments/first_selectman.php,,,missing_email_and_phone,suspicious_winner
 ct_watertown,Watertown,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
