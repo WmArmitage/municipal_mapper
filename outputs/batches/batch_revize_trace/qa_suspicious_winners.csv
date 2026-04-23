@@ -1,8 +1,11 @@
 municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
-ct_avon,Finance Director,Tom DiStasio,,8604094344,"Avon, Ct",staff_directory,https://www.avonct.gov/departments/finance/index.php,0,role_department_mismatch
-ct_groton,Finance Director,Richard Freeman,rfreeman@groton-ct.gov,8604416690,,staff_directory,https://www.groton-ct.gov/departments/finance/index.php,0,role_department_mismatch
-ct_groton,Tax Collector,to request,,8604416660,Assessor,staff_directory,https://www.groton-ct.gov/departments/finance/tax.php,0,role_department_mismatch
-ct_groton,Town Manager,Lisa Hylton,lhylton@groton-ct.gov,8604416630,,staff_directory,https://www.groton-ct.gov/departments/twnmgr/index.php,0,chief_role_assistant_contamination
-ct_killingly,Tax Collector,Main Street Killingly,,8607795331,Revenue Collector,staff_directory,https://www.killinglyct.gov/departments/,0,role_department_mismatch
-ct_north_haven,Assessor,,assessor@northhaven-ct.gov,2032395321,Education,homepage,https://www.northhaven-ct.gov/contact_us/index.php,0,role_department_mismatch
-ct_north_haven,Building Official,,floriano.elio@northhaven-ct.gov,2032395321,Education,homepage,https://www.northhaven-ct.gov/contact_us/index.php,0,role_department_mismatch
+ct_avon,Finance Director,Tom DiStasio,,8604094344,,staff_directory,https://www.avonct.gov/departments/finance/index.php,0,role_department_mismatch
+ct_griswold,Building Official,,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
+ct_griswold,Planner,,planningdepartment@griswoldct.gov,8603767060,Planning & Development,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
+ct_griswold,Treasurer,,treasurer@griswoldct.gov,8603767060,Finance,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
+ct_groton,Assessor,Mary Gardner,mgardner@groton-ct.gov,8604416660,Assessment,staff_directory,https://www.groton-ct.gov/departments/finance/assessment.php,0,role_department_mismatch
+ct_guilford,Building Official,,,2034538038,Building,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,0,invalid_person_name
+ct_guilford,Planner,,,2034538074,Guilford,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,0,invalid_person_name
+ct_killingly,Finance Director,Jennifer Hawkins,,8607795339,Bids And Rfp's,staff_directory,https://www.killinglyct.gov/departments/finance/bids_and_rfps.php,0,role_department_mismatch
+ct_new_canaan,First Selectman,Carlson Phone,firstselectman@newcanaanct.gov,2035943000,,staff_directory,https://www.newcanaan.info/Newsletters/April%202026.html?t=202604100803520,0,non_person_role_candidate
+ct_north_haven,Building Official,Clintonville Elementary,,2032392581,,homepage,https://www.northhaven-ct.gov/contact_us/index.php,0,role_department_mismatch

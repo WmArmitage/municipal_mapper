@@ -1,15 +1,15 @@
 municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
-ct_avon,Avon,Hartford County,108,80,7,0
-ct_fairfield,Fairfield,Fairfield County,23,21,2,0
-ct_griswold,Griswold,New London County,43,43,8,0
-ct_groton,Groton,New London County,16,16,5,5
-ct_guilford,Guilford,New Haven County,76,71,7,0
-ct_killingly,Killingly,Windham County,169,156,6,0
+ct_avon,Avon,Hartford County,86,76,5,0
+ct_fairfield,Fairfield,Fairfield County,1,1,0,0
+ct_griswold,Griswold,New London County,40,40,4,0
+ct_groton,Groton,New London County,36,34,2,0
+ct_guilford,Guilford,New Haven County,41,40,2,0
+ct_killingly,Killingly,Windham County,173,162,5,0
 ct_marlborough,Marlborough,Hartford County,123,88,6,9
-ct_new_canaan,New Canaan,Fairfield County,10,10,0,0
-ct_north_haven,North Haven,New Haven County,19,19,6,0
-ct_plainfield,Plainfield,Windham County,17,17,1,0
-ct_ridgefield,Ridgefield,Fairfield County,67,55,6,0
-ct_southington,Southington,Hartford County,328,56,6,0
-ct_stafford,Stafford,Tolland County,1,1,0,0
-ct_watertown,Watertown,Litchfield County,27,17,2,0
+ct_new_canaan,New Canaan,Fairfield County,42,41,3,0
+ct_north_haven,North Haven,New Haven County,17,17,2,0
+ct_plainfield,Plainfield,Windham County,20,20,0,0
+ct_ridgefield,Ridgefield,Fairfield County,85,71,5,0
+ct_southington,Southington,Hartford County,321,81,6,0
+ct_stafford,Stafford,Tolland County,9,9,0,0
+ct_watertown,Watertown,Litchfield County,15,9,0,0

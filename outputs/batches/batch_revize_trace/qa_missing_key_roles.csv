@@ -1,13 +1,15 @@
 municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
-ct_avon,Avon,tax,1,executive; assessment; clerk; building; planning; finance,"executive: Town Manager; assessment: Assessor; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Finance Director, Treasurer"
-ct_fairfield,Fairfield,executive; assessment; clerk; planning; finance,5,tax; building,tax: Tax Collector; building: Building Official
-ct_groton,Groton,clerk; building; planning,3,executive; assessment; tax; finance,"executive: Town Manager; assessment: Assessor; tax: Tax Collector; finance: Finance Director, Treasurer"
-ct_killingly,Killingly,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
+ct_avon,Avon,executive; tax; clerk,3,assessment; building; planning; finance,"assessment: Assessor; building: Building Official; planning: Planner; finance: Finance Director, Treasurer"
+ct_fairfield,Fairfield,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_griswold,Griswold,executive; assessment; clerk,3,tax; building; planning; finance,tax: Tax Collector; building: Building Official; planning: Planner; finance: Treasurer
+ct_groton,Groton,executive; tax; clerk; building; finance,5,assessment; planning,assessment: Assessor; planning: Planner
+ct_guilford,Guilford,executive; assessment; tax; clerk; finance,5,building; planning,building: Building Official; planning: Planner
+ct_killingly,Killingly,tax; clerk,2,executive; assessment; building; planning; finance,executive: Town Manager; assessment: Assessor; building: Building Official; planning: Planner; finance: Finance Director
 ct_marlborough,Marlborough,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
-ct_new_canaan,New Canaan,executive; assessment; tax; clerk; building; planning; finance,7,,
-ct_north_haven,North Haven,clerk; finance,2,executive; assessment; tax; building; planning,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner, Land Use"
-ct_plainfield,Plainfield,executive; tax; clerk; building; planning; finance,6,assessment,assessment: Assessor
-ct_ridgefield,Ridgefield,executive,1,assessment; tax; clerk; building; planning; finance,assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner; finance: Treasurer
+ct_new_canaan,New Canaan,tax; clerk; planning; finance,4,executive; assessment; building,executive: First Selectman; assessment: Assessor; building: Building Official
+ct_north_haven,North Haven,executive; assessment; tax; clerk; finance,5,building; planning,building: Building Official; planning: Land Use
+ct_plainfield,Plainfield,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_ridgefield,Ridgefield,executive; clerk,2,assessment; tax; building; planning; finance,assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner; finance: Treasurer
 ct_southington,Southington,finance,1,executive; assessment; tax; clerk; building; planning,executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
 ct_stafford,Stafford,executive; assessment; tax; clerk; building; planning; finance,7,,
-ct_watertown,Watertown,assessment; tax; clerk; building; finance,5,executive; planning,executive: Town Manager; planning: Planner
+ct_watertown,Watertown,executive; assessment; tax; clerk; building; planning; finance,7,,
