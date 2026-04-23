@@ -506,6 +506,197 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertRegex(phone, r"^\d+$")
         self.assertNotIn("E+", phone.upper())
 
+    def test_split_phone_fragment_reconstruction_and_extension_capture(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building &amp; Zoning Enforcement</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head">
+                  <h4>Carl Brown<span>Building &amp; Zoning Enforcement Officer</span></h4>
+                </div>
+                <div class="staff-details">
+                  <span>86</span><span>0-376-7060x2109</span>
+                  <a href="mailto:buildingdepartment@griswold-ct.org">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        matching = [row for row in rows if str(row.get("name") or "") == "Carl Brown"]
+        self.assertTrue(matching)
+        self.assertEqual(str(matching[0].get("phone") or ""), "8603767060")
+        self.assertEqual(str(matching[0].get("phone_ext") or ""), "2109")
+
+    def test_phone_extension_formats_parse_consistently(self) -> None:
+        html = """
+        <html>
+          <body>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Phone</th><th>Email</th></tr>
+              <tr>
+                <td>Kaitlyn Olszewski</td>
+                <td>Assistant to the Building Official</td>
+                <td>860-376-7060 x2110</td>
+                <td><a href="mailto:buildingdepartment@griswold-ct.org">Email</a></td>
+              </tr>
+              <tr>
+                <td>Amy Traversa</td>
+                <td>Planning Assistant</td>
+                <td>860.376.7060 x2111</td>
+                <td><a href="mailto:planningdepartment@griswold-ct.org">Email</a></td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        by_name = {str(row.get("name") or ""): row for row in rows if str(row.get("name") or "")}
+        self.assertEqual(str(by_name["Kaitlyn Olszewski"].get("phone_ext") or ""), "2110")
+        self.assertEqual(str(by_name["Amy Traversa"].get("phone_ext") or ""), "2111")
+
+    def test_valid_name_variants_are_preserved(self) -> None:
+        html = """
+        <html>
+          <body>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Email</th></tr>
+              <tr><td>Mario J. Tristany, Jr.</td><td>Town Manager</td><td>mario@example.gov</td></tr>
+              <tr><td>Alex J. Ricciardone</td><td>Assessor</td><td>alex@example.gov</td></tr>
+              <tr><td>Kaitlyn Olszewski</td><td>Assistant to the Building Official</td><td>kaitlyn@example.gov</td></tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/administration/index.php",
+            source_kind="department_page",
+        )
+        names = {str(row.get("name") or "") for row in rows}
+        self.assertIn("Mario J. Tristany, Jr.", names)
+        self.assertIn("Alex J. Ricciardone", names)
+        self.assertIn("Kaitlyn Olszewski", names)
+
+    def test_role_only_contact_is_demoted_to_office_row(self) -> None:
+        html = """
+        <html>
+          <body>
+            <table>
+              <tr><th>Name</th><th>Phone</th><th>Email</th></tr>
+              <tr>
+                <td>Planning Assistant</td>
+                <td>860-376-7060x2112</td>
+                <td>planningdepartment@griswold-ct.org</td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/planning/index.php",
+            source_kind="department_page",
+        )
+        self.assertTrue(rows)
+        self.assertTrue(all(not str(row.get("name") or "").strip() for row in rows))
+        self.assertTrue(all(str(row.get("revize_source_type") or "") == "department_contact_block" for row in rows))
+
+    def test_invalid_non_person_names_are_rejected(self) -> None:
+        html = """
+        <html>
+          <body>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Email</th></tr>
+              <tr><td>TAX PAYMENTS</td><td>Finance Director</td><td>tax@example.gov</td></tr>
+              <tr><td>Level Ridgefield</td><td>Planner</td><td>planner@example.gov</td></tr>
+              <tr><td>Clintonville Elementary</td><td>Manager</td><td>elem@example.gov</td></tr>
+              <tr><td>Main Level</td><td>Assessor</td><td>main@example.gov</td></tr>
+              <tr><td>Groton Long Point</td><td>Treasurer</td><td>groton@example.gov</td></tr>
+              <tr><td>Carl Brown</td><td>Building Official</td><td>carl.brown@example.gov</td></tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        names = {str(row.get("name") or "") for row in rows if str(row.get("name") or "")}
+        self.assertEqual(names, {"Carl Brown"})
+
+    def test_breadcrumb_department_context_is_preferred(self) -> None:
+        html = """
+        <html>
+          <body>
+            <nav class="breadcrumb">Home > Departments > Building &amp; Zoning Enforcement</nav>
+            <h1>Contact Info</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Kaitlyn Olszewski<span>Assistant to the Building Official</span></h4>
+                <a class="staff-link" href="mailto:buildingdepartment@griswold-ct.org">Email</a>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/government/contact.php",
+            source_kind="department_page",
+        )
+        self.assertTrue(rows)
+        self.assertEqual(str(rows[0].get("department") or ""), "Building & Zoning Enforcement")
+
+    def test_revize_v3_diagnostics_counters_increment(self) -> None:
+        html = """
+        <html>
+          <body>
+            <nav class="breadcrumb">Home > Departments > Building &amp; Zoning Enforcement</nav>
+            <div id="hours-wrap"><h3>Office Hours</h3><p>Mon-Fri 8:00-4:00</p></div>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Carl Brown<span>Building &amp; Zoning Enforcement Officer</span></h4>
+                <div class="staff-details">
+                  <span>86</span><span>0-376-7060x2109</span>
+                  <a href="mailto:buildingdepartment@griswold-ct.org">Email</a>
+                </div>
+              </div>
+              <div class="staff">
+                <h4>Planning Assistant<span>Planning Assistant</span></h4>
+                <div class="staff-details">
+                  <a href="mailto:planningdepartment@griswold-ct.org">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/building/index.php",
+            harvested_links=["https://www.example.gov/departments/building/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        self.assertGreaterEqual(int(result.get("revize_split_text_merged") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_phone_extensions_parsed") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_office_contact_rows_classified") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_person_rows_classified") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_role_only_rows_demoted") or 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

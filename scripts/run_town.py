@@ -1076,8 +1076,18 @@ def crawl_single_municipality(
             "revize_hours_blocks_ignored": _coerce_int(revize_result.get("revize_hours_blocks_ignored")),
             "revize_office_contact_blocks": _coerce_int(revize_result.get("revize_office_contact_blocks")),
             "revize_person_blocks": _coerce_int(revize_result.get("revize_person_blocks")),
+            "revize_office_contact_rows_classified": _coerce_int(
+                revize_result.get("revize_office_contact_rows_classified")
+            ),
+            "revize_person_rows_classified": _coerce_int(revize_result.get("revize_person_rows_classified")),
+            "revize_role_only_rows_demoted": _coerce_int(revize_result.get("revize_role_only_rows_demoted")),
             "revize_structural_blocks_dropped": _coerce_int(revize_result.get("revize_structural_blocks_dropped")),
             "revize_invalid_name_rejections": _coerce_int(revize_result.get("revize_invalid_name_rejections")),
+            "revize_department_contamination_rejections": _coerce_int(
+                revize_result.get("revize_department_contamination_rejections")
+            ),
+            "revize_split_text_merged": _coerce_int(revize_result.get("revize_split_text_merged")),
+            "revize_phone_extensions_parsed": _coerce_int(revize_result.get("revize_phone_extensions_parsed")),
             "revize_phone_string_preserved": _coerce_int(revize_result.get("revize_phone_string_preserved")),
             "suppressed_vacancy_rows": _coerce_int(revize_result.get("suppressed_vacancy_rows")),
             "suspicious_reduction_counts": reduction_counts,

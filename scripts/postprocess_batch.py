@@ -222,6 +222,7 @@ WITH ranked AS (
   JOIN contacts c
     ON v.contact_id = c.contact_id
   WHERE v.role_normalized IS NOT NULL
+    AND COALESCE(v.entity_type, '') = 'person'
 )
 SELECT *
 FROM ranked
@@ -361,6 +362,36 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
         ).fetchone()[0],
         "rows_in_vw_contacts_clean": 0,
         "rows_in_vw_best_role_per_town": 0,
+        "revize_winner_penalty_non_person_name": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM contacts
+            WHERE municipality_id IN ({where_in})
+              AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+              AND COALESCE(suspicious_reason, '') = 'invalid_person_name'
+            """,
+            params,
+        ).fetchone()[0],
+        "revize_winner_penalty_role_department_mismatch": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM contacts
+            WHERE municipality_id IN ({where_in})
+              AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+              AND COALESCE(suspicious_reason, '') = 'role_department_mismatch'
+            """,
+            params,
+        ).fetchone()[0],
+        "revize_winner_penalty_office_row": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM contacts
+            WHERE municipality_id IN ({where_in})
+              AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+              AND COALESCE(suspicious_reason, '') = 'non_person_role_candidate'
+            """,
+            params,
+        ).fetchone()[0],
     }
 
     if view_exists(conn, "vw_contacts_clean"):
@@ -1218,6 +1249,11 @@ def print_metrics(title: str, metrics: dict[str, int]) -> None:
     print(f"  contacts with role_normalized: {metrics['contacts_with_role_normalized']}")
     print(f"  rows in vw_contacts_clean: {metrics['rows_in_vw_contacts_clean']}")
     print(f"  rows in vw_best_role_per_town: {metrics['rows_in_vw_best_role_per_town']}")
+    print(f"  revize winner penalty (non-person name): {metrics['revize_winner_penalty_non_person_name']}")
+    print(
+        f"  revize winner penalty (role/department mismatch): {metrics['revize_winner_penalty_role_department_mismatch']}"
+    )
+    print(f"  revize winner penalty (office row): {metrics['revize_winner_penalty_office_row']}")
 
 
 def main() -> None:
