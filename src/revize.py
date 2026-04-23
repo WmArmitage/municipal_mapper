@@ -137,8 +137,43 @@ REVIZE_NAME_LITERAL_REJECTS = {
     "contact",
     "staff directory",
     "contact info",
+    "services",
+    "links",
+    "request",
+    "information",
 }
 REVIZE_VACANCY_TOKENS = {"vacant", "vacancy", "position vacant"}
+REVIZE_EXCLUDED_SELECTOR_PATTERNS = (
+    "footer",
+    ".footer-links-box",
+    ".rz-btns-container",
+    "#hours-wrap",
+    ".resource-link",
+)
+REVIZE_STRUCTURAL_TEXT_REJECTS = (
+    "office hours",
+    "resources",
+    "related links",
+)
+REVIZE_NAME_REJECT_FRAGMENT_TOKENS = (
+    "contact",
+    "services",
+    "links",
+    "request",
+    "information",
+)
+REVIZE_LOCATION_NAME_REJECT_TOKENS = (
+    "street",
+    "avenue",
+    "road",
+    "drive",
+    "lane",
+    "boulevard",
+    "highway",
+    "main st",
+    "town hall",
+    "city hall",
+)
 REVIZE_OUTCOME_LABELS = (
     "ok_detected",
     "not_detected",
@@ -269,6 +304,18 @@ def classify_revize_page(
     if sidebar_staff_hits >= 1:
         signals.append("block:sidebar_staff")
 
+    contact_card_hits = _count_contact_card_hits(html_text)
+    if contact_card_hits >= 1:
+        signals.append("block:contact_card")
+
+    inline_staff_hits = _count_inline_staff_hits(html_text)
+    if inline_staff_hits >= 1:
+        signals.append("block:inline_staff")
+
+    labeled_staff_hits = _count_labeled_staff_hits(html_text)
+    if labeled_staff_hits >= 1:
+        signals.append("block:labeled_staff")
+
     profile_block_hits = _count_profile_block_hits(html_text)
     if profile_block_hits >= 2:
         signals.append("block:profile_repeat")
@@ -288,6 +335,12 @@ def classify_revize_page(
     source_type = "unknown"
     if sidebar_staff_hits >= 1:
         source_type = "sidebar_staff"
+    elif contact_card_hits >= 1:
+        source_type = "contact_card"
+    elif inline_staff_hits >= 1:
+        source_type = "inline_staff_list"
+    elif labeled_staff_hits >= 1:
+        source_type = "labeled_staff"
     elif key_value_hits >= 3 and profile_block_hits <= 1 and header_hits == 0:
         source_type = "single_profile_page"
     elif header_hits >= 2:
@@ -301,6 +354,9 @@ def classify_revize_page(
     if status_code is None or 200 <= status_code < 400:
         matched = (
             sidebar_staff_hits >= 1
+            or contact_card_hits >= 1
+            or inline_staff_hits >= 1
+            or labeled_staff_hits >= 1
             or header_hits >= 2
             or profile_block_hits >= 2
             or key_value_hits >= 3
@@ -319,6 +375,9 @@ def classify_revize_page(
         "signals": sorted(set(signals)),
         "source_type": source_type,
         "sidebar_staff_hits": sidebar_staff_hits,
+        "contact_card_hits": contact_card_hits,
+        "inline_staff_hits": inline_staff_hits,
+        "labeled_staff_hits": labeled_staff_hits,
         "header_hits": header_hits,
         "profile_block_hits": profile_block_hits,
         "department_section_hits": department_section_hits,
@@ -743,6 +802,195 @@ def extract_revize_department_contact_info(
     return out
 
 
+def extract_revize_contact_cards(
+    soup,
+    page_url: str,
+    page_context: dict[str, object] | None = None,
+) -> list[dict[str, str | float | None]]:
+    context = dict(page_context or {})
+    inferred_department = _infer_department_from_page_context(context, page_url)
+    if soup is None:
+        return _extract_revize_contact_cards_regex(
+            html_text=str(context.get("html_text") or ""),
+            page_url=page_url,
+            department_hint=inferred_department,
+        )
+    page_level_contact_node = soup.select_one("#contact-info")
+    out: list[dict[str, str | float | None]] = []
+
+    for name_node in soup.select(".contact-name"):
+        name = normalize_whitespace(name_node.get_text(" ", strip=True)) or None
+        if not name:
+            continue
+        card_root = name_node.find_parent(["div", "li", "article", "section"]) or name_node
+        title_node = card_root.select_one(".contact-position") or card_root.find(
+            ["p", "div", "span"],
+            attrs={"class": re.compile(r"(?i)position|title")},
+        )
+        title = normalize_whitespace(title_node.get_text(" ", strip=True)) if title_node is not None else None
+
+        phone, phone_ext = _extract_phone_from_tel_links(card_root)
+        email = _extract_email_from_mailto_links(card_root)
+        source_context = normalize_whitespace(card_root.get_text(" ", strip=True)) or ""
+        if (not phone and not email) and page_level_contact_node is not None:
+            phone, phone_ext, email = _extract_contact_info_from_node(
+                page_level_contact_node,
+                fallback_phone=phone,
+                fallback_phone_ext=phone_ext,
+                fallback_email=email,
+            )
+            source_context = (
+                normalize_whitespace(page_level_contact_node.get_text(" ", strip=True))
+                or source_context
+            )
+
+        out.append(
+            {
+                "name": name,
+                "title": title,
+                "department": inferred_department,
+                "email": email or None,
+                "email_type": infer_email_type(email),
+                "phone": phone or None,
+                "phone_ext": phone_ext or None,
+                "address": None,
+                "hours": None,
+                "source_context": source_context[:240],
+                "source_url": page_url,
+                "confidence": 0.84,
+                "revize_source_type": "contact_card",
+            }
+        )
+    return out
+
+
+def extract_revize_inline_staff_lists(
+    soup,
+    page_url: str,
+    page_context: dict[str, object] | None = None,
+) -> list[dict[str, str | float | None]]:
+    context = dict(page_context or {})
+    inferred_department = _infer_department_from_page_context(context, page_url)
+    if soup is None:
+        return _extract_revize_inline_staff_lists_regex(
+            html_text=str(context.get("html_text") or ""),
+            page_url=page_url,
+            department_hint=inferred_department,
+        )
+    out: list[dict[str, str | float | None]] = []
+
+    for node in soup.find_all(["p", "li", "div", "td"]):
+        if _is_structural_or_excluded_node(node):
+            continue
+        mailto_anchors = [
+            anchor
+            for anchor in node.find_all("a", href=True)
+            if str(anchor.get("href") or "").lower().startswith("mailto:")
+        ]
+        if not mailto_anchors:
+            continue
+        text = normalize_whitespace(node.get_text(" ", strip=True)) or ""
+        if not text or "," not in text:
+            continue
+
+        for anchor in mailto_anchors:
+            email = _extract_email_from_mailto_links(anchor) or _extract_email_from_mailto_links(node)
+            if not email:
+                continue
+            phone, phone_ext = _extract_phone_from_tel_links(node)
+            main_part = re.split(r"\s+[–\-]\s+", text, maxsplit=1)[0]
+            match = re.match(
+                r"^\s*([A-Z][a-zA-Z'`.-]+(?:\s+[A-Z][a-zA-Z'`.-]+){1,2})\s*,\s*(.+?)\s*$",
+                main_part,
+            )
+            if not match:
+                continue
+            name = normalize_whitespace(match.group(1)) or None
+            title = normalize_whitespace(match.group(2)) or None
+            out.append(
+                {
+                    "name": name,
+                    "title": title,
+                    "department": inferred_department,
+                    "email": email or None,
+                    "email_type": infer_email_type(email),
+                    "phone": phone or None,
+                    "phone_ext": phone_ext or None,
+                    "address": None,
+                    "hours": None,
+                    "source_context": text[:240],
+                    "source_url": page_url,
+                    "confidence": 0.82,
+                    "revize_source_type": "inline_staff_list",
+                }
+            )
+    return out
+
+
+def extract_revize_labeled_staff_blocks(
+    soup,
+    page_url: str,
+    page_context: dict[str, object] | None = None,
+) -> list[dict[str, str | float | None]]:
+    context = dict(page_context or {})
+    inferred_department = _infer_department_from_page_context(context, page_url)
+    if soup is None:
+        return _extract_revize_labeled_staff_blocks_regex(
+            html_text=str(context.get("html_text") or ""),
+            page_url=page_url,
+            department_hint=inferred_department,
+        )
+    out: list[dict[str, str | float | None]] = []
+
+    for node in soup.find_all(["p", "li", "div", "td"]):
+        if _is_structural_or_excluded_node(node):
+            continue
+        text = normalize_whitespace(node.get_text(" ", strip=True)) or ""
+        if ":" not in text:
+            continue
+        label_match = re.match(r"^\s*([^:]{2,80}):\s*", text)
+        if not label_match:
+            continue
+        label = normalize_whitespace(label_match.group(1)) or None
+        if not label or _is_action_text(label):
+            continue
+
+        candidate_name = None
+        for anchor in node.find_all("a", href=True):
+            href = str(anchor.get("href") or "")
+            if href.lower().startswith("mailto:"):
+                continue
+            anchor_text = normalize_whitespace(anchor.get_text(" ", strip=True)) or ""
+            if _looks_like_person_name(anchor_text):
+                candidate_name = anchor_text
+                break
+        if not candidate_name:
+            candidate_name = _extract_person_name_from_text(text)
+        if not candidate_name:
+            continue
+
+        phone, phone_ext = _extract_phone_from_tel_links(node)
+        email = _extract_email_from_mailto_links(node)
+        out.append(
+            {
+                "name": candidate_name,
+                "title": label,
+                "department": inferred_department,
+                "email": email or None,
+                "email_type": infer_email_type(email),
+                "phone": phone or None,
+                "phone_ext": phone_ext or None,
+                "address": None,
+                "hours": None,
+                "source_context": text[:240],
+                "source_url": page_url,
+                "confidence": 0.81,
+                "revize_source_type": "labeled_staff",
+            }
+        )
+    return out
+
+
 def run_revize_strategy_for_municipality(
     municipality_homepage: str,
     harvested_links: Iterable[dict[str, str] | str] | None = None,
@@ -780,6 +1028,13 @@ def run_revize_strategy_for_municipality(
         "sidebar_staff_contacts_extracted": 0,
         "department_contact_blocks_found": 0,
         "department_contact_rows_extracted": 0,
+        "revize_footer_blocks_ignored": 0,
+        "revize_hours_blocks_ignored": 0,
+        "revize_office_contact_blocks": 0,
+        "revize_person_blocks": 0,
+        "revize_structural_blocks_dropped": 0,
+        "revize_invalid_name_rejections": 0,
+        "revize_phone_string_preserved": 0,
     }
     extracted_rows_sample: list[dict[str, object]] = []
     normalized_rows_sample: list[dict[str, object]] = []
@@ -842,6 +1097,27 @@ def run_revize_strategy_for_municipality(
             )
             counters["department_contact_rows_extracted"] += _coerce_int(
                 per_page_metrics.get("department_contact_rows_extracted")
+            )
+            counters["revize_footer_blocks_ignored"] += _coerce_int(
+                per_page_metrics.get("revize_footer_blocks_ignored")
+            )
+            counters["revize_hours_blocks_ignored"] += _coerce_int(
+                per_page_metrics.get("revize_hours_blocks_ignored")
+            )
+            counters["revize_office_contact_blocks"] += _coerce_int(
+                per_page_metrics.get("revize_office_contact_blocks")
+            )
+            counters["revize_person_blocks"] += _coerce_int(
+                per_page_metrics.get("revize_person_blocks")
+            )
+            counters["revize_structural_blocks_dropped"] += _coerce_int(
+                per_page_metrics.get("revize_structural_blocks_dropped")
+            )
+            counters["revize_invalid_name_rejections"] += _coerce_int(
+                per_page_metrics.get("revize_invalid_name_rejections")
+            )
+            counters["revize_phone_string_preserved"] += _coerce_int(
+                per_page_metrics.get("revize_phone_string_preserved")
             )
             counters["rows_extracted_total"] += _coerce_int(per_page_metrics.get("rows_extracted_total"))
             counters["rows_normalized_seen"] += _coerce_int(per_page_metrics.get("rows_normalized_seen"))
@@ -915,6 +1191,19 @@ def run_revize_strategy_for_municipality(
                 ),
                 "department_contact_rows_extracted": _coerce_int(
                     per_page_metrics.get("department_contact_rows_extracted")
+                ),
+                "revize_footer_blocks_ignored": _coerce_int(per_page_metrics.get("revize_footer_blocks_ignored")),
+                "revize_hours_blocks_ignored": _coerce_int(per_page_metrics.get("revize_hours_blocks_ignored")),
+                "revize_office_contact_blocks": _coerce_int(per_page_metrics.get("revize_office_contact_blocks")),
+                "revize_person_blocks": _coerce_int(per_page_metrics.get("revize_person_blocks")),
+                "revize_structural_blocks_dropped": _coerce_int(
+                    per_page_metrics.get("revize_structural_blocks_dropped")
+                ),
+                "revize_invalid_name_rejections": _coerce_int(
+                    per_page_metrics.get("revize_invalid_name_rejections")
+                ),
+                "revize_phone_string_preserved": _coerce_int(
+                    per_page_metrics.get("revize_phone_string_preserved")
                 ),
                 "page_title": str(fetch_row.get("page_title") or ""),
             }
@@ -991,33 +1280,37 @@ def _extract_revize_contacts_with_diagnostics(
     source_url: str,
     source_kind: str,
 ) -> tuple[list[dict[str, str | float | None]], Counter[str], dict[str, int], dict[str, object]]:
-    soup = None
-    if BeautifulSoup is not None:
-        try:
-            soup = BeautifulSoup(html_text or "", "html.parser")
-        except Exception:
-            soup = None
-    page_context = _build_page_context(html_text=html_text, source_url=source_url, soup=soup)
+    sanitized_html_text, soup, structural_counts = _sanitize_revize_html(html_text)
+    page_context = _build_page_context(html_text=sanitized_html_text, source_url=source_url, soup=soup)
     department_like = _is_department_like_page(source_url, page_context)
 
     sidebar_rows = extract_revize_sidebar_staff(soup, source_url, page_context)
-    table_rows = extract_revize_table_directory(html_text, source_url)
-    profile_rows = extract_revize_profile_blocks(html_text, source_url)
-    department_section_rows = extract_revize_department_sections(html_text, source_url)
-    single_profile_rows = extract_revize_single_profile_page(html_text, source_url)
+    table_rows = extract_revize_table_directory(sanitized_html_text, source_url)
+    contact_card_rows = extract_revize_contact_cards(soup, source_url, page_context)
+    inline_staff_rows = extract_revize_inline_staff_lists(soup, source_url, page_context)
+    labeled_staff_rows = extract_revize_labeled_staff_blocks(soup, source_url, page_context)
+    profile_rows = extract_revize_profile_blocks(sanitized_html_text, source_url)
+    department_section_rows = extract_revize_department_sections(sanitized_html_text, source_url)
+    single_profile_rows = extract_revize_single_profile_page(sanitized_html_text, source_url)
     department_contact_rows = extract_revize_department_contact_info(soup, source_url, page_context)
 
     extracted: list[dict[str, str | float | None]] = []
     if department_like:
         extracted.extend(sidebar_rows)
         extracted.extend(table_rows)
+        extracted.extend(contact_card_rows)
+        extracted.extend(inline_staff_rows)
+        extracted.extend(labeled_staff_rows)
         extracted.extend(profile_rows)
         extracted.extend(department_section_rows)
         extracted.extend(single_profile_rows)
         extracted.extend(department_contact_rows)
     else:
         extracted.extend(table_rows)
+        extracted.extend(contact_card_rows)
         extracted.extend(profile_rows)
+        extracted.extend(inline_staff_rows)
+        extracted.extend(labeled_staff_rows)
         extracted.extend(department_section_rows)
         extracted.extend(single_profile_rows)
         extracted.extend(sidebar_rows)
@@ -1030,12 +1323,22 @@ def _extract_revize_contacts_with_diagnostics(
                 row["department"] = inferred_department
 
     if not extracted:
-        classified = classify_revize_page(html_text=html_text, url=source_url)
+        classified = classify_revize_page(html_text=sanitized_html_text, url=source_url)
         fallback_source_type = str(classified.get("source_type") or "unknown")
-        for row in extract_contacts(html_text, source_url, page_type="directory_page"):
+        for row in extract_contacts(sanitized_html_text, source_url, page_type="directory_page"):
             candidate = dict(row)
             candidate["revize_source_type"] = fallback_source_type
             extracted.append(candidate)
+
+    block_classification_counts = {
+        "person_block": 0,
+        "office_contact_block": 0,
+        "structural_block": 0,
+    }
+    for row in extracted:
+        block_class = _classify_revize_row_block(row)
+        block_classification_counts[block_class] = block_classification_counts.get(block_class, 0) + 1
+        row["revize_block_class"] = block_class
 
     reduction_counts: Counter[str] = Counter()
     deduped: dict[tuple[str, ...], dict[str, str | float | None]] = {}
@@ -1078,15 +1381,30 @@ def _extract_revize_contacts_with_diagnostics(
         ),
     )
     source_counts = _count_extraction_sources(contacts)
+    invalid_name_rejections = (
+        _coerce_int(reduction_counts.get("drop_name_literal_reject"))
+        + _coerce_int(reduction_counts.get("drop_name_action_label"))
+        + _coerce_int(reduction_counts.get("drop_name_generic_heading"))
+        + _coerce_int(reduction_counts.get("drop_name_invalid_pattern"))
+        + _coerce_int(reduction_counts.get("drop_name_address_like"))
+        + _coerce_int(reduction_counts.get("drop_name_non_person_label"))
+    )
     metrics = {
         "rows_extracted_total": len(extracted),
         "rows_normalized_seen": len(extracted),
         "rows_normalized_kept": normalized_kept_count,
         "rows_normalized_rejected": max(0, len(extracted) - normalized_kept_count),
-        "sidebar_staff_blocks_found": _count_sidebar_staff_blocks(html_text),
+        "sidebar_staff_blocks_found": _count_sidebar_staff_blocks(sanitized_html_text),
         "sidebar_staff_contacts_extracted": _coerce_int(source_counts.get("sidebar_staff")),
-        "department_contact_blocks_found": _count_department_contact_blocks(html_text),
+        "department_contact_blocks_found": _count_department_contact_blocks(sanitized_html_text),
         "department_contact_rows_extracted": _coerce_int(source_counts.get("department_contact_block")),
+        "revize_footer_blocks_ignored": _coerce_int(structural_counts.get("revize_footer_blocks_ignored")),
+        "revize_hours_blocks_ignored": _coerce_int(structural_counts.get("revize_hours_blocks_ignored")),
+        "revize_structural_blocks_dropped": _coerce_int(structural_counts.get("revize_structural_blocks_dropped")),
+        "revize_person_blocks": _coerce_int(block_classification_counts.get("person_block")),
+        "revize_office_contact_blocks": _coerce_int(block_classification_counts.get("office_contact_block")),
+        "revize_invalid_name_rejections": invalid_name_rejections,
+        "revize_phone_string_preserved": _coerce_int(reduction_counts.get("revize_phone_string_preserved")),
         "extracted_rows_sample": extracted_rows_sample,
         "normalized_rows_sample": normalized_rows_sample,
         "rejected_rows_sample": rejected_rows_sample,
@@ -1222,6 +1540,150 @@ def _extract_text_blob(html_text: str) -> str:
     return normalize_whitespace(soup.get_text(" ", strip=True)) or ""
 
 
+def _sanitize_revize_html(html_text: str) -> tuple[str, object | None, dict[str, int]]:
+    structural_counts = {
+        "revize_footer_blocks_ignored": 0,
+        "revize_hours_blocks_ignored": 0,
+        "revize_structural_blocks_dropped": 0,
+    }
+    if BeautifulSoup is None:
+        sanitized, regex_counts = _sanitize_revize_html_regex(html_text or "")
+        structural_counts.update(regex_counts)
+        return sanitized, None, structural_counts
+    try:
+        soup = BeautifulSoup(html_text or "", "html.parser")
+    except Exception:
+        sanitized, regex_counts = _sanitize_revize_html_regex(html_text or "")
+        structural_counts.update(regex_counts)
+        return sanitized, None, structural_counts
+
+    removed_nodes: set[int] = set()
+
+    def drop(node, category: str) -> None:
+        if node is None:
+            return
+        node_id = id(node)
+        if node_id in removed_nodes:
+            return
+        removed_nodes.add(node_id)
+        if category == "footer":
+            structural_counts["revize_footer_blocks_ignored"] += 1
+        elif category == "hours":
+            structural_counts["revize_hours_blocks_ignored"] += 1
+        structural_counts["revize_structural_blocks_dropped"] += 1
+        node.decompose()
+
+    for footer in list(soup.find_all("footer")):
+        drop(footer, "footer")
+
+    for selector in REVIZE_EXCLUDED_SELECTOR_PATTERNS:
+        for node in list(soup.select(selector)):
+            if selector == "#hours-wrap":
+                drop(node, "hours")
+            elif selector == "footer":
+                drop(node, "footer")
+            else:
+                drop(node, "structural")
+
+    for script in list(soup.find_all("script")):
+        script_text = normalize_whitespace(script.get_text(" ", strip=True)) or ""
+        if "rz.module" in script_text.lower():
+            drop(script, "structural")
+
+    for node in list(soup.find_all(["section", "div", "aside", "nav", "ul", "ol", "article"])):
+        text = normalize_whitespace(node.get_text(" ", strip=True)) or ""
+        lowered = text.lower()
+        if not lowered:
+            continue
+        if re.match(r"^(?:office hours)\b", lowered):
+            drop(node, "hours")
+            continue
+        if re.match(r"^(?:resources|related links)\b", lowered):
+            drop(node, "structural")
+
+    return str(soup), soup, structural_counts
+
+
+def _sanitize_revize_html_regex(html_text: str) -> tuple[str, dict[str, int]]:
+    structural_counts = {
+        "revize_footer_blocks_ignored": 0,
+        "revize_hours_blocks_ignored": 0,
+        "revize_structural_blocks_dropped": 0,
+    }
+    sanitized = html_text or ""
+    if not sanitized:
+        return sanitized, structural_counts
+
+    def drop_pattern(pattern: str, category: str = "structural") -> None:
+        nonlocal sanitized
+        matches = list(re.finditer(pattern, sanitized))
+        if not matches:
+            return
+        count = len(matches)
+        if category == "footer":
+            structural_counts["revize_footer_blocks_ignored"] += count
+        elif category == "hours":
+            structural_counts["revize_hours_blocks_ignored"] += count
+        structural_counts["revize_structural_blocks_dropped"] += count
+        sanitized = re.sub(pattern, " ", sanitized)
+
+    drop_pattern(r"(?is)<footer\b[^>]*>.*?</footer>", category="footer")
+    drop_pattern(
+        r"(?is)<(?P<tag>[a-z0-9]+)\b(?=[^>]*\bid\s*=\s*(?:\"hours-wrap\"|'hours-wrap'))[^>]*>.*?</(?P=tag)>",
+        category="hours",
+    )
+    for class_token in ("footer-links-box", "rz-btns-container", "resource-link"):
+        drop_pattern(
+            rf"(?is)<(?P<tag>[a-z0-9]+)\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\b{re.escape(class_token)}\b[^\"]*\"|'[^']*\b{re.escape(class_token)}\b[^']*'))[^>]*>.*?</(?P=tag)>",
+            category="structural",
+        )
+    for token in REVIZE_STRUCTURAL_TEXT_REJECTS:
+        if token == "office hours":
+            category = "hours"
+        else:
+            category = "structural"
+        drop_pattern(
+            rf"(?is)<(?P<tag>section|div|aside|nav|ul|ol|article)\b[^>]*>.*?\b{re.escape(token)}\b.*?</(?P=tag)>",
+            category=category,
+        )
+    drop_pattern(r"(?is)<script[^>]*>[^<]*RZ\.module.*?</script>", category="structural")
+    return sanitized, structural_counts
+
+
+def _classify_revize_row_block(row: dict[str, str | float | None]) -> str:
+    source_type = str(row.get("revize_source_type") or "").strip().lower()
+    name = normalize_whitespace(str(row.get("name") or "")) or ""
+    title = normalize_whitespace(str(row.get("title") or "")) or ""
+    email = str(row.get("email") or "").strip()
+    phone = str(row.get("phone") or "").strip()
+
+    if source_type == "department_contact_block":
+        return "office_contact_block"
+    if name and _looks_like_person_name(name) and (title or email or phone):
+        return "person_block"
+    if email or phone:
+        return "office_contact_block"
+    return "structural_block"
+
+
+def _is_structural_or_excluded_node(node) -> bool:
+    if node is None:
+        return True
+    if node.find_parent("footer") is not None:
+        return True
+    class_blob = " ".join(str(token) for token in (node.get("class") or [])).lower()
+    node_id = str(node.get("id") or "").lower()
+    if any(token in class_blob for token in ("footer-links-box", "rz-btns-container", "resource-link")):
+        return True
+    if node_id == "hours-wrap":
+        return True
+    text = normalize_whitespace(node.get_text(" ", strip=True)) or ""
+    lowered = text.lower()
+    if re.match(r"^(?:office hours|resources|related links)\b", lowered):
+        return True
+    return False
+
+
 def _build_page_context(
     html_text: str,
     source_url: str,
@@ -1323,6 +1785,8 @@ def _to_department_label(value: str) -> str | None:
     candidate = normalize_whitespace(value) or ""
     if not candidate:
         return None
+    if _looks_like_address_or_location(candidate):
+        return None
     lowered = candidate.lower()
     lowered = re.sub(r"(?i)\btown of\b.*$", "", lowered).strip(" -|")
     lowered = re.sub(r"(?i)\bcity of\b.*$", "", lowered).strip(" -|")
@@ -1338,6 +1802,8 @@ def _to_department_label(value: str) -> str | None:
     if lowered in REVIZE_GENERIC_HEADING_REJECTS:
         return None
     if lowered in {"government", "departments", "home", "staff", "directory"}:
+        return None
+    if lowered in {"education", "contact us", "office hours", "resources", "related links"}:
         return None
     return " ".join(part.capitalize() for part in lowered.split())
 
@@ -1380,6 +1846,33 @@ def _count_department_contact_blocks(html_text: str) -> int:
         if heading_text and "contact" in heading_text.lower():
             hits += 1
     return hits
+
+
+def _count_contact_card_hits(html_text: str) -> int:
+    if BeautifulSoup is None:
+        return len(re.findall(r"(?is)class\s*=\s*(?:\"[^\"]*contact-name[^\"]*\"|'[^']*contact-name[^']*')", html_text or ""))
+    try:
+        soup = BeautifulSoup(html_text or "", "html.parser")
+    except Exception:
+        return 0
+    return len(soup.select(".contact-name"))
+
+
+def _count_inline_staff_hits(html_text: str) -> int:
+    blob = normalize_whitespace(_extract_text_blob(html_text)) or ""
+    if not blob:
+        return 0
+    has_mailto = bool(re.search(r"(?i)mailto:", html_text or ""))
+    if not has_mailto:
+        return 0
+    return 1 if re.search(r"\b[A-Z][a-zA-Z'`.-]+(?:\s+[A-Z][a-zA-Z'`.-]+){1,2}\s*,\s*[A-Za-z]", blob) else 0
+
+
+def _count_labeled_staff_hits(html_text: str) -> int:
+    blob = normalize_whitespace(_extract_text_blob(html_text)) or ""
+    if not blob:
+        return 0
+    return 1 if re.search(r"(?i)\b(?:manager|clerk|director|administrator|assessor|collector|chief)\s*:\s*[A-Z]", blob) else 0
 
 
 def _count_table_header_hits(html_text: str) -> int:
@@ -1544,6 +2037,31 @@ def _extract_email_from_mailto_links(node) -> str | None:
     return None
 
 
+def _extract_contact_info_from_node(
+    node,
+    fallback_phone: str | None = None,
+    fallback_phone_ext: str | None = None,
+    fallback_email: str | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    phone, phone_ext = _extract_phone_from_tel_links(node)
+    email = _extract_email_from_mailto_links(node)
+    blob = normalize_whitespace(node.get_text(" ", strip=True)) or ""
+    if not email:
+        emails = extract_emails(blob)
+        if emails:
+            email = emails[0].lower()
+    if not phone:
+        phone_candidates = extract_phone_candidates(blob)
+        if phone_candidates:
+            phone = str(phone_candidates[0].get("phone") or "") or None
+            phone_ext = str(phone_candidates[0].get("phone_ext") or "") or phone_ext
+    return (
+        phone or fallback_phone,
+        phone_ext or fallback_phone_ext,
+        email or fallback_email,
+    )
+
+
 def _extract_revize_sidebar_staff_regex(
     html_text: str,
     page_url: str,
@@ -1681,6 +2199,208 @@ def _extract_revize_department_contact_info_regex(
                 "source_url": page_url,
                 "confidence": 0.72,
                 "revize_source_type": "department_contact_block",
+            }
+        )
+    return out
+
+
+def _extract_href_values_from_html(fragment: str) -> list[str]:
+    out: list[str] = []
+    for href in re.findall(
+        r"""(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""",
+        fragment or "",
+    ):
+        value = href[0] or href[1] or href[2]
+        value = normalize_whitespace(value) or ""
+        if value:
+            out.append(value)
+    return out
+
+
+def _extract_contact_channels_from_html_fragment(
+    fragment: str,
+    fallback_phone: str | None = None,
+    fallback_phone_ext: str | None = None,
+    fallback_email: str | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    text = normalize_whitespace(_strip_tags(fragment)) or ""
+    emails = set(extract_emails(text))
+    phones = extract_phone_candidates(text)
+    for href in _extract_href_values_from_html(fragment):
+        emails.update(extract_emails_from_href(href))
+        if href.lower().startswith("tel:"):
+            tel_value = href.split(":", 1)[1] if ":" in href else href
+            phone_candidates = extract_phone_candidates(tel_value)
+            if phone_candidates:
+                phones = [*phone_candidates, *phones]
+    phone = str(phones[0].get("phone") or "") if phones else ""
+    phone_ext = str(phones[0].get("phone_ext") or "") if phones else ""
+    email = sorted(emails)[0].lower() if emails else ""
+    return (
+        phone or fallback_phone,
+        phone_ext or fallback_phone_ext,
+        email or fallback_email,
+    )
+
+
+def _extract_revize_contact_cards_regex(
+    html_text: str,
+    page_url: str,
+    department_hint: str | None,
+) -> list[dict[str, str | float | None]]:
+    out: list[dict[str, str | float | None]] = []
+    if not html_text:
+        return out
+
+    fallback_contact_html = ""
+    fallback_match = re.search(
+        r"(?is)<(?P<tag>[a-z0-9]+)\b(?=[^>]*\bid\s*=\s*(?:\"contact-info\"|'contact-info'))[^>]*>(?P<body>.*?)</(?P=tag)>",
+        html_text,
+    )
+    if fallback_match:
+        fallback_contact_html = str(fallback_match.group("body") or "")
+    fallback_phone, fallback_phone_ext, fallback_email = _extract_contact_channels_from_html_fragment(
+        fallback_contact_html
+    )
+
+    name_pattern = re.compile(
+        r"(?is)<(?P<tag>[a-z0-9]+)\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\bcontact-name\b[^\"]*\"|'[^']*\bcontact-name\b[^']*'))[^>]*>(?P<name>.*?)</(?P=tag)>"
+    )
+    for match in name_pattern.finditer(html_text):
+        name = normalize_whitespace(_strip_tags(str(match.group("name") or ""))) or None
+        if not name:
+            continue
+        start = max(0, match.start() - 500)
+        end = min(len(html_text), match.end() + 900)
+        segment = html_text[start:end]
+        title = None
+        title_match = re.search(
+            r"(?is)<(?P<tag>[a-z0-9]+)\b(?=[^>]*\bclass\s*=\s*(?:\"[^\"]*\bcontact-position\b[^\"]*\"|'[^']*\bcontact-position\b[^']*'))[^>]*>(?P<title>.*?)</(?P=tag)>",
+            segment,
+        )
+        if title_match:
+            title = normalize_whitespace(_strip_tags(str(title_match.group("title") or ""))) or None
+        phone, phone_ext, email = _extract_contact_channels_from_html_fragment(
+            segment,
+            fallback_phone=fallback_phone,
+            fallback_phone_ext=fallback_phone_ext,
+            fallback_email=fallback_email,
+        )
+        out.append(
+            {
+                "name": name,
+                "title": title,
+                "department": department_hint,
+                "email": email or None,
+                "email_type": infer_email_type(email),
+                "phone": phone or None,
+                "phone_ext": phone_ext or None,
+                "address": None,
+                "hours": None,
+                "source_context": (normalize_whitespace(_strip_tags(segment)) or "")[:240],
+                "source_url": page_url,
+                "confidence": 0.84,
+                "revize_source_type": "contact_card",
+            }
+        )
+    return out
+
+
+def _extract_revize_inline_staff_lists_regex(
+    html_text: str,
+    page_url: str,
+    department_hint: str | None,
+) -> list[dict[str, str | float | None]]:
+    out: list[dict[str, str | float | None]] = []
+    if not html_text:
+        return out
+    for match in re.finditer(r"(?is)<(p|li|div|td)[^>]*>(.*?)</\1>", html_text):
+        body = str(match.group(2) or "")
+        href_values = _extract_href_values_from_html(body)
+        if not any(value.lower().startswith("mailto:") for value in href_values):
+            continue
+        text = normalize_whitespace(_strip_tags(body)) or ""
+        if not text or "," not in text:
+            continue
+        main_part = re.split(r"\s*(?:-|–|—|â€“)\s*", text, maxsplit=1)[0]
+        parsed = re.match(
+            r"^\s*([A-Z][a-zA-Z'`.-]+(?:\s+[A-Z][a-zA-Z'`.-]+){1,2})\s*,\s*(.+?)\s*$",
+            main_part,
+        )
+        if not parsed:
+            continue
+        name = normalize_whitespace(parsed.group(1)) or None
+        title = normalize_whitespace(parsed.group(2)) or None
+        phone, phone_ext, email = _extract_contact_channels_from_html_fragment(body)
+        out.append(
+            {
+                "name": name,
+                "title": title,
+                "department": department_hint,
+                "email": email or None,
+                "email_type": infer_email_type(email),
+                "phone": phone or None,
+                "phone_ext": phone_ext or None,
+                "address": None,
+                "hours": None,
+                "source_context": text[:240],
+                "source_url": page_url,
+                "confidence": 0.82,
+                "revize_source_type": "inline_staff_list",
+            }
+        )
+    return out
+
+
+def _extract_revize_labeled_staff_blocks_regex(
+    html_text: str,
+    page_url: str,
+    department_hint: str | None,
+) -> list[dict[str, str | float | None]]:
+    out: list[dict[str, str | float | None]] = []
+    if not html_text:
+        return out
+    for match in re.finditer(r"(?is)<(p|li|div|td)[^>]*>(.*?)</\1>", html_text):
+        body = str(match.group(2) or "")
+        text = normalize_whitespace(_strip_tags(body)) or ""
+        if ":" not in text:
+            continue
+        label_match = re.match(r"^\s*([^:]{2,80}):\s*", text)
+        if not label_match:
+            continue
+        label = normalize_whitespace(label_match.group(1)) or None
+        if not label or _is_action_text(label):
+            continue
+
+        candidate_name = None
+        for anchor_match in re.finditer(r"(?is)<a[^>]*href\s*=\s*(?:\"([^\"]+)\"|'([^']+)')[^>]*>(.*?)</a>", body):
+            href_value = anchor_match.group(1) or anchor_match.group(2) or ""
+            if href_value.lower().startswith("mailto:"):
+                continue
+            anchor_text = normalize_whitespace(_strip_tags(anchor_match.group(3) or "")) or ""
+            if _looks_like_person_name(anchor_text):
+                candidate_name = anchor_text
+                break
+        if not candidate_name:
+            candidate_name = _extract_person_name_from_text(text)
+        if not candidate_name:
+            continue
+        phone, phone_ext, email = _extract_contact_channels_from_html_fragment(body)
+        out.append(
+            {
+                "name": candidate_name,
+                "title": label,
+                "department": department_hint,
+                "email": email or None,
+                "email_type": infer_email_type(email),
+                "phone": phone or None,
+                "phone_ext": phone_ext or None,
+                "address": None,
+                "hours": None,
+                "source_context": text[:240],
+                "source_url": page_url,
+                "confidence": 0.81,
+                "revize_source_type": "labeled_staff",
             }
         )
     return out
@@ -2071,25 +2791,37 @@ def _normalize_revize_contact_row(
     reduction_counts: Counter[str],
 ) -> dict[str, str | float | None] | None:
     email = str(row.get("email") or "").strip().lower()
-    phone = str(row.get("phone") or "").strip()
+    phone = _normalize_phone_string(row.get("phone"))
 
     name = normalize_whitespace(str(row.get("name") or "")) or None
     title = normalize_whitespace(str(row.get("title") or "")) or None
     department = normalize_whitespace(str(row.get("department") or "")) or None
     source_context = normalize_whitespace(str(row.get("source_context") or "")) or ""
     source_type = str(row.get("revize_source_type") or "unknown").strip() or "unknown"
+    source_context = _tag_revize_source_context(source_context, source_type)
+    block_class = str(row.get("revize_block_class") or _classify_revize_row_block(row))
 
     if name and _is_vacancy_name(name):
         reduction_counts["suppressed_vacancy_rows"] += 1
         return None
     if name and _is_rejected_name_literal(name):
+        reduction_counts["revize_invalid_name_rejections"] += 1
         reduction_counts["drop_name_literal_reject"] += 1
         return None
 
     if name:
         lowered_name = name.lower()
         if _is_action_text(name):
+            reduction_counts["revize_invalid_name_rejections"] += 1
             reduction_counts["drop_name_action_label"] += 1
+            return None
+        if _looks_like_address_or_location(name):
+            reduction_counts["revize_invalid_name_rejections"] += 1
+            reduction_counts["drop_name_address_like"] += 1
+            return None
+        if _is_non_person_label(name):
+            reduction_counts["revize_invalid_name_rejections"] += 1
+            reduction_counts["drop_name_non_person_label"] += 1
             return None
         if _looks_like_department(name):
             if not department:
@@ -2102,9 +2834,11 @@ def _normalize_revize_contact_row(
             name = None
             reduction_counts["converted_name_to_title"] += 1
         elif lowered_name in REVIZE_GENERIC_HEADING_REJECTS:
+            reduction_counts["revize_invalid_name_rejections"] += 1
             reduction_counts["drop_name_generic_heading"] += 1
             return None
         elif not _looks_like_person_name(name):
+            reduction_counts["revize_invalid_name_rejections"] += 1
             reduction_counts["drop_name_invalid_pattern"] += 1
             name = None
 
@@ -2114,19 +2848,39 @@ def _normalize_revize_contact_row(
     if department and _is_action_text(department):
         department = None
         reduction_counts["drop_department_action_label"] += 1
+    if department and _looks_like_address_or_location(department):
+        reduction_counts["drop_department_address_like"] += 1
+        department = None
+    if (
+        department
+        and department.strip().lower() == "education"
+        and "education" not in (source_url or "").lower()
+        and "education department" not in source_context.lower()
+    ):
+        reduction_counts["drop_department_ambiguous_education"] += 1
+        department = None
     if department:
         department = _to_department_label(department) or department
 
     if not name and (email or phone):
         source_type = "department_contact_block"
+        block_class = "office_contact_block"
         if not title:
+            title = "Department Contact"
+        elif _looks_like_title(title):
             title = "Department Contact"
         if not department:
             department = _infer_department_from_source_url(source_url)
+        if department and _looks_like_title(department):
+            department = None
         reduction_counts["contact_only_mapped_to_department_contact"] += 1
 
     if _count_contacts_in_context(source_context) > 1 and not name and source_type != "department_contact_block":
         reduction_counts["drop_multi_contact_block_ambiguous"] += 1
+        return None
+
+    if name and not (title or email or phone):
+        reduction_counts["drop_person_missing_supporting_fields"] += 1
         return None
 
     if not name and not title and not department:
@@ -2140,6 +2894,22 @@ def _normalize_revize_contact_row(
             reduction_counts["drop_missing_contact_method"] += 1
             return None
 
+    if phone:
+        reduction_counts["revize_phone_string_preserved"] += 1
+
+    confidence = round(float(row.get("confidence") or 0.58), 3)
+    if source_type == "department_contact_block" or block_class == "office_contact_block":
+        confidence = min(confidence, 0.62)
+    if _is_contact_hub_source_url(source_url) and (not name or block_class != "person_block"):
+        confidence = min(confidence, 0.54)
+    if (
+        source_type == "department_contact_block"
+        and title
+        and _looks_like_title(title)
+        and "department contact" not in title.lower()
+    ):
+        confidence = min(confidence, 0.5)
+
     normalized = {
         "name": name,
         "title": title,
@@ -2147,12 +2917,12 @@ def _normalize_revize_contact_row(
         "email": email or None,
         "email_type": str(row.get("email_type") or infer_email_type(email)),
         "phone": phone or None,
-        "phone_ext": (str(row.get("phone_ext") or "").strip() or None),
+        "phone_ext": (_normalize_phone_ext_string(row.get("phone_ext")) or None),
         "address": row.get("address"),
         "hours": row.get("hours"),
         "source_context": source_context,
         "source_url": str(row.get("source_url") or source_url),
-        "confidence": round(float(row.get("confidence") or 0.58), 3),
+        "confidence": confidence,
         "revize_source_kind": source_kind,
         "revize_source_type": source_type or "unknown",
     }
@@ -2231,6 +3001,9 @@ def _count_extraction_sources(
 ) -> dict[str, int]:
     counts = {
         "sidebar_staff": 0,
+        "contact_card": 0,
+        "inline_staff_list": 0,
+        "labeled_staff": 0,
         "department_contact_block": 0,
         "table_directory": 0,
         "profile_block": 0,
@@ -2263,6 +3036,10 @@ def _looks_like_person_name(value: str) -> bool:
         return False
     if _is_rejected_name_literal(candidate):
         return False
+    if _is_non_person_label(candidate):
+        return False
+    if _looks_like_address_or_location(candidate):
+        return False
     if re.search(r"\d", candidate):
         return False
     parts = candidate.split()
@@ -2285,6 +3062,8 @@ def _looks_like_person_name(value: str) -> bool:
     }:
         return False
     lowered = candidate.lower()
+    if re.search(r"\b(building|annex)\b", lowered):
+        return False
     if _is_action_text(candidate):
         return False
     if lowered in REVIZE_GENERIC_HEADING_REJECTS:
@@ -2333,6 +3112,76 @@ def _is_rejected_name_literal(value: str) -> bool:
     if not lowered:
         return False
     return lowered in REVIZE_NAME_LITERAL_REJECTS
+
+
+def _is_non_person_label(value: str) -> bool:
+    lowered = (normalize_whitespace(value) or "").lower()
+    if not lowered:
+        return False
+    if lowered in REVIZE_NAME_LITERAL_REJECTS:
+        return True
+    return any(token in lowered for token in REVIZE_NAME_REJECT_FRAGMENT_TOKENS)
+
+
+def _looks_like_address_or_location(value: str) -> bool:
+    lowered = (normalize_whitespace(value) or "").lower()
+    if not lowered:
+        return False
+    if re.search(r"\b\d{1,5}\b", lowered):
+        return True
+    if re.search(r"\bct\b|\bconnecticut\b|\b\d{5}(?:-\d{4})?\b", lowered):
+        return True
+    if any(token in lowered for token in REVIZE_LOCATION_NAME_REJECT_TOKENS):
+        return True
+    return False
+
+
+def _normalize_phone_string(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    phone_candidates = extract_phone_candidates(text)
+    if phone_candidates:
+        return str(phone_candidates[0].get("phone") or "").strip()
+    digits = re.sub(r"[^0-9]", "", text)
+    if len(digits) >= 10:
+        if len(digits) == 11 and digits.startswith("1"):
+            return digits[1:]
+        return digits
+    return ""
+
+
+def _normalize_phone_ext_string(value: object) -> str:
+    if value is None:
+        return ""
+    digits = re.sub(r"[^0-9]", "", str(value))
+    return digits[:6] if digits else ""
+
+
+def _tag_revize_source_context(source_context: str, source_type: str) -> str:
+    cleaned_context = normalize_whitespace(source_context) or ""
+    prefix = f"revize:{(source_type or 'unknown').strip().lower()}"
+    if cleaned_context:
+        return f"{prefix} | {cleaned_context}"[:240]
+    return prefix
+
+
+def _is_contact_hub_source_url(source_url: str) -> bool:
+    lowered = (source_url or "").lower()
+    if not lowered:
+        return False
+    return any(
+        token in lowered
+        for token in (
+            "/contact",
+            "contact_us",
+            "contact-us",
+            "staff_directory",
+            "directory",
+        )
+    )
 
 
 def _normalize_token(value: str) -> str:

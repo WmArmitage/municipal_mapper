@@ -107,7 +107,13 @@ WITH ranked AS (
       PARTITION BY v.municipality_id, v.role_normalized
       ORDER BY
         CASE
-          WHEN COALESCE(c.suspicious_reason, '') = 'role_department_mismatch'
+          WHEN COALESCE(c.suspicious_reason, '') IN (
+              'role_department_mismatch',
+              'invalid_person_name',
+              'non_person_role_candidate',
+              'contact_hub_candidate',
+              'assistant_role_contamination'
+          )
           THEN 1
           WHEN v.role_normalized = 'Assessor'
                AND (
@@ -880,6 +886,51 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
                  AND LOWER(COALESCE(department, '')) NOT LIKE '%treasurer%'
             THEN 'role_department_mismatch'
             ELSE NULL
+        END
+        WHERE {where_contacts}
+        """,
+        params,
+    )
+
+    conn.execute(
+        f"""
+        UPDATE contacts
+        SET suspicious_reason = CASE
+            WHEN NULLIF(TRIM(COALESCE(suspicious_reason, '')), '') IS NOT NULL
+            THEN suspicious_reason
+            WHEN NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NULL
+            THEN suspicious_reason
+            WHEN LOWER(COALESCE(source_context, '')) NOT LIKE 'revize:%'
+            THEN suspicious_reason
+            WHEN (
+                NULLIF(TRIM(COALESCE(name, '')), '') IS NULL
+                OR LOWER(COALESCE(name, '')) LIKE '% street%'
+                OR LOWER(COALESCE(name, '')) LIKE '% avenue%'
+                OR LOWER(COALESCE(name, '')) LIKE '% road%'
+                OR LOWER(COALESCE(name, '')) LIKE '% lane%'
+                OR LOWER(COALESCE(name, '')) LIKE '% drive%'
+                OR LOWER(COALESCE(name, '')) LIKE '% ct %'
+                OR LOWER(COALESCE(name, '')) LIKE '% connecticut%'
+                OR LOWER(COALESCE(name, '')) GLOB '*[0-9][0-9][0-9][0-9][0-9]*'
+            )
+            THEN 'invalid_person_name'
+            WHEN COALESCE(entity_type, '') <> 'person'
+            THEN 'non_person_role_candidate'
+            WHEN LOWER(COALESCE(source_url, '')) LIKE '%contact%'
+                 AND (
+                    LOWER(COALESCE(title, '')) LIKE '%contact%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%department contact%'
+                    OR LOWER(COALESCE(name, '')) LIKE '%request%'
+                    OR LOWER(COALESCE(name, '')) LIKE '%information%'
+                 )
+            THEN 'contact_hub_candidate'
+            WHEN role_normalized IN ('First Selectman', 'Mayor', 'Town Manager', 'Town Administrator')
+                 AND (
+                    LOWER(COALESCE(name, '')) LIKE '%assistant%'
+                    OR LOWER(COALESCE(title, '')) LIKE '%assistant%'
+                 )
+            THEN 'assistant_role_contamination'
+            ELSE suspicious_reason
         END
         WHERE {where_contacts}
         """,

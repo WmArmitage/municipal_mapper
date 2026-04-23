@@ -329,6 +329,183 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertGreaterEqual(len(rows), 1)
         self.assertEqual(str(rows[0].get("department") or ""), "Building")
 
+    def test_footer_blocks_are_ignored(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Finance Department</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Jane Analyst<span>Finance Director</span></h4>
+                <a class="staff-link" href="mailto:jane.analyst@example.gov">Email</a>
+              </div>
+            </aside>
+            <footer>
+              <div class="staff-card">
+                <h3>Footer Noise</h3>
+                <a href="mailto:footer@example.gov">Email</a>
+              </div>
+            </footer>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/finance/index.php",
+            harvested_links=["https://www.example.gov/departments/finance/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        self.assertGreaterEqual(int(result.get("revize_footer_blocks_ignored") or 0), 1)
+        self.assertFalse(any(str(row.get("name") or "").strip() == "Footer Noise" for row in list(result.get("contacts") or [])))
+
+    def test_hours_blocks_are_ignored(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building Department</h1>
+            <div id="hours-wrap">
+              <h3>Office Hours</h3>
+              <p>Mon-Fri 8:30 AM - 4:30 PM</p>
+              <p>Phone: (860) 555-9999</p>
+            </div>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Jamie Stone<span>Inspector</span></h4>
+                <a class="staff-link" href="mailto:jamie.stone@example.gov">Email</a>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/building/index.php",
+            harvested_links=["https://www.example.gov/departments/building/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        self.assertGreaterEqual(int(result.get("revize_hours_blocks_ignored") or 0), 1)
+        self.assertFalse(any(str(row.get("phone") or "") == "8605559999" and not str(row.get("name") or "") for row in list(result.get("contacts") or [])))
+
+    def test_contact_card_pattern_extraction(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Administration</h1>
+            <div class="card">
+              <div class="contact-name">Alex Carter</div>
+              <div class="contact-position">Town Manager</div>
+            </div>
+            <div id="contact-info">
+              <a href="tel:(860)555-1010">Phone</a>
+              <a href="mailto:alex.carter@example.gov">Email</a>
+            </div>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/government/administration/index.php",
+            source_kind="department_page",
+        )
+        matching = [row for row in rows if str(row.get("name") or "") == "Alex Carter"]
+        self.assertTrue(matching)
+        self.assertEqual(str(matching[0].get("title") or ""), "Town Manager")
+        self.assertEqual(str(matching[0].get("email") or ""), "alex.carter@example.gov")
+
+    def test_inline_staff_list_pattern_extraction(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Town Hall</h1>
+            <p>Jane Doe, Town Clerk – <a href="mailto:jane.doe@example.gov">Email</a></p>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/town_hall/staff.php",
+            source_kind="department_page",
+        )
+        matching = [row for row in rows if str(row.get("name") or "") == "Jane Doe"]
+        self.assertTrue(matching)
+        self.assertEqual(str(matching[0].get("title") or ""), "Town Clerk")
+        self.assertEqual(str(matching[0].get("revize_source_type") or ""), "inline_staff_list")
+
+    def test_office_contact_block_does_not_become_person(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Finance Department</h1>
+            <section id="contact-info">
+              <h3>Contact Info</h3>
+              <p>Phone: (860) 555-4400</p>
+              <p>Email: finance@example.gov</p>
+              <p>172 Main Street, Example, CT 06001</p>
+            </section>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/finance/index.php",
+            source_kind="department_page",
+        )
+        office_rows = [row for row in rows if str(row.get("revize_source_type") or "") == "department_contact_block"]
+        self.assertTrue(office_rows)
+        self.assertTrue(all(not str(row.get("name") or "").strip() for row in office_rows))
+
+    def test_address_like_name_is_rejected(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Contact</h1>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Phone</th></tr>
+              <tr>
+                <td>Main Street Killingly</td>
+                <td>Town Manager</td>
+                <td>(860) 555-2222</td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/contact-us",
+            source_kind="contact_path",
+        )
+        self.assertFalse(any("Main Street" in str(row.get("name") or "") for row in rows))
+
+    def test_phone_is_preserved_as_digit_string(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Staff Contacts</h1>
+            <table>
+              <tr><th>Name</th><th>Title</th><th>Phone</th><th>Email</th></tr>
+              <tr>
+                <td>Riley Hart</td>
+                <td>Assessor</td>
+                <td>(860) 555-3333 ext 12</td>
+                <td><a href="mailto:riley.hart@example.gov">Email</a></td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/assessor/index.php",
+            source_kind="department_page",
+        )
+        self.assertTrue(rows)
+        phone = str(rows[0].get("phone") or "")
+        self.assertRegex(phone, r"^\d+$")
+        self.assertNotIn("E+", phone.upper())
+
 
 if __name__ == "__main__":
     unittest.main()
