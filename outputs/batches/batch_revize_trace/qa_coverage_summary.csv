@@ -1,0 +1,2 @@
+batch_id,municipalities_total,municipalities_blocked,municipalities_unblocked,municipalities_with_zero_yield_unblocked,municipalities_with_any_missing_groups_unblocked,municipalities_fully_covered_unblocked
+batch_revize_trace,14,0,14,3,14,0

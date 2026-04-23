@@ -1,0 +1,15 @@
+municipality_id,revize_rows_extracted,revize_rows_normalized_seen,revize_rows_normalized_kept,revize_rows_normalized_rejected,revize_rows_insert_attempted,revize_rows_inserted_or_updated,revize_rows_dropped_pre_clean_contacts,revize_rows_in_clean_contacts,revize_rows_considered_for_role_winners,revize_rows_selected_as_role_winners
+ct_avon,181,181,175,6,118,108,0,0,0,0
+ct_fairfield,121,121,121,0,46,23,0,0,0,0
+ct_griswold,53,53,53,0,43,43,0,0,0,0
+ct_groton,0,0,0,0,0,0,0,0,0,0
+ct_guilford,119,119,119,0,88,76,0,0,0,0
+ct_killingly,0,0,0,0,0,0,0,0,0,0
+ct_marlborough,0,0,0,0,0,0,0,0,0,0
+ct_new_canaan,0,0,0,0,0,0,0,0,0,0
+ct_north_haven,114,114,114,0,19,19,0,0,0,0
+ct_plainfield,40,40,40,0,17,17,0,0,0,0
+ct_ridgefield,121,121,121,0,71,67,0,0,0,0
+ct_southington,444,444,444,0,350,328,0,0,0,0
+ct_stafford,2,2,2,0,1,1,0,0,0,0
+ct_watertown,83,83,83,0,44,27,0,0,0,0
