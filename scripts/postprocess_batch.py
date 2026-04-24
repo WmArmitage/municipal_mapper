@@ -908,6 +908,15 @@ WITH eligible_candidates AS (
         END,
         v.candidate_score DESC,
         COALESCE(v.display_confidence, 0.0) DESC,
+        CASE
+          WHEN LOWER(COALESCE(v.title, '')) LIKE '%director%' THEN 1
+          WHEN LOWER(COALESCE(v.title, '')) LIKE '%chief%' THEN 2
+          WHEN LOWER(COALESCE(v.title, '')) LIKE '%official%' THEN 3
+          WHEN LOWER(COALESCE(v.title, '')) LIKE '%manager%' THEN 4
+          WHEN LOWER(COALESCE(v.title, '')) LIKE '%planner%' THEN 5
+          WHEN LOWER(COALESCE(v.title, '')) LIKE '%assistant%' THEN 6
+          ELSE 7
+        END,
         COALESCE(v.contact_id, '') ASC
     ) AS rn,
     CASE

@@ -293,6 +293,73 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "structure_favored_assessor")
 
+    def test_title_tiebreak_prefers_director_over_manager_when_other_fields_tie(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="a_manager",
+            municipality_id="ct_title_tiebreak",
+            role_normalized="Finance Director",
+            role_family="finance",
+            name="Avery Blake",
+            title="Finance Manager",
+            department="Finance Department",
+            email="",
+            phone="8605550300",
+            page_type="department_page",
+            source_url="https://town.example.org/finance",
+            source_context="revize:contact_card|page_class=department_page",
+            display_confidence=0.72,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="z_director",
+            municipality_id="ct_title_tiebreak",
+            role_normalized="Finance Director",
+            role_family="finance",
+            name="Taylor Brooks",
+            title="Director of Finance",
+            department="Finance Department",
+            email="",
+            phone="8605550301",
+            page_type="department_page",
+            source_url="https://town.example.org/finance",
+            source_context="revize:contact_card|page_class=department_page",
+            display_confidence=0.72,
+            suspicious_reason=None,
+        )
+        candidates = conn.execute(
+            """
+            SELECT contact_id, candidate_state, candidate_score, display_confidence
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            ORDER BY contact_id
+            """,
+            ("ct_title_tiebreak", "Finance Director"),
+        ).fetchall()
+        winner = conn.execute(
+            """
+            SELECT contact_id, title, candidate_state
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_title_tiebreak", "Finance Director"),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(
+            [(row["contact_id"], row["candidate_state"]) for row in candidates],
+            [
+                ("a_manager", "candidate_for_review"),
+                ("z_director", "candidate_for_review"),
+            ],
+        )
+        self.assertEqual(int(candidates[0]["candidate_score"]), int(candidates[1]["candidate_score"]))
+        self.assertEqual(float(candidates[0]["display_confidence"]), float(candidates[1]["display_confidence"]))
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "z_director")
+        self.assertEqual(winner["title"], "Director of Finance")
+
     def test_role_group_ranking_keeps_single_winner_when_high_confidence_exists_in_family(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
