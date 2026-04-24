@@ -117,7 +117,41 @@ WITH base AS (
     LOWER(TRIM(COALESCE(c.role_normalized, ''))) AS role_norm,
     LOWER(COALESCE(c.source_url, '')) AS source_url_norm,
     LOWER(COALESCE(c.page_type, '')) AS page_type_norm,
-    LOWER(COALESCE(c.source_context, '')) AS source_context_norm
+    LOWER(COALESCE(c.source_context, '')) AS source_context_norm,
+    CASE
+      WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:contact_card%'
+           OR LOWER(COALESCE(c.source_context, '')) LIKE 'revize:profile_block%'
+      THEN 'revize_profile_card'
+      WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
+           OR (
+             LOWER(COALESCE(c.source_context, '')) LIKE 'revize:labeled_staff%'
+             AND (
+               LOWER(COALESCE(c.page_type, '')) = 'staff_directory'
+               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=staff_directory%'
+             )
+           )
+      THEN 'revize_staff_table'
+      WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:labeled_staff%'
+           AND (
+             LOWER(COALESCE(c.page_type, '')) = 'department_page'
+             OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=department_page%'
+           )
+           AND (
+             NULLIF(TRIM(COALESCE(c.email, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(c.phone, '')), '') IS NOT NULL
+           )
+      THEN 'revize_sidebar_contact'
+      WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:department_section%'
+           OR (
+             LOWER(COALESCE(c.source_context, '')) LIKE 'revize:labeled_staff%'
+             AND (
+               LOWER(COALESCE(c.page_type, '')) = 'department_page'
+               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=department_page%'
+             )
+           )
+      THEN 'revize_content_body'
+      ELSE ''
+    END AS source_structure_type
   FROM contacts c
   WHERE NULLIF(TRIM(COALESCE(c.role_normalized, '')), '') IS NOT NULL
 ),
@@ -953,6 +987,13 @@ WITH eligible_candidates AS (
                OR NULLIF(TRIM(COALESCE(v.phone, '')), '') IS NOT NULL
           THEN 3
           ELSE 4
+        END,
+        CASE COALESCE(v.source_structure_type, '')
+          WHEN 'revize_profile_card' THEN 1
+          WHEN 'revize_staff_table' THEN 2
+          WHEN 'revize_sidebar_contact' THEN 3
+          WHEN 'revize_content_body' THEN 4
+          ELSE 5
         END,
         v.candidate_score DESC,
         COALESCE(v.display_confidence, 0.0) DESC,

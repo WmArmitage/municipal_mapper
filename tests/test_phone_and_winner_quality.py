@@ -293,6 +293,79 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "structure_favored_assessor")
 
+    def test_source_structure_type_priority_beats_higher_score_content_body(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="content_body_planner",
+            municipality_id="ct_source_structure_priority",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Taylor Update",
+            title="Town Planner",
+            department="Planning & Zoning",
+            email="",
+            phone="8605550110",
+            page_type="department_page",
+            source_url="https://town.example.org/departments/planning/procedures.php",
+            source_context="revize:department_section|page_class=department_page|page_priority=0.75 | Planning overview and permit guidance",
+            display_confidence=0.90,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="profile_card_planner",
+            municipality_id="ct_source_structure_priority",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Aarti Paranjape",
+            title="Town Planner",
+            department="",
+            email="",
+            phone="8605550111",
+            page_type="department_page",
+            source_url="https://town.example.org/departments/planning/index.php",
+            source_context="revize:contact_card|page_class=department_page|page_priority=0.75 | Town Hall Annex (860) 555-0111",
+            display_confidence=0.70,
+            suspicious_reason=None,
+        )
+        candidates = conn.execute(
+            """
+            SELECT contact_id, candidate_state, candidate_score, source_structure_type
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            ORDER BY contact_id
+            """,
+            ("ct_source_structure_priority", "Planner"),
+        ).fetchall()
+        winner = conn.execute(
+            """
+            SELECT contact_id, source_structure_type
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_group = ?
+            """,
+            ("ct_source_structure_priority", "planning_zoning_primary"),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(
+            [
+                (row["contact_id"], row["candidate_state"], row["source_structure_type"])
+                for row in candidates
+            ],
+            [
+                ("content_body_planner", "candidate_for_review", "revize_content_body"),
+                ("profile_card_planner", "candidate_for_review", "revize_profile_card"),
+            ],
+        )
+        candidate_scores = {row["contact_id"]: int(row["candidate_score"]) for row in candidates}
+        self.assertGreater(
+            candidate_scores["content_body_planner"],
+            candidate_scores["profile_card_planner"],
+        )
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "profile_card_planner")
+        self.assertEqual(winner["source_structure_type"], "revize_profile_card")
+
     def test_title_tiebreak_prefers_director_over_manager_when_other_fields_tie(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
