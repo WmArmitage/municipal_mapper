@@ -649,7 +649,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         ).fetchone()
         unresolved = conn.execute(
             """
-            SELECT forced_fallback_blocked, top_candidate_winner_block_reason
+            SELECT forced_fallback_blocked, top_candidate_winner_block_reason, unresolved_reason
             FROM vw_unresolved_roles
             WHERE municipality_id = ? AND role_normalized = ?
             """,
@@ -663,6 +663,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(unresolved)
         self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
         self.assertEqual(unresolved["top_candidate_winner_block_reason"], "artifact_name")
+        self.assertEqual(unresolved["unresolved_reason"], "fragmented_contact_structure")
 
     def test_weak_artifact_candidate_leaves_role_unresolved(self) -> None:
         conn = self._build_postprocess_test_db()
@@ -701,7 +702,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         ).fetchone()
         unresolved = conn.execute(
             """
-            SELECT top_candidate_name, top_candidate_state, forced_fallback_blocked
+            SELECT top_candidate_name, top_candidate_state, forced_fallback_blocked, unresolved_reason
             FROM vw_unresolved_roles
             WHERE municipality_id = ? AND role_normalized = ?
             """,
@@ -716,6 +717,39 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(unresolved["top_candidate_name"], "Land Use")
         self.assertEqual(unresolved["top_candidate_state"], "disqualified")
         self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
+        self.assertEqual(unresolved["unresolved_reason"], "no_person_contact_available")
+
+    def test_department_only_unresolved_is_classified(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="dept_only_planning",
+            municipality_id="ct_dept_only",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="",
+            title="Planning Department",
+            department="Planning & Development",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:table_directory|page_class=staff_directory",
+            page_type="staff_directory",
+            email="",
+            phone="",
+            display_confidence=0.51,
+            suspicious_reason="non_person_role_candidate",
+        )
+        unresolved = conn.execute(
+            """
+            SELECT top_candidate_title, unresolved_reason
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_dept_only", "Planner"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(unresolved)
+        self.assertEqual(unresolved["top_candidate_title"], "Planning Department")
+        self.assertEqual(unresolved["unresolved_reason"], "department_only")
 
     def test_land_use_label_cannot_win_land_use_role(self) -> None:
         conn = self._build_postprocess_test_db()

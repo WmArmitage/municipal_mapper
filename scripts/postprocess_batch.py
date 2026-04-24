@@ -637,6 +637,71 @@ role_counts AS (
   FROM grouped_candidates
   GROUP BY municipality_id, role_group
 ),
+group_signals AS (
+  SELECT
+    municipality_id,
+    role_group,
+    MAX(
+      CASE
+        WHEN NULLIF(TRIM(COALESCE(name, '')), '') IS NOT NULL
+             AND COALESCE(blank_name_flag, 0) = 0
+             AND COALESCE(artifact_name_flag, 0) = 0
+        THEN 1
+        ELSE 0
+      END
+    ) AS has_usable_name,
+    MAX(
+      CASE
+        WHEN NULLIF(TRIM(COALESCE(email, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(phone, '')), '') IS NOT NULL
+        THEN 1
+        ELSE 0
+      END
+    ) AS has_contact_signal,
+    MAX(
+      CASE
+        WHEN NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(role_family, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(title, '')), '') IS NOT NULL
+        THEN 1
+        ELSE 0
+      END
+    ) AS has_role_evidence,
+    MAX(
+      CASE
+        WHEN NULLIF(TRIM(COALESCE(department, '')), '') IS NOT NULL
+             AND (
+               NULLIF(TRIM(COALESCE(name, '')), '') IS NULL
+               OR COALESCE(blank_name_flag, 0) = 1
+             )
+             AND (
+               NULLIF(TRIM(COALESCE(title, '')), '') IS NULL
+               OR title_norm LIKE '%department%'
+               OR title_norm LIKE '%office%'
+             )
+        THEN 1
+        ELSE 0
+      END
+    ) AS has_department_only_row,
+    MAX(
+      CASE
+        WHEN (
+               NULLIF(TRIM(COALESCE(email, '')), '') IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(phone, '')), '') IS NOT NULL
+             )
+             AND COALESCE(source_context_norm, '') LIKE 'revize:%'
+             AND (
+               COALESCE(blank_name_flag, 0) = 1
+               OR COALESCE(artifact_name_flag, 0) = 1
+               OR COALESCE(suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+             )
+        THEN 1
+        ELSE 0
+      END
+    ) AS has_fragmented_contact_structure
+  FROM grouped_candidates
+  GROUP BY municipality_id, role_group
+),
 selected_winners AS (
   SELECT DISTINCT municipality_id, role_group
   FROM vw_best_role_per_town
@@ -667,8 +732,25 @@ SELECT
   tc.source_url AS top_candidate_source_url,
   tc.candidate_score AS top_candidate_score,
   tc.candidate_state AS top_candidate_state,
-  tc.winner_disqualifier_reason AS top_candidate_winner_block_reason
+  tc.winner_disqualifier_reason AS top_candidate_winner_block_reason,
+  CASE
+    WHEN rc.candidate_count <= 0 THEN 'no_valid_candidates_after_filtering'
+    WHEN COALESCE(gs.has_fragmented_contact_structure, 0) = 1
+         AND COALESCE(gs.has_contact_signal, 0) = 1
+         AND COALESCE(gs.has_role_evidence, 0) = 1
+    THEN 'fragmented_contact_structure'
+    WHEN COALESCE(gs.has_department_only_row, 0) = 1
+         AND COALESCE(gs.has_usable_name, 0) = 0
+    THEN 'department_only'
+    WHEN COALESCE(gs.has_usable_name, 0) = 0
+         AND COALESCE(gs.has_contact_signal, 0) = 0
+    THEN 'no_person_contact_available'
+    ELSE 'no_valid_candidates_after_filtering'
+  END AS unresolved_reason
 FROM role_counts rc
+LEFT JOIN group_signals gs
+  ON gs.municipality_id = rc.municipality_id
+ AND gs.role_group = rc.role_group
 LEFT JOIN selected_winners sw
   ON sw.municipality_id = rc.municipality_id
  AND sw.role_group = rc.role_group

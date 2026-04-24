@@ -133,6 +133,7 @@ UNRESOLVED_ROLE_FIELDS = (
     "top_candidate_score",
     "top_candidate_state",
     "top_candidate_winner_block_reason",
+    "unresolved_reason",
 )
 
 MISSING_KEY_ROLE_FIELDS = (
