@@ -225,7 +225,7 @@ class RevizeTraceCollectorTests(unittest.TestCase):
             self.assertEqual(int(stage_counts[0]["revize_rows_in_clean_contacts"]), 3)
             self.assertEqual(int(stage_counts[0]["revize_rows_dropped_pre_clean_contacts"]), 1)
             self.assertEqual(int(stage_counts[0]["revize_rows_considered_for_role_winners"]), 2)
-            self.assertEqual(int(stage_counts[0]["revize_rows_selected_as_role_winners"]), 1)
+            self.assertEqual(int(stage_counts[0]["revize_rows_selected_as_role_winners"]), 2)
 
             drop_reasons = self._read_csv(paths["revize_drop_reasons.csv"])
             reason_counts = {
@@ -236,10 +236,7 @@ class RevizeTraceCollectorTests(unittest.TestCase):
             self.assertEqual(reason_counts.get(("normalization", "drop_name_literal_reject")), 2)
             self.assertEqual(reason_counts.get(("insert_precheck", "missing_contact_fields")), 1)
             self.assertEqual(reason_counts.get(("pre_clean_contacts", "failed_clean_contact_filter")), 1)
-            self.assertEqual(
-                reason_counts.get(("role_winner_selection", "failed_role_mapping_or_scoring")),
-                1,
-            )
+            self.assertIsNone(reason_counts.get(("role_winner_selection", "failed_role_mapping_or_scoring")))
 
             trace_rows = self._read_jsonl(paths["revize_row_trace.jsonl"])
             self.assertTrue(trace_rows)

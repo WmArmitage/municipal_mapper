@@ -424,6 +424,117 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "real_name_row")
 
+    def test_your_link_name_loses_to_real_person(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="bad_link_row",
+            municipality_id="ct_link_case",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Your Link Name",
+            title="Assessor",
+            department="Assessor",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="contact@town.org",
+            phone="8606001000",
+            display_confidence=0.99,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="good_link_case",
+            municipality_id="ct_link_case",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Mary Gardner",
+            title="Assessor",
+            department="Assessor",
+            source_url="https://town.example.org/departments/assessor/index.php",
+            source_context="revize:reconstructed_contact_block|page_class=department_page",
+            page_type="department_page",
+            email="mgardner@town.org",
+            phone="8606001001",
+            display_confidence=0.73,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_link_case", "Assessor"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "good_link_case")
+
+    def test_forced_fallback_keeps_winner_when_only_hard_disqualified_candidates_exist(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="fallback_only_candidate",
+            municipality_id="ct_fallback_case",
+            role_normalized="Town Clerk",
+            role_family="town_clerk",
+            name="Your Link Name",
+            title="Town Clerk",
+            department="Town Clerk",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="contact@town.org",
+            phone="8607001000",
+            display_confidence=0.95,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id, forced_fallback
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_fallback_case", "Town Clerk"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "fallback_only_candidate")
+        self.assertEqual(int(winner["forced_fallback"]), 1)
+
+    def test_weak_candidate_still_selected_when_it_is_only_role_option(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="north_haven_land_use",
+            municipality_id="ct_north_haven",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Land Use",
+            title="",
+            department="",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="",
+            phone="",
+            display_confidence=0.45,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_north_haven", "Building Official"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "north_haven_land_use")
+
     def _build_postprocess_test_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

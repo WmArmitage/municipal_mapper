@@ -82,213 +82,126 @@ WHERE COALESCE(c.record_rank, 1) = 1
 
 FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL = """
 CREATE VIEW vw_best_role_per_town AS
-WITH ranked AS (
+WITH scored AS (
   SELECT
-    v.contact_id,
-    v.municipality_id,
-    v.entity_type,
-    v.name,
-    v.title,
-    v.role_normalized,
-    v.role_family,
-    v.department,
-    v.department_normalized,
-    v.email,
-    v.email_type,
-    v.phone,
-    v.phone_ext,
-    v.address,
-    v.hours,
-    v.page_type,
-    v.source_url,
-    v.display_confidence,
+    c.contact_id,
+    c.municipality_id,
+    c.entity_type,
+    c.name,
+    c.title,
+    c.role_normalized,
+    c.role_family,
+    c.department,
+    c.department_normalized,
+    c.email,
+    c.email_type,
+    c.phone,
+    c.phone_ext,
+    c.address,
+    c.hours,
+    c.page_type,
+    c.source_url,
+    c.display_confidence,
+    c.source_context,
     c.is_likely_noise,
     c.suspicious_reason,
-    c.source_context,
+    CASE
+      WHEN NULLIF(TRIM(COALESCE(c.name, '')), '') IS NULL
+           OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%your link name%'
+           OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%click here%'
+           OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%email me%'
+      THEN 1
+      ELSE 0
+    END AS hard_disqualifier,
+    (
+      /* Name quality */
+      CASE
+        WHEN NULLIF(TRIM(COALESCE(c.name, '')), '') IS NOT NULL
+             AND (
+               LENGTH(TRIM(COALESCE(c.name, '')))
+               - LENGTH(REPLACE(TRIM(COALESCE(c.name, '')), ' ', ''))
+               + 1
+             ) >= 2
+        THEN 5
+        ELSE 0
+      END
+      + CASE
+          WHEN TRIM(COALESCE(c.name, '')) GLOB '[A-Z]* [A-Z]*' THEN 3
+          ELSE 0
+        END
+      + CASE
+          WHEN LOWER(TRIM(COALESCE(c.name, ''))) = LOWER(TRIM(COALESCE(c.role_normalized, ''))) THEN -5
+          ELSE 0
+        END
+      + CASE
+          WHEN LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%link%'
+               OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%click%'
+               OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%affidavit%'
+               OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%vacanc%'
+          THEN -10
+          ELSE 0
+        END
+      /* Source quality */
+      + CASE
+          WHEN LOWER(COALESCE(c.page_type, '')) = 'staff_directory'
+               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=staff_directory%'
+          THEN 5
+          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%' THEN 3
+          WHEN LOWER(COALESCE(c.page_type, '')) = 'department_page'
+               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=department_page%'
+          THEN 2
+          WHEN LOWER(COALESCE(c.page_type, '')) = 'contact_hub'
+               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=contact_hub%'
+          THEN -3
+          WHEN LOWER(COALESCE(c.page_type, '')) IN ('generic', 'homepage', 'other')
+               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=generic%'
+          THEN -5
+          ELSE 0
+        END
+      /* Field completeness */
+      + CASE WHEN NULLIF(TRIM(COALESCE(c.email, '')), '') IS NOT NULL THEN 2 ELSE 0 END
+      + CASE WHEN NULLIF(TRIM(COALESCE(c.phone, '')), '') IS NOT NULL THEN 2 ELSE 0 END
+      + CASE WHEN NULLIF(TRIM(COALESCE(c.title, '')), '') IS NOT NULL THEN 1 ELSE 0 END
+      /* Reconstruction bonus */
+      + CASE
+          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%' THEN 4
+          ELSE 0
+        END
+      /* Soft quality penalties for known weak signals */
+      + CASE
+          WHEN COALESCE(c.suspicious_reason, '') = 'role_department_mismatch' THEN -3
+          WHEN COALESCE(c.suspicious_reason, '') IN ('invalid_person_name', 'non_person_role_candidate', 'role_only_name')
+          THEN -4
+          ELSE 0
+        END
+    ) AS candidate_score
+  FROM contacts c
+  WHERE NULLIF(TRIM(COALESCE(c.role_normalized, '')), '') IS NOT NULL
+),
+scored_with_valid AS (
+  SELECT
+    s.*,
+    MAX(CASE WHEN s.hard_disqualifier = 0 THEN 1 ELSE 0 END) OVER (
+      PARTITION BY s.municipality_id, s.role_normalized
+    ) AS has_non_disqualified_candidate
+  FROM scored s
+),
+ranked AS (
+  SELECT
+    swv.*,
+    CASE WHEN swv.has_non_disqualified_candidate = 0 THEN 1 ELSE 0 END AS forced_fallback,
     ROW_NUMBER() OVER (
-      PARTITION BY v.municipality_id, v.role_normalized
+      PARTITION BY swv.municipality_id, swv.role_normalized
       ORDER BY
         CASE
-          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
-               AND (
-                 LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%affidavit%'
-                 OR LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%vacanc%'
-                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'building'
-                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'tax collector'
-                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'department'
-                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'office'
-                 OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% department %'
-                 OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% office %'
-               )
-          THEN 1
+          WHEN swv.has_non_disqualified_candidate = 1 THEN swv.hard_disqualifier
           ELSE 0
         END ASC,
-        CASE
-          WHEN COALESCE(c.suspicious_reason, '') IN (
-              'role_department_mismatch',
-              'invalid_person_name',
-              'role_only_name',
-              'non_person_role_candidate',
-              'contact_hub_candidate',
-              'assistant_role_contamination'
-          )
-          THEN 1
-          WHEN v.role_normalized = 'Assessor'
-               AND (
-                   LOWER(COALESCE(v.source_url, '')) LIKE '%tax%'
-                   OR LOWER(COALESCE(v.email, '')) LIKE '%tax%'
-               )
-          THEN 1
-          WHEN v.role_normalized = 'Tax Collector'
-               AND (
-                   LOWER(COALESCE(v.source_url, '')) LIKE '%clerk%'
-                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%planning%'
-               )
-          THEN 1
-          WHEN v.role_normalized = 'Town Clerk'
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%planning%'
-          THEN 1
-          WHEN v.role_normalized = 'First Selectman'
-               AND (
-                   LOWER(COALESCE(v.source_url, '')) LIKE '%finance%'
-                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%building%'
-               )
-          THEN 1
-          WHEN v.role_normalized IN ('Finance Director', 'Treasurer')
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%school%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%finance%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%treasurer%'
-          THEN 1
-          WHEN v.role_normalized = 'Building Official'
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%school%'
-          THEN 1
-          WHEN v.role_normalized IN ('First Selectman', 'Mayor', 'Town Manager', 'Town Administrator')
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%board%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%selectmen%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%first-selectman%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%mayor%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%town-manager%'
-               AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%administrator%'
-          THEN 1
-          ELSE 0
-        END ASC,
-        CASE
-          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
-               AND NULLIF(TRIM(COALESCE(v.name, '')), '') IS NOT NULL
-               AND (
-                   LENGTH(TRIM(COALESCE(v.name, '')))
-                   - LENGTH(REPLACE(TRIM(COALESCE(v.name, '')), ' ', ''))
-                   + 1
-               ) >= 2
-               AND LOWER(TRIM(COALESCE(v.name, ''))) NOT IN ('building', 'tax collector', 'department', 'office')
-               AND LOWER(TRIM(COALESCE(v.name, ''))) NOT LIKE '%affidavit%'
-               AND LOWER(TRIM(COALESCE(v.name, ''))) NOT LIKE '%vacanc%'
-               AND NULLIF(TRIM(COALESCE(v.role_family, '')), '') IS NOT NULL
-               AND COALESCE(c.suspicious_reason, '') NOT IN ('invalid_person_name', 'role_only_name')
-          THEN 3
-          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
-          THEN 1
-          ELSE 0
-        END DESC,
-        CASE
-          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
-               AND NULLIF(TRIM(COALESCE(v.name, '')), '') IS NOT NULL
-               AND (
-                   LOWER(TRIM(COALESCE(v.name, ''))) = LOWER(TRIM(COALESCE(v.role_normalized, '')))
-                   OR LOWER(TRIM(COALESCE(v.name, ''))) = LOWER(TRIM(COALESCE(v.title, '')))
-               )
-          THEN 1
-          ELSE 0
-        END ASC,
-        CASE
-          WHEN LOWER(COALESCE(v.page_type, '')) = 'staff_directory' THEN 3
-          WHEN LOWER(COALESCE(v.page_type, '')) = 'department_page' THEN 2
-          WHEN LOWER(COALESCE(v.page_type, '')) = 'contact_hub' THEN 0
-          WHEN LOWER(COALESCE(v.page_type, '')) IN ('homepage', 'generic', 'other') THEN -1
-          ELSE 1
-        END DESC,
-        CASE WHEN v.email IS NOT NULL AND TRIM(v.email) <> '' THEN 1 ELSE 0 END DESC,
-        CASE
-          WHEN (v.email IS NULL OR TRIM(v.email) = '')
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%directory.aspx%'
-          THEN 1
-          ELSE 0
-        END ASC,
-        CASE
-          WHEN v.role_normalized = 'Tax Collector'
-               AND (
-                   LOWER(COALESCE(v.source_url, '')) LIKE '%tax-collector%'
-                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%/tax%'
-               )
-          THEN 2
-          WHEN v.role_normalized = 'Assessor'
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%assessor%'
-          THEN 2
-          WHEN v.role_normalized = 'Town Clerk'
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%town-clerk%'
-          THEN 2
-          WHEN v.role_normalized = 'Building Official'
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%building%'
-          THEN 2
-          WHEN v.role_normalized IN ('Planner', 'Land Use')
-               AND (
-                   LOWER(COALESCE(v.source_url, '')) LIKE '%planning%'
-                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%land-use%'
-               )
-          THEN 2
-          WHEN v.role_normalized IN ('Finance Director', 'Treasurer')
-               AND LOWER(COALESCE(v.source_url, '')) LIKE '%finance%'
-          THEN 2
-          WHEN v.role_normalized = 'First Selectman'
-               AND (
-                   LOWER(COALESCE(v.source_url, '')) LIKE '%first-selectman%'
-                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%board-of-selectmen%'
-                   OR LOWER(COALESCE(v.source_url, '')) LIKE '%selectman%'
-               )
-          THEN 2
-          WHEN LOWER(COALESCE(v.source_url, '')) LIKE '%directory.aspx%'
-          THEN 0
-          ELSE 1
-        END DESC,
-        CASE
-          WHEN v.role_normalized IN ('First Selectman', 'Mayor', 'Town Manager')
-               AND (
-                   LOWER(COALESCE(v.name, '')) LIKE '%assistant%'
-                   OR LOWER(COALESCE(v.title, '')) LIKE '%assistant%'
-                   OR LOWER(COALESCE(v.department, '')) LIKE '%assistant%'
-                   OR LOWER(COALESCE(v.name, '')) LIKE '%admin assistant%'
-                   OR LOWER(COALESCE(v.title, '')) LIKE '%admin assistant%'
-                   OR LOWER(COALESCE(v.name, '')) LIKE '%administrative%'
-                   OR LOWER(COALESCE(v.title, '')) LIKE '%administrative%'
-                   OR LOWER(COALESCE(v.name, '')) LIKE '%executive assistant%'
-                   OR LOWER(COALESCE(v.title, '')) LIKE '%executive assistant%'
-               )
-          THEN 1
-          ELSE 0
-        END ASC,
-        CASE WHEN v.phone IS NOT NULL AND TRIM(v.phone) <> '' THEN 1 ELSE 0 END DESC,
-        CASE WHEN v.name IS NOT NULL AND TRIM(v.name) <> '' THEN 1 ELSE 0 END DESC,
-        CASE WHEN c.is_likely_noise = 0 THEN 1 ELSE 0 END DESC,
-        v.display_confidence DESC
+        swv.candidate_score DESC,
+        COALESCE(swv.display_confidence, 0.0) DESC,
+        COALESCE(swv.contact_id, '') ASC
     ) AS rn
-  FROM vw_contacts_clean v
-  JOIN contacts c
-    ON v.contact_id = c.contact_id
-  WHERE v.role_normalized IS NOT NULL
-    AND COALESCE(v.entity_type, '') = 'person'
-    AND NOT (
-        LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
-        AND (
-            LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%affidavit%'
-            OR LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%vacanc%'
-            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'building'
-            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'tax collector'
-            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'department'
-            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'office'
-            OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% department %'
-            OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% office %'
-        )
-    )
+  FROM scored_with_valid swv
 )
 SELECT *
 FROM ranked
@@ -461,6 +374,30 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
             """,
             params,
         ).fetchone()[0],
+        "revize_candidates_scored": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM contacts
+            WHERE municipality_id IN ({where_in})
+              AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+              AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+            """,
+            params,
+        ).fetchone()[0],
+        "revize_roles_with_no_candidates": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM (
+              SELECT DISTINCT municipality_id, role_normalized
+              FROM contacts
+              WHERE municipality_id IN ({where_in})
+                AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+                AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+            ) rr
+            """,
+            params,
+        ).fetchone()[0],
+        "revize_roles_with_forced_fallback": 0,
         "revize_reconstructed_rows_promoted_to_winner": 0,
         "revize_garbage_rows_demoted": conn.execute(
             f"""
@@ -540,6 +477,40 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
               AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
             """,
             params,
+        ).fetchone()[0]
+        metrics["revize_roles_with_forced_fallback"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_best_role_per_town v
+            WHERE v.municipality_id IN ({where_in})
+              AND COALESCE(v.forced_fallback, 0) = 1
+              AND LOWER(COALESCE(v.source_context, '')) LIKE 'revize:%'
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_roles_with_no_candidates"] = conn.execute(
+            f"""
+            WITH revize_role_scope AS (
+              SELECT DISTINCT municipality_id, role_normalized
+              FROM contacts
+              WHERE municipality_id IN ({where_in})
+                AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+                AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+            ),
+            winners AS (
+              SELECT DISTINCT municipality_id, role_normalized
+              FROM vw_best_role_per_town
+              WHERE municipality_id IN ({where_in})
+                AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+            )
+            SELECT COUNT(*)
+            FROM revize_role_scope r
+            LEFT JOIN winners w
+              ON w.municipality_id = r.municipality_id
+             AND w.role_normalized = r.role_normalized
+            WHERE w.role_normalized IS NULL
+            """,
+            params + params,
         ).fetchone()[0]
     return {key: int(value) for key, value in metrics.items()}
 
@@ -1456,6 +1427,9 @@ def print_metrics(title: str, metrics: dict[str, int]) -> None:
         f"{metrics['revize_reconstructed_rows_promoted_to_winner']}"
     )
     print(f"  revize garbage rows demoted: {metrics['revize_garbage_rows_demoted']}")
+    print(f"  revize candidates scored: {metrics['revize_candidates_scored']}")
+    print(f"  revize roles with no candidates: {metrics['revize_roles_with_no_candidates']}")
+    print(f"  revize roles with forced fallback: {metrics['revize_roles_with_forced_fallback']}")
 
 
 def main() -> None:
