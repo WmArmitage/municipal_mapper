@@ -9,7 +9,7 @@ ct_marlborough,Marlborough,executive; assessment; tax; clerk; finance,5,building
 ct_new_canaan,New Canaan,executive; tax; clerk; finance,4,assessment; building; planning,assessment: Assessor; building: Building Official; planning: Planner
 ct_north_haven,North Haven,executive; assessment; tax; clerk; building; finance,6,planning,planning: Land Use
 ct_plainfield,Plainfield,executive; tax; clerk; building; planning; finance,6,assessment,assessment: Assessor
-ct_ridgefield,Ridgefield,executive; assessment; tax; clerk; planning; finance,6,building,building: Building Official
-ct_southington,Southington,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_ridgefield,Ridgefield,executive; tax; clerk; finance,4,assessment; building; planning,assessment: Assessor; building: Building Official; planning: Planner
+ct_southington,Southington,executive; tax; clerk; building; planning; finance,6,assessment,assessment: Assessor
 ct_stafford,Stafford,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_watertown,Watertown,executive; assessment; tax; clerk; building; planning; finance,7,,

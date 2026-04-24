@@ -854,6 +854,49 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(candidate["winner_disqualifier_reason"], "artifact_name")
         self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 1)
 
+    def test_revize_contact_card_with_direct_contact_clears_weak_source_match(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="weak_source_assessor",
+            municipality_id="ct_weak_source_allow",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Erin O'Connell",
+            title="Assessor",
+            department="Assessors",
+            source_url="https://town.example.org/departments/assessors/index.php",
+            source_context="revize:labeled_staff|page_class=department_page",
+            page_type="department_page",
+            email="assessor@town.org",
+            phone="8605550303",
+            display_confidence=0.71,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id, candidate_state, forced_fallback
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_weak_source_allow", "Assessor"),
+        ).fetchone()
+        candidate = conn.execute(
+            """
+            SELECT candidate_state, winner_disqualifier_reason
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_weak_source_allow", "Assessor"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "weak_source_assessor")
+        self.assertEqual(winner["candidate_state"], "candidate_for_review")
+        self.assertEqual(int(winner["forced_fallback"]), 1)
+        self.assertEqual(candidate["candidate_state"], "candidate_for_review")
+        self.assertEqual(candidate["winner_disqualifier_reason"], "")
+
     def test_blank_name_office_contact_becomes_review_candidate(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(

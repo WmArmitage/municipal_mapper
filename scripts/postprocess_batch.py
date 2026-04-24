@@ -382,7 +382,22 @@ component_scores AS (
            AND b.source_context_norm NOT LIKE '%copy and paste this code%'
       THEN 1
       ELSE 0
-    END AS artifact_structural_allow_flag
+    END AS artifact_structural_allow_flag,
+    CASE
+      WHEN b.is_revize = 1
+           AND (
+             NULLIF(TRIM(COALESCE(b.role_normalized, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(b.role_family, '')), '') IS NOT NULL
+           )
+           AND (
+             NULLIF(TRIM(COALESCE(b.email, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(b.phone, '')), '') IS NOT NULL
+           )
+           AND b.source_context_norm LIKE 'revize:%'
+           AND COALESCE(b.is_likely_noise, 0) = 0
+      THEN 1
+      ELSE 0
+    END AS weak_source_structural_allow_flag
   FROM base b
 ),
 scored AS (
@@ -441,7 +456,10 @@ scored AS (
            AND NOT (s.artifact_name_flag = 1 AND COALESCE(s.artifact_structural_allow_flag, 0) = 1)
       THEN 'weak_name_quality'
       WHEN s.is_revize = 1 AND s.role_match_score < 5 THEN 'weak_role_match'
-      WHEN s.is_revize = 1 AND (s.source_score + s.reconstruction_score) < 3 THEN 'weak_source_match'
+      WHEN s.is_revize = 1
+           AND (s.source_score + s.reconstruction_score) < 3
+           AND COALESCE(s.weak_source_structural_allow_flag, 0) = 0
+      THEN 'weak_source_match'
       ELSE ''
     END AS winner_disqualifier_reason
   FROM component_scores s
