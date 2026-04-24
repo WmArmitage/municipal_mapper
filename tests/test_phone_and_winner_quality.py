@@ -758,6 +758,60 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(unresolved["top_candidate_name"], "Land Use")
         self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
 
+    def test_structured_role_label_with_contact_details_can_fallback(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="structured_building_label",
+            municipality_id="ct_structured_building",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Building",
+            title="Building Inspector",
+            department="Building Department",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:table_directory|page_class=staff_directory",
+            page_type="staff_directory",
+            email="inspector@town.org",
+            phone="8605550202",
+            display_confidence=0.77,
+            suspicious_reason="invalid_person_name",
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id, candidate_state, forced_fallback
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_structured_building", "Building Official"),
+        ).fetchone()
+        candidate = conn.execute(
+            """
+            SELECT contact_id, candidate_state, winner_disqualifier_reason, invalid_candidate_disqualified
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_structured_building", "Building Official"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_structured_building", "Building Official"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "structured_building_label")
+        self.assertEqual(winner["candidate_state"], "candidate_for_review")
+        self.assertEqual(int(winner["forced_fallback"]), 1)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["candidate_state"], "candidate_for_review")
+        self.assertEqual(candidate["winner_disqualifier_reason"], "")
+        self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 0)
+        self.assertEqual(int(unresolved["cnt"]), 0)
+
     def test_blank_name_office_contact_becomes_review_candidate(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(

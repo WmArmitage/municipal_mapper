@@ -6,20 +6,23 @@ ct_avon,Avon,candidate_for_review,Planner,"Emily Kyle, AICP, CZEO",,8604094330,,
 ct_avon,Avon,candidate_for_review,Planner,"Hiram Peck III, AICP, CFM, CZEO",,8604094328,,staff_directory,https://www.avonct.gov/departments/planning_community_development/index.php,,,,candidate_for_review
 ct_avon,Avon,missing_role_groups_2plus,,,,,,,,executive; tax; clerk,3,,normal_coverage_gap
 ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
-ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_griswold,Griswold,candidate_for_review,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,invalid_person_name,candidate_for_review
+ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; planning; finance,6,,normal_coverage_gap
+ct_griswold,Griswold,suspicious_winner,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,invalid_person_name,suspicious_winner
 ct_griswold,Griswold,unresolved_role,Assessor,Your Link Name,,,Assessor's,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,artifact_name,unresolved_role
-ct_griswold,Griswold,unresolved_role,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,artifact_name,unresolved_role
 ct_griswold,Griswold,unresolved_role,Planner,,townplanner@griswoldct.gov,8603767060,Planning & Development,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,blank_name,unresolved_role
 ct_groton,Groton,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
 ct_guilford,Guilford,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; finance,6,,normal_coverage_gap
 ct_guilford,Guilford,unresolved_role,Building Official,,,2034538038,Building,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,,,blank_name,unresolved_role
 ct_killingly,Killingly,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; planning; finance,5,,normal_coverage_gap
-ct_marlborough,Marlborough,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; finance,6,,normal_coverage_gap
-ct_marlborough,Marlborough,unresolved_role,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,,,artifact_name,unresolved_role
+ct_marlborough,Marlborough,candidate_for_review,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,,,invalid_person_name,candidate_for_review
+ct_marlborough,Marlborough,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; finance,5,,normal_coverage_gap
+ct_marlborough,Marlborough,suspicious_winner,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,,,invalid_person_name,suspicious_winner
 ct_new_canaan,New Canaan,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; finance,4,,normal_coverage_gap
-ct_north_haven,North Haven,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
+ct_north_haven,North Haven,candidate_for_review,Land Use,Land Use,magaraci.laura@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,,,role_only_name,candidate_for_review
+ct_north_haven,North Haven,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; finance,6,,normal_coverage_gap
+ct_north_haven,North Haven,suspicious_winner,Land Use,Land Use,magaraci.laura@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,,,role_only_name,suspicious_winner
 ct_north_haven,North Haven,unresolved_role,Building Official,,floriano.elio@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,,,blank_name,unresolved_role
-ct_north_haven,North Haven,unresolved_role,Land Use,Land Use,magaraci.laura@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,,,artifact_name,unresolved_role
 ct_plainfield,Plainfield,missing_role_groups_2plus,,,,,,,,executive; tax; clerk; building; planning; finance,6,,normal_coverage_gap
 ct_ridgefield,Ridgefield,candidate_for_review,Assessor,Al Garzi,,2034312706,Tax Assessor,department_page,https://www.ridgefieldct.gov/departments/tax_assessors_office/index.php,,,weak_source_match,candidate_for_review
 ct_ridgefield,Ridgefield,candidate_for_review,Building Official,International Code Council,,,Building,staff_directory,https://www.ridgefieldct.gov/departments/building_department/index.php,,,missing_email_and_phone,candidate_for_review

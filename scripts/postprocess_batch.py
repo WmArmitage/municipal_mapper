@@ -383,9 +383,55 @@ scored AS (
       + s.suspicious_score
     ) AS candidate_score,
     CASE
-      WHEN s.is_revize = 1 AND s.artifact_name_flag = 1 THEN 'artifact_name'
+      WHEN s.is_revize = 1
+           AND s.artifact_name_flag = 1
+           AND NOT (
+             s.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+             AND NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+             AND s.title_norm <> s.name_norm
+             AND s.title_norm <> s.role_norm
+             AND (
+               NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+             )
+             AND s.role_match_score >= 5
+             AND COALESCE(s.is_likely_noise, 0) = 0
+             AND (
+               s.source_context_norm LIKE 'revize:table_directory%'
+               OR s.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+               OR s.source_context_norm LIKE 'revize:labeled_staff%'
+             )
+             AND s.page_type_norm <> 'contact_hub'
+             AND s.title_norm NOT LIKE '%vacanc%'
+             AND s.title_norm NOT LIKE '%share this page%'
+             AND s.title_norm NOT LIKE '%click here%'
+           )
+      THEN 'artifact_name'
       WHEN s.is_revize = 1 AND s.blank_name_flag = 1 THEN 'blank_name'
-      WHEN s.is_revize = 1 AND COALESCE(s.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+      WHEN s.is_revize = 1
+           AND COALESCE(s.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+           AND NOT (
+             s.artifact_name_flag = 1
+             AND s.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+             AND NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+             AND s.title_norm <> s.name_norm
+             AND s.title_norm <> s.role_norm
+             AND (
+               NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+             )
+             AND s.role_match_score >= 5
+             AND COALESCE(s.is_likely_noise, 0) = 0
+             AND (
+               s.source_context_norm LIKE 'revize:table_directory%'
+               OR s.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+               OR s.source_context_norm LIKE 'revize:labeled_staff%'
+             )
+             AND s.page_type_norm <> 'contact_hub'
+             AND s.title_norm NOT LIKE '%vacanc%'
+             AND s.title_norm NOT LIKE '%share this page%'
+             AND s.title_norm NOT LIKE '%click here%'
+           )
       THEN TRIM(COALESCE(s.suspicious_reason, ''))
       WHEN s.is_revize = 1 AND COALESCE(s.entity_type, '') <> 'person' THEN 'non_person_contact'
       WHEN s.is_revize = 1
@@ -404,7 +450,31 @@ scored AS (
            AND NULLIF(TRIM(COALESCE(s.email, '')), '') IS NULL
            AND NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NULL
       THEN 'missing_email_and_phone'
-      WHEN s.is_revize = 1 AND s.person_name_score < 7 THEN 'weak_name_quality'
+      WHEN s.is_revize = 1
+           AND s.person_name_score < 7
+           AND NOT (
+             s.artifact_name_flag = 1
+             AND s.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+             AND NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+             AND s.title_norm <> s.name_norm
+             AND s.title_norm <> s.role_norm
+             AND (
+               NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+             )
+             AND s.role_match_score >= 5
+             AND COALESCE(s.is_likely_noise, 0) = 0
+             AND (
+               s.source_context_norm LIKE 'revize:table_directory%'
+               OR s.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+               OR s.source_context_norm LIKE 'revize:labeled_staff%'
+             )
+             AND s.page_type_norm <> 'contact_hub'
+             AND s.title_norm NOT LIKE '%vacanc%'
+             AND s.title_norm NOT LIKE '%share this page%'
+             AND s.title_norm NOT LIKE '%click here%'
+           )
+      THEN 'weak_name_quality'
       WHEN s.is_revize = 1 AND s.role_match_score < 5 THEN 'weak_role_match'
       WHEN s.is_revize = 1 AND (s.source_score + s.reconstruction_score) < 3 THEN 'weak_source_match'
       ELSE ''
@@ -433,8 +503,56 @@ ranked AS (
     END AS high_confidence_eligible,
     CASE
       WHEN s.is_revize = 1
-           AND s.artifact_name_flag = 0
-           AND COALESCE(s.suspicious_reason, '') NOT IN ('invalid_person_name', 'role_only_name')
+           AND (
+             s.artifact_name_flag = 0
+             OR (
+               s.artifact_name_flag = 1
+               AND s.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+               AND NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+               AND s.title_norm <> s.name_norm
+               AND s.title_norm <> s.role_norm
+               AND (
+                 NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+                 OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+               )
+               AND s.role_match_score >= 5
+               AND COALESCE(s.is_likely_noise, 0) = 0
+               AND (
+                 s.source_context_norm LIKE 'revize:table_directory%'
+                 OR s.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+                 OR s.source_context_norm LIKE 'revize:labeled_staff%'
+               )
+               AND s.page_type_norm <> 'contact_hub'
+               AND s.title_norm NOT LIKE '%vacanc%'
+               AND s.title_norm NOT LIKE '%share this page%'
+               AND s.title_norm NOT LIKE '%click here%'
+             )
+           )
+           AND (
+             COALESCE(s.suspicious_reason, '') NOT IN ('invalid_person_name', 'role_only_name')
+             OR (
+               s.artifact_name_flag = 1
+               AND s.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+               AND NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+               AND s.title_norm <> s.name_norm
+               AND s.title_norm <> s.role_norm
+               AND (
+                 NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+                 OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+               )
+               AND s.role_match_score >= 5
+               AND COALESCE(s.is_likely_noise, 0) = 0
+               AND (
+                 s.source_context_norm LIKE 'revize:table_directory%'
+                 OR s.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+                 OR s.source_context_norm LIKE 'revize:labeled_staff%'
+               )
+               AND s.page_type_norm <> 'contact_hub'
+               AND s.title_norm NOT LIKE '%vacanc%'
+               AND s.title_norm NOT LIKE '%share this page%'
+               AND s.title_norm NOT LIKE '%click here%'
+             )
+           )
            AND (
              NULLIF(TRIM(COALESCE(s.name, '')), '') IS NOT NULL
              OR NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
@@ -513,8 +631,55 @@ labeled AS (
     CASE
       WHEN r.is_revize = 1
            AND (
-             r.artifact_name_flag = 1
-             OR COALESCE(r.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+             (
+               r.artifact_name_flag = 1
+               AND NOT (
+                 r.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+                 AND NULLIF(TRIM(COALESCE(r.title, '')), '') IS NOT NULL
+                 AND r.title_norm <> r.name_norm
+                 AND r.title_norm <> r.role_norm
+                 AND (
+                   NULLIF(TRIM(COALESCE(r.email, '')), '') IS NOT NULL
+                   OR NULLIF(TRIM(COALESCE(r.phone, '')), '') IS NOT NULL
+                 )
+                 AND r.role_match_score >= 5
+                 AND COALESCE(r.is_likely_noise, 0) = 0
+                 AND (
+                   r.source_context_norm LIKE 'revize:table_directory%'
+                   OR r.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+                   OR r.source_context_norm LIKE 'revize:labeled_staff%'
+                 )
+                 AND r.page_type_norm <> 'contact_hub'
+                 AND r.title_norm NOT LIKE '%vacanc%'
+                 AND r.title_norm NOT LIKE '%share this page%'
+                 AND r.title_norm NOT LIKE '%click here%'
+               )
+             )
+             OR (
+               COALESCE(r.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+               AND NOT (
+                 r.artifact_name_flag = 1
+                 AND r.name_norm IN ('building', 'land use', 'tax collector', 'assessor')
+                 AND NULLIF(TRIM(COALESCE(r.title, '')), '') IS NOT NULL
+                 AND r.title_norm <> r.name_norm
+                 AND r.title_norm <> r.role_norm
+                 AND (
+                   NULLIF(TRIM(COALESCE(r.email, '')), '') IS NOT NULL
+                   OR NULLIF(TRIM(COALESCE(r.phone, '')), '') IS NOT NULL
+                 )
+                 AND r.role_match_score >= 5
+                 AND COALESCE(r.is_likely_noise, 0) = 0
+                 AND (
+                   r.source_context_norm LIKE 'revize:table_directory%'
+                   OR r.source_context_norm LIKE 'revize:reconstructed_contact_block%'
+                   OR r.source_context_norm LIKE 'revize:labeled_staff%'
+                 )
+                 AND r.page_type_norm <> 'contact_hub'
+                 AND r.title_norm NOT LIKE '%vacanc%'
+                 AND r.title_norm NOT LIKE '%share this page%'
+                 AND r.title_norm NOT LIKE '%click here%'
+               )
+             )
            )
       THEN 1
       ELSE 0
