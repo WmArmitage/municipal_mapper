@@ -30,6 +30,7 @@ if "requests" not in sys.modules:
 
 from src.http_client import FetchResult
 from src.revize import (
+    _extract_revize_contacts_with_diagnostics,
     build_revize_candidate_urls,
     classify_revize_page,
     classify_revize_page_class_for_url,
@@ -1075,6 +1076,134 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertFalse(str(row.get("name") or "").strip())
         self.assertEqual(str(row.get("is_likely_noise") or ""), "1")
         self.assertIn("invalid_name", str(row.get("normalization_flag") or ""))
+
+    def test_development_permit_does_not_produce_candidate(self) -> None:
+        rows = extract_revize_contacts(
+            html_text=self._build_non_contact_staff_block_html("Development Permit"),
+            source_url="https://www.example.gov/departments/planning/index.php",
+            source_kind="department_page",
+        )
+        self.assertEqual(rows, [])
+
+    def test_adopted_march_does_not_produce_candidate(self) -> None:
+        rows = extract_revize_contacts(
+            html_text=self._build_non_contact_staff_block_html("Adopted March"),
+            source_url="https://www.example.gov/departments/planning/index.php",
+            source_kind="department_page",
+        )
+        self.assertEqual(rows, [])
+
+    def test_cover_page_does_not_produce_candidate(self) -> None:
+        rows = extract_revize_contacts(
+            html_text=self._build_non_contact_staff_block_html("Cover Page"),
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        self.assertEqual(rows, [])
+
+    def test_international_code_council_does_not_produce_candidate(self) -> None:
+        rows = extract_revize_contacts(
+            html_text=self._build_non_contact_staff_block_html("International Code Council"),
+            source_url="https://www.example.gov/departments/building/index.php",
+            source_kind="department_page",
+        )
+        self.assertEqual(rows, [])
+
+    def test_aarti_paranjape_still_produces_candidate(self) -> None:
+        html = """
+        <html>
+          <body>
+            <nav class="breadcrumb">Home > Departments > Planning</nav>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Aarti Paranjape<span>Planning Director</span></h4>
+                <div class="staff-details">
+                  <a href="mailto:aparanjape@example.gov">Email</a>
+                  <a href="tel:860-555-0102">860-555-0102</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        rows = extract_revize_contacts(
+            html_text=html,
+            source_url="https://www.example.gov/departments/planning/index.php",
+            source_kind="department_page",
+        )
+        named_rows = [row for row in rows if str(row.get("name") or "") == "Aarti Paranjape"]
+        self.assertTrue(named_rows)
+        self.assertTrue(any(str(row.get("revize_block_type") or "") == "staff_row" for row in named_rows))
+
+    def test_non_contact_blocks_are_filtered_before_candidate_emission(self) -> None:
+        html = """
+        <html>
+          <body>
+            <nav class="breadcrumb">Home > Departments > Planning</nav>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Development Permit</h4>
+                <div class="staff-details">
+                  <p>
+                    Development Permit Application: Adopted March 2024. Cover Page required.
+                    International Code Council rules apply. Submit materials to the office below.
+                  </p>
+                  <a href="mailto:planning@example.gov">Email</a>
+                  <a href="tel:860-555-0101">860-555-0101</a>
+                </div>
+              </div>
+              <div class="staff">
+                <h4>Aarti Paranjape<span>Planning Director</span></h4>
+                <div class="staff-details">
+                  <a href="mailto:aparanjape@example.gov">Email</a>
+                  <a href="tel:860-555-0102">860-555-0102</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        contacts, reduction_counts, _, metrics = _extract_revize_contacts_with_diagnostics(
+            html_text=html,
+            source_url="https://www.example.gov/departments/planning/index.php",
+            source_kind="department_page",
+            page_class="department_page",
+            page_priority_score=0.85,
+        )
+        self.assertGreaterEqual(int(metrics.get("revize_blocks_seen") or 0), 2)
+        self.assertGreaterEqual(int(metrics.get("revize_blocks_filtered_non_contact") or 0), 1)
+        self.assertGreaterEqual(int(metrics.get("revize_blocks_emitted_as_candidates") or 0), 1)
+        self.assertGreaterEqual(int(reduction_counts.get("revize_non_contact_blocks_filtered") or 0), 1)
+        names = {str(contact.get("name") or "") for contact in contacts}
+        self.assertIn("Aarti Paranjape", names)
+        self.assertNotIn("Development Permit", names)
+        self.assertNotIn("International Code Council", names)
+        rejected_rows = list(metrics.get("rejected_rows_sample") or [])
+        non_contact_rows = [row for row in rejected_rows if str(row.get("drop_reason") or "") == "non_contact_content"]
+        self.assertTrue(non_contact_rows)
+        self.assertIn("Development Permit", str((non_contact_rows[0].get("row") or {}).get("source_context") or ""))
+
+    def _build_non_contact_staff_block_html(self, heading: str) -> str:
+        return f"""
+        <html>
+          <body>
+            <nav class="breadcrumb">Home > Departments > Planning</nav>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>{heading}</h4>
+                <div class="staff-details">
+                  <p>
+                    {heading}: Development Permit Application. Adopted March 2024.
+                    Cover Page required for all submissions. International Code Council standards apply.
+                  </p>
+                  <a href="mailto:planning@example.gov">Email</a>
+                  <a href="tel:860-555-0101">860-555-0101</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
 
     def _build_contacts_only_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")

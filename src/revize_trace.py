@@ -336,6 +336,7 @@ class RevizeTraceCollector:
         return {
             "source_url": normalize_whitespace(str(row.get("source_url") or "")) or "",
             "revize_source_type": normalize_whitespace(str(row.get("revize_source_type") or "")) or "",
+            "revize_block_type": normalize_whitespace(str(row.get("revize_block_type") or "")) or "",
             "revize_page_class": normalize_whitespace(str(row.get("revize_page_class") or "")) or "",
             "name": normalize_whitespace(str(row.get("name") or "")) or "",
             "title": normalize_whitespace(str(row.get("title") or "")) or "",

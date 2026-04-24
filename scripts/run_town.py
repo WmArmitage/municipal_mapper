@@ -530,6 +530,9 @@ def crawl_single_municipality(
         "revize_reconstruction_blocks_seen": 0,
         "revize_reconstruction_candidates_emitted": 0,
         "revize_reconstruction_candidates_persisted": 0,
+        "revize_blocks_seen": 0,
+        "revize_blocks_filtered_non_contact": 0,
+        "revize_blocks_emitted_as_candidates": 0,
         "revize_fallback_to_generic": 0,
         "revize_suspicious_reduction_count": 0,
         "revize_pass_produced_contacts_before_fallback": 0,
@@ -1094,6 +1097,13 @@ def crawl_single_municipality(
             revize_result.get("revize_reconstruction_candidates_emitted")
         )
         diagnostics["revize_reconstruction_candidates_persisted"] = reconstructed_persisted
+        diagnostics["revize_blocks_seen"] = _coerce_int(revize_result.get("revize_blocks_seen"))
+        diagnostics["revize_blocks_filtered_non_contact"] = _coerce_int(
+            revize_result.get("revize_blocks_filtered_non_contact")
+        )
+        diagnostics["revize_blocks_emitted_as_candidates"] = _coerce_int(
+            revize_result.get("revize_blocks_emitted_as_candidates")
+        )
         reduction_counts = dict(revize_result.get("suspicious_reduction_counts") or {})
         diagnostics["revize_suspicious_reduction_count"] = sum(
             _coerce_int(value) for value in reduction_counts.values()
@@ -1129,6 +1139,9 @@ def crawl_single_municipality(
             "revize_department_pages_found": _coerce_int(revize_result.get("revize_department_pages_found")),
             "revize_contact_hub_pages_found": _coerce_int(revize_result.get("revize_contact_hub_pages_found")),
             "revize_generic_pages_used": _coerce_int(revize_result.get("revize_generic_pages_used")),
+            "revize_blocks_seen": diagnostics["revize_blocks_seen"],
+            "revize_blocks_filtered_non_contact": diagnostics["revize_blocks_filtered_non_contact"],
+            "revize_blocks_emitted_as_candidates": diagnostics["revize_blocks_emitted_as_candidates"],
             "revize_rows_from_staff_directory": _coerce_int(revize_result.get("revize_rows_from_staff_directory")),
             "revize_rows_from_department_pages": _coerce_int(
                 revize_result.get("revize_rows_from_department_pages")

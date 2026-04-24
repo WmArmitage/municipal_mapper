@@ -264,6 +264,21 @@ REVIZE_DEPARTMENT_LITERAL_REJECTS = {
     "online services",
     "community development",
 }
+REVIZE_NON_CONTACT_KEYWORDS = (
+    "permit",
+    "regulation",
+    "code",
+    "application",
+    "certificate",
+    "affidavit",
+    "cover page",
+)
+REVIZE_NON_CONTACT_NAME_LITERALS = {
+    "development permit",
+    "adopted march",
+    "cover page",
+    "international code council",
+}
 REVIZE_OUTCOME_LABELS = (
     "ok_detected",
     "not_detected",
@@ -1674,6 +1689,9 @@ def run_revize_strategy_for_municipality(
         "revize_department_pages_found": 0,
         "revize_contact_hub_pages_found": 0,
         "revize_generic_pages_used": 0,
+        "revize_blocks_seen": 0,
+        "revize_blocks_filtered_non_contact": 0,
+        "revize_blocks_emitted_as_candidates": 0,
         "rows_extracted_total": 0,
         "rows_normalized_seen": 0,
         "rows_normalized_kept": 0,
@@ -1833,6 +1851,13 @@ def run_revize_strategy_for_municipality(
             counters["revize_reconstruction_candidates_emitted"] += _coerce_int(
                 per_page_metrics.get("revize_reconstruction_candidates_emitted")
             )
+            counters["revize_blocks_seen"] += _coerce_int(per_page_metrics.get("revize_blocks_seen"))
+            counters["revize_blocks_filtered_non_contact"] += _coerce_int(
+                per_page_metrics.get("revize_blocks_filtered_non_contact")
+            )
+            counters["revize_blocks_emitted_as_candidates"] += _coerce_int(
+                per_page_metrics.get("revize_blocks_emitted_as_candidates")
+            )
             counters["rows_extracted_total"] += _coerce_int(per_page_metrics.get("rows_extracted_total"))
             counters["rows_normalized_seen"] += _coerce_int(per_page_metrics.get("rows_normalized_seen"))
             counters["rows_normalized_kept"] += _coerce_int(per_page_metrics.get("rows_normalized_kept"))
@@ -1938,6 +1963,13 @@ def run_revize_strategy_for_municipality(
                 "extraction_source_type": str(page_classification.get("source_type") or "unknown"),
                 "response_body_length": len(text),
                 "contacts_extracted": len(extracted_rows),
+                "revize_blocks_seen": _coerce_int(per_page_metrics.get("revize_blocks_seen")),
+                "revize_blocks_filtered_non_contact": _coerce_int(
+                    per_page_metrics.get("revize_blocks_filtered_non_contact")
+                ),
+                "revize_blocks_emitted_as_candidates": _coerce_int(
+                    per_page_metrics.get("revize_blocks_emitted_as_candidates")
+                ),
                 "sidebar_staff_blocks_found": _coerce_int(per_page_metrics.get("sidebar_staff_blocks_found")),
                 "sidebar_staff_contacts_extracted": _coerce_int(
                     per_page_metrics.get("sidebar_staff_contacts_extracted")
@@ -2251,6 +2283,28 @@ def _extract_revize_contacts_with_diagnostics(
         if row.get("revize_page_priority_score") in (None, ""):
             row["revize_page_priority_score"] = page_priority_score
 
+    reduction_counts: Counter[str] = Counter()
+    rejected_rows_sample: list[dict[str, object]] = []
+    extracted_before_filter = list(extracted)
+    filtered_extracted: list[dict[str, str | float | None]] = []
+    non_contact_blocks_filtered = 0
+    for row in extracted_before_filter:
+        block_type, is_non_contact = _classify_revize_non_contact_block(row)
+        row["revize_block_type"] = block_type
+        if not is_non_contact:
+            filtered_extracted.append(row)
+            continue
+        non_contact_blocks_filtered += 1
+        reduction_counts["revize_non_contact_blocks_filtered"] += 1
+        if len(rejected_rows_sample) < 12:
+            rejected_rows_sample.append(
+                {
+                    "row": _trace_row_payload(row),
+                    "drop_reason": "non_contact_content",
+                }
+            )
+    extracted = filtered_extracted
+
     block_classification_counts = {
         "person_block": 0,
         "office_contact_block": 0,
@@ -2261,7 +2315,6 @@ def _extract_revize_contacts_with_diagnostics(
         block_classification_counts[block_class] = block_classification_counts.get(block_class, 0) + 1
         row["revize_block_class"] = block_class
 
-    reduction_counts: Counter[str] = Counter()
     split_merge_from_reconstruction = _coerce_int(reconstruction_metrics.get("revize_split_text_merged"))
     if split_merge_from_reconstruction > 0:
         reduction_counts["revize_split_text_merged"] += split_merge_from_reconstruction
@@ -2269,7 +2322,6 @@ def _extract_revize_contacts_with_diagnostics(
     normalized_kept_count = 0
     extracted_rows_sample: list[dict[str, object]] = []
     normalized_rows_sample: list[dict[str, object]] = []
-    rejected_rows_sample: list[dict[str, object]] = []
     for row in extracted:
         if len(extracted_rows_sample) < 12:
             extracted_rows_sample.append(_trace_row_payload(row))
@@ -2320,6 +2372,9 @@ def _extract_revize_contacts_with_diagnostics(
     if over_filtering_detected:
         reduction_counts["revize_over_filtering_detected"] += 1
     metrics = {
+        "revize_blocks_seen": len(extracted_before_filter),
+        "revize_blocks_filtered_non_contact": non_contact_blocks_filtered,
+        "revize_blocks_emitted_as_candidates": len(extracted),
         "rows_extracted_total": len(extracted),
         "rows_normalized_seen": len(extracted),
         "rows_normalized_kept": normalized_kept_count,
@@ -4215,6 +4270,7 @@ def _normalize_revize_contact_row(
         "normalization_soft_keep": 1 if soft_kept else 0,
     }
     for extra_key in (
+        "revize_block_type",
         "original_lines",
         "reconstructed_name",
         "reconstructed_title",
@@ -4336,6 +4392,8 @@ def _merge_contacts(
         merged["email_type"] = right.get("email_type")
     if str(merged.get("revize_source_type") or "").strip().lower() in {"", "unknown"}:
         merged["revize_source_type"] = right.get("revize_source_type")
+    if str(merged.get("revize_block_type") or "").strip().lower() in {"", "unknown"}:
+        merged["revize_block_type"] = right.get("revize_block_type")
     if str(merged.get("revize_page_class") or "").strip().lower() in {"", "generic"}:
         merged["revize_page_class"] = right.get("revize_page_class")
     merged["revize_page_priority_score"] = max(
@@ -4404,6 +4462,96 @@ def _count_page_class_sources(
             page_class = "generic"
         counts[page_class] += 1
     return counts
+
+
+def _revize_candidate_text_blob(row: dict[str, object]) -> str:
+    original_lines_raw = row.get("original_lines") or []
+    original_lines: list[str] = []
+    if isinstance(original_lines_raw, (list, tuple)):
+        for item in original_lines_raw:
+            cleaned = normalize_whitespace(str(item) or "") or ""
+            if cleaned:
+                original_lines.append(cleaned)
+            if len(original_lines) >= 16:
+                break
+    parts = original_lines or [
+        normalize_whitespace(str(row.get("source_context") or "")) or "",
+        normalize_whitespace(str(row.get("name") or "")) or "",
+        normalize_whitespace(str(row.get("title") or "")) or "",
+        normalize_whitespace(str(row.get("department") or "")) or "",
+    ]
+    blob = normalize_whitespace(" ".join(part for part in parts if part)) or ""
+    return blob[:500]
+
+
+def _revize_candidate_has_structured_fields(row: dict[str, object]) -> bool:
+    email = str(row.get("email") or "").strip()
+    phone = str(row.get("phone") or "").strip()
+    phone_ext = str(row.get("phone_ext") or "").strip()
+    title = normalize_whitespace(str(row.get("title") or "")) or ""
+    return bool(email or phone or phone_ext or title)
+
+
+def _classify_revize_candidate_block_type(row: dict[str, object]) -> str:
+    source_type = (normalize_whitespace(str(row.get("revize_source_type") or "")) or "unknown").lower()
+    if source_type in {"contact_card", "profile_block", "single_profile_page", "department_contact_block"}:
+        return "contact_card"
+    if source_type == REVIZE_RECONSTRUCTION_SOURCE_TYPE:
+        return "contact_card"
+    if source_type in {"table_directory", "sidebar_staff", "inline_staff_list"}:
+        return "staff_row"
+    if source_type == "labeled_staff":
+        return "staff_row" if _revize_candidate_has_structured_fields(row) else "department_content"
+    if source_type == "department_section":
+        return "department_content"
+    return "unknown"
+
+
+def _is_revize_non_contact_name(name: str) -> bool:
+    normalized_name = normalize_whitespace(name) or ""
+    if not normalized_name:
+        return False
+    lowered_name = normalized_name.lower()
+    if lowered_name in REVIZE_NON_CONTACT_NAME_LITERALS:
+        return True
+    parts = [part for part in normalized_name.split() if part]
+    if len(parts) == 1 and not re.fullmatch(r"[A-Z][a-zA-Z'`.-]{1,40}", parts[0]):
+        return True
+    return False
+
+
+def _classify_revize_non_contact_block(
+    row: dict[str, object],
+) -> tuple[str, bool]:
+    source_type = (normalize_whitespace(str(row.get("revize_source_type") or "")) or "unknown").lower()
+    block_type = _classify_revize_candidate_block_type(row)
+    text_blob = _revize_candidate_text_blob(row)
+    lowered_blob = text_blob.lower()
+    name = normalize_whitespace(str(row.get("name") or "")) or ""
+    explicit_non_contact_name = _is_revize_non_contact_name(name)
+    keyword_hit = any(keyword in lowered_blob for keyword in REVIZE_NON_CONTACT_KEYWORDS)
+    multiple_sentences = len(re.findall(r"[.!?](?:\s|$)", text_blob)) >= 2
+    colon_count = text_blob.count(":")
+    long_text = len(text_blob) > 120
+    structured_fields = _revize_candidate_has_structured_fields(row)
+    source_demoted = source_type == "department_section" or (source_type == "labeled_staff" and not structured_fields)
+
+    if keyword_hit or explicit_non_contact_name:
+        block_type = "document_content"
+    elif block_type == "unknown" and source_demoted:
+        block_type = "department_content"
+
+    is_non_contact = False
+    if explicit_non_contact_name:
+        is_non_contact = True
+    elif source_demoted and (long_text or multiple_sentences or colon_count >= 2 or keyword_hit):
+        is_non_contact = True
+    elif keyword_hit and (long_text or multiple_sentences or colon_count >= 2):
+        is_non_contact = True
+
+    if is_non_contact and block_type == "unknown":
+        block_type = "document_content" if keyword_hit else "department_content"
+    return block_type, is_non_contact
 
 
 def _extract_person_name_from_text(value: str) -> str | None:
@@ -4644,6 +4792,7 @@ def _trace_row_payload(row: dict[str, object]) -> dict[str, object]:
         "source_url": normalize_whitespace(str(row.get("source_url") or "")) or None,
         "source_context": normalize_whitespace(str(row.get("source_context") or "")) or None,
         "revize_source_type": normalize_whitespace(str(row.get("revize_source_type") or "")) or None,
+        "revize_block_type": normalize_whitespace(str(row.get("revize_block_type") or "")) or None,
         "revize_page_class": normalize_whitespace(str(row.get("revize_page_class") or "")) or None,
         "revize_page_priority_score": float(row.get("revize_page_priority_score") or 0.0),
         "is_likely_noise": _coerce_int(row.get("is_likely_noise")),
