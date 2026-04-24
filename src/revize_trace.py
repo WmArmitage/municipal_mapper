@@ -69,6 +69,45 @@ class RevizeTraceCollector:
                 drop_stage="normalization",
                 drop_reason=drop_reason,
             )
+        reconstructed_sample_count = 0
+        for sample in list(revize_result.get("reconstructed_rows_sample") or []):
+            if reconstructed_sample_count >= 5:
+                break
+            reconstructed_sample_count += 1
+            accepted = int(sample.get("accepted") or 0) > 0
+            payload = {
+                "source_url": sample.get("source_url") or "",
+                "name": sample.get("reconstructed_name") or "",
+                "title": sample.get("reconstructed_title") or "",
+                "email": sample.get("reconstructed_email") or "",
+                "phone": sample.get("reconstructed_phone") or "",
+                "phone_ext": sample.get("phone_ext") or sample.get("reconstructed_phone_ext") or "",
+                "revize_source_type": "reconstructed_candidate",
+                "original_lines": list(sample.get("original_lines") or []),
+                "reconstructed_name": sample.get("reconstructed_name") or "",
+                "reconstructed_title": sample.get("reconstructed_title") or "",
+                "reconstructed_email": sample.get("reconstructed_email") or "",
+                "reconstructed_phone": sample.get("reconstructed_phone") or "",
+                "reconstructed_phone_ext": sample.get("phone_ext") or sample.get("reconstructed_phone_ext") or "",
+                "accepted": 1 if accepted else 0,
+                "rejection_reason": sample.get("rejection_reason") or "",
+            }
+            drop_stage = "" if accepted else "reconstruction"
+            drop_reason = "" if accepted else str(sample.get("rejection_reason") or "unknown_pipeline_drop")
+            self._record_row_stage(
+                municipality_id=municipality_id,
+                row=payload,
+                stage_name="reconstructed_candidate",
+                drop_stage=drop_stage,
+                drop_reason=drop_reason,
+            )
+            if drop_stage and drop_reason:
+                self._add_drop_reason(
+                    municipality_id=municipality_id,
+                    drop_stage=drop_stage,
+                    drop_reason=drop_reason,
+                    count=1,
+                )
 
         for reason, count in dict(revize_result.get("suspicious_reduction_counts") or {}).items():
             self._add_drop_reason(
@@ -267,6 +306,19 @@ class RevizeTraceCollector:
         return self.follow_match in blob
 
     def _trace_payload(self, row: dict[str, Any]) -> dict[str, Any]:
+        original_lines: list[str] = []
+        original_lines_raw = row.get("original_lines") or row.get("revize_reconstruction_original_lines") or []
+        if isinstance(original_lines_raw, (list, tuple)):
+            for item in original_lines_raw:
+                cleaned = normalize_whitespace(str(item) or "") or ""
+                if cleaned:
+                    original_lines.append(cleaned)
+                if len(original_lines) >= 16:
+                    break
+        accepted = int(row.get("accepted") or row.get("reconstruction_accepted") or 0)
+        rejection_reason = normalize_whitespace(
+            str(row.get("rejection_reason") or row.get("reconstruction_rejection_reason") or "")
+        ) or ""
         return {
             "source_url": normalize_whitespace(str(row.get("source_url") or "")) or "",
             "name": normalize_whitespace(str(row.get("name") or "")) or "",
@@ -279,6 +331,27 @@ class RevizeTraceCollector:
             "role_normalized": normalize_whitespace(str(row.get("role_normalized") or "")) or "",
             "source_context": normalize_whitespace(str(row.get("source_context") or "")) or "",
             "confidence": _coerce_float(row.get("confidence")),
+            "original_lines": original_lines,
+            "reconstructed_name": normalize_whitespace(
+                str(row.get("reconstructed_name") or row.get("name") or "")
+            ) or "",
+            "reconstructed_title": normalize_whitespace(
+                str(row.get("reconstructed_title") or row.get("title") or "")
+            ) or "",
+            "reconstructed_email": str(row.get("reconstructed_email") or row.get("email") or "").strip().lower(),
+            "reconstructed_phone": normalize_whitespace(
+                str(row.get("reconstructed_phone") or row.get("phone") or "")
+            ) or "",
+            "reconstructed_phone_ext": normalize_whitespace(
+                str(
+                    row.get("reconstructed_phone_ext")
+                    or row.get("reconstructed_ext")
+                    or row.get("phone_ext")
+                    or ""
+                )
+            ) or "",
+            "accepted": accepted,
+            "rejection_reason": rejection_reason,
         }
 
     def _add_drop_reason(

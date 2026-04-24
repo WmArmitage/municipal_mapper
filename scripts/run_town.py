@@ -471,6 +471,10 @@ def crawl_single_municipality(
         "revize_pages_with_body": 0,
         "revize_pages_detected": 0,
         "revize_contacts_extracted": 0,
+        "revize_reconstruction_pages_seen": 0,
+        "revize_reconstruction_blocks_seen": 0,
+        "revize_reconstruction_candidates_emitted": 0,
+        "revize_reconstruction_candidates_persisted": 0,
     }
     diagnostics: dict[str, object] = {
         "municipality_id": municipality_id,
@@ -509,6 +513,10 @@ def crawl_single_municipality(
         "revize_pages_with_body": 0,
         "revize_detected_page_count": 0,
         "revize_contacts_extracted": 0,
+        "revize_reconstruction_pages_seen": 0,
+        "revize_reconstruction_blocks_seen": 0,
+        "revize_reconstruction_candidates_emitted": 0,
+        "revize_reconstruction_candidates_persisted": 0,
         "revize_fallback_to_generic": 0,
         "revize_suspicious_reduction_count": 0,
         "revize_pass_produced_contacts_before_fallback": 0,
@@ -988,6 +996,15 @@ def crawl_single_municipality(
         stats["revize_pages_with_body"] = _coerce_int(revize_result.get("pages_fetched_with_body_count"))
         stats["revize_pages_detected"] = _coerce_int(revize_result.get("pages_classified_detected_count"))
         stats["revize_contacts_extracted"] = _coerce_int(revize_result.get("contacts_total"))
+        stats["revize_reconstruction_pages_seen"] = _coerce_int(
+            revize_result.get("revize_reconstruction_pages_seen")
+        )
+        stats["revize_reconstruction_blocks_seen"] = _coerce_int(
+            revize_result.get("revize_reconstruction_blocks_seen")
+        )
+        stats["revize_reconstruction_candidates_emitted"] = _coerce_int(
+            revize_result.get("revize_reconstruction_candidates_emitted")
+        )
 
         for row in attempted_rows:
             final_url = str(row.get("final_url") or "")
@@ -1027,7 +1044,7 @@ def crawl_single_municipality(
             municipality_id=municipality_id,
             source_url=entry_url,
             contacts=revize_contacts,
-            debug_rows_out=revize_insert_debug_rows if revize_trace_collector is not None else None,
+            debug_rows_out=revize_insert_debug_rows,
         )
         if revize_trace_collector is not None:
             try:
@@ -1039,6 +1056,13 @@ def crawl_single_municipality(
                 )
             except Exception:
                 pass
+        reconstructed_persisted = sum(
+            1
+            for event in revize_insert_debug_rows
+            if str(event.get("stage") or "") == "insert_upsert"
+            and str((event.get("row") or {}).get("revize_source_type") or "") == "reconstructed_candidate"
+        )
+        stats["revize_reconstruction_candidates_persisted"] = reconstructed_persisted
         stats["contacts"] += persisted_revize_contacts
 
         diagnostics["revize_candidates_generated"] = _coerce_int(revize_result.get("candidate_urls_generated_count"))
@@ -1047,6 +1071,16 @@ def crawl_single_municipality(
         diagnostics["revize_pages_with_body"] = _coerce_int(revize_result.get("pages_fetched_with_body_count"))
         diagnostics["revize_detected_page_count"] = _coerce_int(revize_result.get("pages_classified_detected_count"))
         diagnostics["revize_contacts_extracted"] = _coerce_int(revize_result.get("contacts_total"))
+        diagnostics["revize_reconstruction_pages_seen"] = _coerce_int(
+            revize_result.get("revize_reconstruction_pages_seen")
+        )
+        diagnostics["revize_reconstruction_blocks_seen"] = _coerce_int(
+            revize_result.get("revize_reconstruction_blocks_seen")
+        )
+        diagnostics["revize_reconstruction_candidates_emitted"] = _coerce_int(
+            revize_result.get("revize_reconstruction_candidates_emitted")
+        )
+        diagnostics["revize_reconstruction_candidates_persisted"] = reconstructed_persisted
         reduction_counts = dict(revize_result.get("suspicious_reduction_counts") or {})
         diagnostics["revize_suspicious_reduction_count"] = sum(
             _coerce_int(value) for value in reduction_counts.values()
@@ -1112,6 +1146,17 @@ def crawl_single_municipality(
             "revize_split_text_merged": _coerce_int(revize_result.get("revize_split_text_merged")),
             "revize_phone_extensions_parsed": _coerce_int(revize_result.get("revize_phone_extensions_parsed")),
             "revize_phone_string_preserved": _coerce_int(revize_result.get("revize_phone_string_preserved")),
+            "revize_reconstruction_pages_seen": _coerce_int(
+                revize_result.get("revize_reconstruction_pages_seen")
+            ),
+            "revize_reconstruction_blocks_seen": _coerce_int(
+                revize_result.get("revize_reconstruction_blocks_seen")
+            ),
+            "revize_reconstruction_candidates_emitted": _coerce_int(
+                revize_result.get("revize_reconstruction_candidates_emitted")
+            ),
+            "revize_reconstruction_candidates_persisted": reconstructed_persisted,
+            "revize_reconstruction_skipped_reason": revize_result.get("revize_reconstruction_skipped_reason") or {},
             "suppressed_vacancy_rows": _coerce_int(revize_result.get("suppressed_vacancy_rows")),
             "suspicious_reduction_counts": reduction_counts,
             "outcome_counts": revize_result.get("outcome_counts") or {},

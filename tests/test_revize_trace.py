@@ -149,6 +149,35 @@ class RevizeTraceCollectorTests(unittest.TestCase):
                             "drop_reason": "drop_name_literal_reject",
                         }
                     ],
+                    "reconstructed_rows_sample": [
+                        {
+                            "source_url": "https://example.gov/departments/building",
+                            "original_lines": [
+                                "Carl Brown",
+                                "Building & Zoning Enforcement Officer",
+                                "86",
+                                "0-376-7060x2109",
+                            ],
+                            "reconstructed_name": "Carl Brown",
+                            "reconstructed_title": "Building & Zoning Enforcement Officer",
+                            "reconstructed_email": "buildingdepartment@example.gov",
+                            "reconstructed_phone": "8603767060",
+                            "phone_ext": "2109",
+                            "accepted": 1,
+                            "rejection_reason": "",
+                        },
+                        {
+                            "source_url": "https://example.gov/departments/building",
+                            "original_lines": ["VACANT", "Planning Assistant"],
+                            "reconstructed_name": "VACANT",
+                            "reconstructed_title": "Planning Assistant",
+                            "reconstructed_email": "",
+                            "reconstructed_phone": "",
+                            "phone_ext": "",
+                            "accepted": 0,
+                            "rejection_reason": "vacancy_name",
+                        },
+                    ],
                     "suspicious_reduction_counts": {"drop_name_literal_reject": 2},
                 },
             )
@@ -217,6 +246,12 @@ class RevizeTraceCollectorTests(unittest.TestCase):
             self.assertTrue(any("normalized_rejected" in row.get("stages", {}) for row in trace_rows))
             self.assertTrue(any("clean_contacts" in row.get("stages", {}) for row in trace_rows))
             self.assertTrue(any("role_winner" in row.get("stages", {}) for row in trace_rows))
+            reconstructed_rows = [row for row in trace_rows if "reconstructed_candidate" in row.get("stages", {})]
+            self.assertTrue(reconstructed_rows)
+            reconstructed_stage = reconstructed_rows[0]["stages"]["reconstructed_candidate"]
+            self.assertTrue(reconstructed_stage.get("original_lines"))
+            self.assertIn("reconstructed_name", reconstructed_stage)
+            self.assertIn("accepted", reconstructed_stage)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 

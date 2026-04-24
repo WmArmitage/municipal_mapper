@@ -32,8 +32,10 @@ from src.revize import (
     build_revize_candidate_urls,
     classify_revize_page,
     classify_revize_page_class_for_url,
+    extract_reconstructed_revize_candidates,
     discover_revize_department_candidates,
     extract_revize_contacts,
+    group_revize_contact_blocks,
     is_revize_staff_page,
     score_revize_page_class,
     run_revize_strategy_for_municipality,
@@ -539,6 +541,113 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertTrue(matching)
         self.assertEqual(str(matching[0].get("phone") or ""), "8603767060")
         self.assertEqual(str(matching[0].get("phone_ext") or ""), "2109")
+
+    def test_reconstruction_helper_emits_candidate_for_griswold_sidebar_pattern(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building &amp; Zoning Enforcement</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head">
+                  <h4>Carl Brown<span>Building &amp; Zoning Enforcement Officer</span></h4>
+                </div>
+                <div class="staff-details">
+                  <span>86</span><span>0-376-7060x2109</span>
+                  <a href="mailto:buildingdepartment@griswold-ct.org">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        blocks = group_revize_contact_blocks(
+            soup=None,
+            html_text=html,
+            source_url="https://www.example.gov/departments/building/index.php",
+            page_context={},
+        )
+        candidates, diagnostics = extract_reconstructed_revize_candidates(
+            blocks=blocks,
+            source_url="https://www.example.gov/departments/building/index.php",
+            page_context={},
+            page_class="department_page",
+            page_priority_score=0.85,
+        )
+        self.assertGreaterEqual(int(diagnostics.get("revize_reconstruction_blocks_seen") or 0), 1)
+        self.assertGreaterEqual(int(diagnostics.get("revize_reconstruction_candidates_emitted") or 0), 1)
+        self.assertTrue(any(str(row.get("name") or "") == "Carl Brown" for row in candidates))
+        first = candidates[0]
+        self.assertEqual(str(first.get("revize_source_type") or ""), "reconstructed_candidate")
+        self.assertEqual(str(first.get("phone") or ""), "8603767060")
+        self.assertEqual(str(first.get("phone_ext") or ""), "2109")
+
+    def test_active_revize_extraction_path_includes_reconstructed_candidates(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building &amp; Zoning Enforcement</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head">
+                  <h4>Carl Brown<span>Building &amp; Zoning Enforcement Officer</span></h4>
+                </div>
+                <div class="staff-details">
+                  <span>86</span><span>0-376-7060x2109</span>
+                  <a href="mailto:buildingdepartment@griswold-ct.org">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/building/index.php",
+            harvested_links=["https://www.example.gov/departments/building/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        self.assertGreaterEqual(int(result.get("revize_reconstruction_pages_seen") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_reconstruction_blocks_seen") or 0), 1)
+        self.assertGreaterEqual(int(result.get("revize_reconstruction_candidates_emitted") or 0), 1)
+        source_counts = dict(result.get("extraction_source_counts") or {})
+        self.assertGreaterEqual(int(source_counts.get("reconstructed_candidate", 0)), 1)
+        contact_names = {str(row.get("name") or "") for row in list(result.get("contacts") or [])}
+        self.assertIn("Carl Brown", contact_names)
+
+    def test_reconstruction_rows_sample_is_recorded(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building &amp; Zoning Enforcement</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <h4>Carl Brown<span>Building &amp; Zoning Enforcement Officer</span></h4>
+                <div class="staff-details"><span>86</span><span>0-376-7060x2109</span></div>
+              </div>
+              <div class="staff">
+                <h4>VACANT<span>Planning Assistant</span></h4>
+                <div class="staff-details"><span>86</span><span>0-376-7060x2112</span></div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/building/index.php",
+            harvested_links=["https://www.example.gov/departments/building/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        rows = list(result.get("reconstructed_rows_sample") or [])
+        self.assertTrue(rows)
+        self.assertTrue(any(int(row.get("accepted") or 0) == 1 for row in rows))
+        self.assertTrue(any(int(row.get("accepted") or 0) == 0 for row in rows))
+        self.assertTrue(any(str(row.get("reconstructed_name") or "") == "Carl Brown" for row in rows))
+        self.assertTrue(any(str(row.get("rejection_reason") or "") == "vacancy_name" for row in rows))
 
     def test_phone_extension_formats_parse_consistently(self) -> None:
         html = """

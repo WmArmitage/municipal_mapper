@@ -306,6 +306,8 @@ REVIZE_CANDIDATE_ORIGIN_BOOST = {
     "section_root": 6,
     "discovered_link": 5,
 }
+REVIZE_RECONSTRUCTION_SOURCE_TYPE = "reconstructed_candidate"
+REVIZE_RECONSTRUCTION_SAMPLE_LIMIT = 5
 
 FetchFn = Callable[[str, str | None, dict[str, str] | None], FetchResult]
 
@@ -1316,6 +1318,325 @@ def extract_revize_labeled_staff_blocks(
     return out
 
 
+def group_revize_contact_blocks(
+    soup,
+    html_text: str,
+    source_url: str,
+    page_context: dict[str, object] | None = None,
+    max_blocks: int = 40,
+) -> list[dict[str, object]]:
+    if soup is None and BeautifulSoup is not None:
+        try:
+            soup = BeautifulSoup(html_text or "", "html.parser")
+        except Exception:
+            soup = None
+    if soup is None:
+        return _group_revize_contact_blocks_regex(
+            html_text=html_text,
+            source_url=source_url,
+            page_context=page_context,
+            max_blocks=max_blocks,
+        )
+
+    context = dict(page_context or {})
+    department_hint = _infer_department_from_page_context(context, source_url)
+    blocks: list[dict[str, object]] = []
+    seen_nodes: set[int] = set()
+
+    def add_node(node) -> None:
+        if node is None:
+            return
+        node_id = id(node)
+        if node_id in seen_nodes:
+            return
+        if len(blocks) >= max_blocks:
+            return
+        if _is_structural_or_excluded_node(node):
+            return
+        lines: list[str] = []
+        for raw_line in node.stripped_strings:
+            cleaned = normalize_whitespace(str(raw_line) or "") or ""
+            if not cleaned:
+                continue
+            lines.append(cleaned)
+        if not lines:
+            return
+        text_blob = normalize_whitespace(" | ".join(lines)) or ""
+        if not text_blob:
+            return
+        has_mailto = any(
+            str(anchor.get("href") or "").lower().startswith("mailto:")
+            for anchor in node.find_all("a", href=True)
+        )
+        has_tel = any(
+            str(anchor.get("href") or "").lower().startswith("tel:")
+            for anchor in node.find_all("a", href=True)
+        )
+        has_email = bool(extract_emails(text_blob))
+        has_phone = bool(extract_phone_candidates(text_blob))
+        has_digit_fragment = bool(re.search(r"\d", text_blob))
+        heading = node.find(["h4", "h3", "h2"])
+        if not heading and not (has_mailto or has_tel or has_email or has_phone):
+            return
+        if heading and not (has_mailto or has_tel or has_email or has_phone or has_digit_fragment):
+            return
+
+        blocks.append(
+            {
+                "node": node,
+                "original_lines": lines,
+                "source_url": source_url,
+                "department_hint": department_hint,
+                "has_mailto": has_mailto,
+                "has_tel": has_tel,
+            }
+        )
+        seen_nodes.add(node_id)
+
+    for node in soup.select("aside#staff-dr .staff"):
+        add_node(node)
+        if len(blocks) >= max_blocks:
+            return blocks
+    for node in soup.find_all(
+        ["div", "li", "article", "section"],
+        attrs={"class": re.compile(r"(?i)(staff|contact|profile|employee)")},
+    ):
+        add_node(node)
+        if len(blocks) >= max_blocks:
+            break
+    return blocks
+
+
+def _extract_text_nodes_from_html_fragment(fragment: str) -> list[str]:
+    out: list[str] = []
+    for match in re.finditer(r"(?is)>([^<]+)<", fragment or ""):
+        cleaned = normalize_whitespace(html_unescape(str(match.group(1) or ""))) or ""
+        if cleaned:
+            out.append(cleaned)
+    return out
+
+
+def _group_revize_contact_blocks_regex(
+    html_text: str,
+    source_url: str,
+    page_context: dict[str, object] | None = None,
+    max_blocks: int = 40,
+) -> list[dict[str, object]]:
+    context = dict(page_context or {})
+    department_hint = _infer_department_from_page_context(context, source_url)
+    blocks: list[dict[str, object]] = []
+    if not html_text:
+        return blocks
+
+    aside_match = re.search(
+        r'(?is)<aside[^>]*id\s*=\s*(?:"staff-dr"|\'staff-dr\'|staff-dr)[^>]*>(.*?)</aside>',
+        html_text,
+    )
+    if not aside_match:
+        return blocks
+
+    aside_html = aside_match.group(1) or ""
+    heading_matches = list(re.finditer(r"(?is)<h4[^>]*>(.*?)</h4>", aside_html))
+    for idx, heading_match in enumerate(heading_matches):
+        if len(blocks) >= max_blocks:
+            break
+        start = heading_match.start()
+        end = heading_matches[idx + 1].start() if idx + 1 < len(heading_matches) else len(aside_html)
+        block_html = aside_html[start:end]
+        if not block_html:
+            continue
+        original_lines = _extract_text_nodes_from_html_fragment(block_html)[:16]
+        if not original_lines:
+            continue
+        has_mailto = bool(re.search(r"(?is)\bhref\s*=\s*(?:\"mailto:[^\"]+\"|'mailto:[^']+')", block_html))
+        has_tel = bool(re.search(r"(?is)\bhref\s*=\s*(?:\"tel:[^\"]+\"|'tel:[^']+')", block_html))
+        text_blob = normalize_whitespace(" | ".join(original_lines)) or ""
+        has_digit_fragment = bool(re.search(r"\d", text_blob))
+        if not (has_mailto or has_tel or extract_emails(text_blob) or extract_phone_candidates(text_blob) or has_digit_fragment):
+            continue
+        blocks.append(
+            {
+                "node": None,
+                "block_html": block_html,
+                "original_lines": original_lines,
+                "source_url": source_url,
+                "department_hint": department_hint,
+                "has_mailto": has_mailto,
+                "has_tel": has_tel,
+            }
+        )
+    return blocks
+
+
+def extract_reconstructed_revize_candidates(
+    blocks: list[dict[str, object]],
+    source_url: str,
+    page_context: dict[str, object] | None = None,
+    page_class: str = "generic",
+    page_priority_score: float = 0.0,
+) -> tuple[list[dict[str, str | float | None]], dict[str, object]]:
+    context = dict(page_context or {})
+    department_hint = _infer_department_from_page_context(context, source_url)
+    emitted: list[dict[str, str | float | None]] = []
+    skipped_reasons: Counter[str] = Counter()
+    sample_rows: list[dict[str, object]] = []
+    split_merge_count = 0
+
+    for block in blocks:
+        node = block.get("node")
+        block_html = str(block.get("block_html") or "")
+        has_mailto = bool(block.get("has_mailto"))
+        has_tel = bool(block.get("has_tel"))
+        original_lines = [normalize_whitespace(str(item) or "") or "" for item in (block.get("original_lines") or [])]
+        original_lines = [item for item in original_lines if item][:16]
+        if not original_lines:
+            skipped_reasons["missing_original_lines"] += 1
+            continue
+
+        merged_text, merge_count = normalize_revize_fragmented_text(" ".join(original_lines))
+        split_merge_count += int(merge_count)
+        merged_text = normalize_whitespace(merged_text) or ""
+
+        if merge_count == 0 and has_tel and has_mailto:
+            skipped_reasons["already_structured_sidebar"] += 1
+            continue
+
+        name = None
+        title = None
+        email = None
+        phone = None
+        phone_ext = None
+
+        if node is not None:
+            heading = node.find(["h4", "h3", "h2"])
+            if heading is not None:
+                name, title = _extract_name_title_from_heading(heading)
+            email = _extract_email_from_mailto_links(node)
+            phone, phone_ext = _extract_phone_from_tel_links(node)
+        elif block_html:
+            heading_match = re.search(r"(?is)<h4[^>]*>(.*?)</h4>", block_html)
+            if heading_match:
+                raw_heading = str(heading_match.group(1) or "")
+                title_match = re.search(r"(?is)<span[^>]*>(.*?)</span>", raw_heading)
+                if title_match:
+                    title = normalize_whitespace(_strip_tags(title_match.group(1) or "")) or None
+                name = normalize_whitespace(
+                    _strip_tags(re.sub(r"(?is)<span[^>]*>.*?</span>", " ", raw_heading))
+                ) or None
+            mailto_match = re.search(
+                r"""(?is)\bhref\s*=\s*(?:"(mailto:[^"]+)"|'(mailto:[^']+)')""",
+                block_html,
+            )
+            if mailto_match:
+                mailto_href = mailto_match.group(1) or mailto_match.group(2) or ""
+                emails = extract_emails_from_href(mailto_href)
+                if emails:
+                    email = emails[0].lower()
+            tel_match = re.search(
+                r"""(?is)\bhref\s*=\s*(?:"(tel:[^"]+)"|'(tel:[^']+)')""",
+                block_html,
+            )
+            if tel_match:
+                tel_href = tel_match.group(1) or tel_match.group(2) or ""
+                phone_candidates = extract_phone_candidates(tel_href.split(":", 1)[1] if ":" in tel_href else tel_href)
+                if phone_candidates:
+                    phone = str(phone_candidates[0].get("phone") or "") or None
+                    phone_ext = str(phone_candidates[0].get("phone_ext") or "") or None
+
+        if not name:
+            name = _extract_person_name_from_text(merged_text)
+        if not title:
+            title = _guess_title_from_values(original_lines, name=name)
+        if not email:
+            email_candidates = extract_emails(merged_text)
+            if email_candidates:
+                email = email_candidates[0].lower()
+        parsed_phone, parsed_phone_ext, _, _ = parse_revize_phone_and_ext(
+            phone_value=phone,
+            fallback_text=merged_text,
+            phone_ext_value=phone_ext,
+        )
+        if parsed_phone:
+            phone = parsed_phone
+        if parsed_phone_ext:
+            phone_ext = parsed_phone_ext
+
+        department = (
+            normalize_whitespace(str(block.get("department_hint") or "")) or department_hint
+            or _infer_department_from_source_url(source_url)
+        )
+
+        rejection_reason = ""
+        accepted = True
+        if name and _is_vacancy_name(name):
+            accepted = False
+            rejection_reason = "vacancy_name"
+        elif not name:
+            accepted = False
+            rejection_reason = "missing_name"
+        elif not _accept_revize_person_name(name, title):
+            accepted = False
+            rejection_reason = "invalid_person_name"
+        elif not (title or email or phone):
+            accepted = False
+            rejection_reason = "missing_supporting_signal"
+
+        trace_sample = {
+            "source_url": source_url,
+            "original_lines": original_lines,
+            "reconstructed_name": name or "",
+            "reconstructed_title": title or "",
+            "reconstructed_email": email or "",
+            "reconstructed_phone": phone or "",
+            "phone_ext": phone_ext or "",
+            "accepted": 1 if accepted else 0,
+            "rejection_reason": rejection_reason or "",
+        }
+        if len(sample_rows) < REVIZE_RECONSTRUCTION_SAMPLE_LIMIT:
+            sample_rows.append(trace_sample)
+
+        if not accepted:
+            skipped_reasons[rejection_reason or "reconstruction_rejected"] += 1
+            continue
+
+        emitted.append(
+            {
+                "name": name,
+                "title": title,
+                "department": department,
+                "email": email or None,
+                "email_type": infer_email_type(email),
+                "phone": phone or None,
+                "phone_ext": phone_ext or None,
+                "address": None,
+                "hours": None,
+                "source_context": merged_text[:240],
+                "source_url": source_url,
+                "confidence": 0.86,
+                "revize_source_type": REVIZE_RECONSTRUCTION_SOURCE_TYPE,
+                "revize_page_class": page_class,
+                "revize_page_priority_score": page_priority_score,
+                "original_lines": original_lines,
+                "reconstructed_name": name or "",
+                "reconstructed_title": title or "",
+                "reconstructed_email": email or "",
+                "reconstructed_phone": phone or "",
+                "reconstructed_phone_ext": phone_ext or "",
+                "reconstruction_accepted": 1,
+                "reconstruction_rejection_reason": "",
+            }
+        )
+
+    diagnostics = {
+        "revize_reconstruction_blocks_seen": len(blocks),
+        "revize_reconstruction_candidates_emitted": len(emitted),
+        "revize_reconstruction_skipped_reason": dict(sorted(skipped_reasons.items())),
+        "revize_split_text_merged": split_merge_count,
+        "reconstructed_rows_sample": sample_rows,
+    }
+    return emitted, diagnostics
+
+
 def run_revize_strategy_for_municipality(
     municipality_homepage: str,
     harvested_links: Iterable[dict[str, str] | str] | None = None,
@@ -1381,10 +1702,16 @@ def run_revize_strategy_for_municipality(
         "revize_split_text_merged": 0,
         "revize_phone_extensions_parsed": 0,
         "revize_phone_string_preserved": 0,
+        "revize_reconstruction_pages_seen": 0,
+        "revize_reconstruction_blocks_seen": 0,
+        "revize_reconstruction_candidates_emitted": 0,
+        "revize_reconstruction_candidates_persisted": 0,
     }
     extracted_rows_sample: list[dict[str, object]] = []
     normalized_rows_sample: list[dict[str, object]] = []
     rejected_rows_sample: list[dict[str, object]] = []
+    reconstructed_rows_sample: list[dict[str, object]] = []
+    reconstruction_skipped_reasons: Counter[str] = Counter()
 
     while queue and len(attempted_rows) < max_total_candidates:
         candidate = queue.popleft()
@@ -1497,6 +1824,15 @@ def run_revize_strategy_for_municipality(
             counters["revize_phone_string_preserved"] += _coerce_int(
                 per_page_metrics.get("revize_phone_string_preserved")
             )
+            counters["revize_reconstruction_pages_seen"] += _coerce_int(
+                per_page_metrics.get("revize_reconstruction_pages_seen")
+            )
+            counters["revize_reconstruction_blocks_seen"] += _coerce_int(
+                per_page_metrics.get("revize_reconstruction_blocks_seen")
+            )
+            counters["revize_reconstruction_candidates_emitted"] += _coerce_int(
+                per_page_metrics.get("revize_reconstruction_candidates_emitted")
+            )
             counters["rows_extracted_total"] += _coerce_int(per_page_metrics.get("rows_extracted_total"))
             counters["rows_normalized_seen"] += _coerce_int(per_page_metrics.get("rows_normalized_seen"))
             counters["rows_normalized_kept"] += _coerce_int(per_page_metrics.get("rows_normalized_kept"))
@@ -1527,6 +1863,16 @@ def run_revize_strategy_for_municipality(
                 if len(rejected_rows_sample) >= 25:
                     break
                 rejected_rows_sample.append(dict(row))
+            for row in list(per_page_metrics.get("reconstructed_rows_sample") or []):
+                if len(reconstructed_rows_sample) >= 25:
+                    break
+                reconstructed_rows_sample.append(dict(row))
+            reconstruction_skipped_reasons.update(
+                {
+                    str(reason): _coerce_int(count)
+                    for reason, count in dict(per_page_metrics.get("revize_reconstruction_skipped_reason") or {}).items()
+                }
+            )
             if extracted_rows:
                 contacts_by_url.append(
                     {
@@ -1631,6 +1977,18 @@ def run_revize_strategy_for_municipality(
                 "revize_phone_string_preserved": _coerce_int(
                     per_page_metrics.get("revize_phone_string_preserved")
                 ),
+                "revize_reconstruction_pages_seen": _coerce_int(
+                    per_page_metrics.get("revize_reconstruction_pages_seen")
+                ),
+                "revize_reconstruction_blocks_seen": _coerce_int(
+                    per_page_metrics.get("revize_reconstruction_blocks_seen")
+                ),
+                "revize_reconstruction_candidates_emitted": _coerce_int(
+                    per_page_metrics.get("revize_reconstruction_candidates_emitted")
+                ),
+                "revize_reconstruction_skipped_reason": dict(
+                    per_page_metrics.get("revize_reconstruction_skipped_reason") or {}
+                ),
                 "rows_kept_vs_dropped_ratio": float(per_page_metrics.get("rows_kept_vs_dropped_ratio") or 0.0),
                 "rows_flagged_as_noise": _coerce_int(per_page_metrics.get("rows_flagged_as_noise")),
                 "rows_soft_kept": _coerce_int(per_page_metrics.get("rows_soft_kept")),
@@ -1680,6 +2038,8 @@ def run_revize_strategy_for_municipality(
         "extracted_rows_sample": extracted_rows_sample,
         "normalized_rows_sample": normalized_rows_sample,
         "rejected_rows_sample": rejected_rows_sample,
+        "reconstructed_rows_sample": reconstructed_rows_sample,
+        "revize_reconstruction_skipped_reason": dict(sorted(reconstruction_skipped_reasons.items())),
         "revize_pass_produced_contacts": len(deduped_contacts) > 0,
     }
 
@@ -1820,6 +2180,19 @@ def _extract_revize_contacts_with_diagnostics(
     page_context = _build_page_context(html_text=sanitized_html_text, source_url=source_url, soup=soup)
     department_like = _is_department_like_page(source_url, page_context)
 
+    reconstruction_blocks = group_revize_contact_blocks(
+        soup=soup,
+        html_text=sanitized_html_text,
+        source_url=source_url,
+        page_context=page_context,
+    )
+    reconstructed_rows, reconstruction_metrics = extract_reconstructed_revize_candidates(
+        blocks=reconstruction_blocks,
+        source_url=source_url,
+        page_context=page_context,
+        page_class=page_class,
+        page_priority_score=page_priority_score,
+    )
     sidebar_rows = extract_revize_sidebar_staff(soup, source_url, page_context)
     table_rows = extract_revize_table_directory(sanitized_html_text, source_url)
     contact_card_rows = extract_revize_contact_cards(soup, source_url, page_context)
@@ -1832,6 +2205,7 @@ def _extract_revize_contacts_with_diagnostics(
 
     extracted: list[dict[str, str | float | None]] = []
     if department_like:
+        extracted.extend(reconstructed_rows)
         extracted.extend(sidebar_rows)
         extracted.extend(table_rows)
         extracted.extend(contact_card_rows)
@@ -1842,6 +2216,7 @@ def _extract_revize_contacts_with_diagnostics(
         extracted.extend(single_profile_rows)
         extracted.extend(department_contact_rows)
     else:
+        extracted.extend(reconstructed_rows)
         extracted.extend(table_rows)
         extracted.extend(contact_card_rows)
         extracted.extend(profile_rows)
@@ -1887,6 +2262,9 @@ def _extract_revize_contacts_with_diagnostics(
         row["revize_block_class"] = block_class
 
     reduction_counts: Counter[str] = Counter()
+    split_merge_from_reconstruction = _coerce_int(reconstruction_metrics.get("revize_split_text_merged"))
+    if split_merge_from_reconstruction > 0:
+        reduction_counts["revize_split_text_merged"] += split_merge_from_reconstruction
     deduped: dict[tuple[str, ...], dict[str, str | float | None]] = {}
     normalized_kept_count = 0
     extracted_rows_sample: list[dict[str, object]] = []
@@ -1971,6 +2349,16 @@ def _extract_revize_contacts_with_diagnostics(
         "revize_split_text_merged": _coerce_int(reduction_counts.get("revize_split_text_merged")),
         "revize_phone_extensions_parsed": _coerce_int(reduction_counts.get("revize_phone_extensions_parsed")),
         "revize_phone_string_preserved": _coerce_int(reduction_counts.get("revize_phone_string_preserved")),
+        "revize_reconstruction_pages_seen": 1,
+        "revize_reconstruction_blocks_seen": _coerce_int(
+            reconstruction_metrics.get("revize_reconstruction_blocks_seen")
+        ),
+        "revize_reconstruction_candidates_emitted": _coerce_int(
+            reconstruction_metrics.get("revize_reconstruction_candidates_emitted")
+        ),
+        "revize_reconstruction_skipped_reason": dict(
+            reconstruction_metrics.get("revize_reconstruction_skipped_reason") or {}
+        ),
         "revize_rows_from_staff_directory": normalized_kept_count if page_class == "staff_directory" else 0,
         "revize_rows_from_department_pages": normalized_kept_count if page_class == "department_page" else 0,
         "revize_rows_from_contact_hubs": normalized_kept_count if page_class == "contact_hub" else 0,
@@ -1979,6 +2367,7 @@ def _extract_revize_contacts_with_diagnostics(
         "extracted_rows_sample": extracted_rows_sample,
         "normalized_rows_sample": normalized_rows_sample,
         "rejected_rows_sample": rejected_rows_sample,
+        "reconstructed_rows_sample": list(reconstruction_metrics.get("reconstructed_rows_sample") or []),
     }
     return contacts, reduction_counts, source_counts, metrics
 
@@ -3825,6 +4214,18 @@ def _normalize_revize_contact_row(
         "normalization_flag": normalization_flag_value,
         "normalization_soft_keep": 1 if soft_kept else 0,
     }
+    for extra_key in (
+        "original_lines",
+        "reconstructed_name",
+        "reconstructed_title",
+        "reconstructed_email",
+        "reconstructed_phone",
+        "reconstructed_phone_ext",
+        "reconstruction_accepted",
+        "reconstruction_rejection_reason",
+    ):
+        if extra_key in row:
+            normalized[extra_key] = row.get(extra_key)
     return normalized
 
 
@@ -3967,6 +4368,7 @@ def _count_extraction_sources(
     contacts: list[dict[str, str | float | None]],
 ) -> dict[str, int]:
     counts = {
+        REVIZE_RECONSTRUCTION_SOURCE_TYPE: 0,
         "sidebar_staff": 0,
         "contact_card": 0,
         "inline_staff_list": 0,
@@ -4211,6 +4613,27 @@ def _normalize_token(value: str) -> str:
 
 
 def _trace_row_payload(row: dict[str, object]) -> dict[str, object]:
+    original_lines_raw = row.get("original_lines") or row.get("revize_reconstruction_original_lines") or []
+    original_lines: list[str] = []
+    if isinstance(original_lines_raw, (list, tuple)):
+        for item in original_lines_raw:
+            cleaned = normalize_whitespace(str(item) or "") or ""
+            if cleaned:
+                original_lines.append(cleaned)
+            if len(original_lines) >= 16:
+                break
+    reconstruction_accepted = _coerce_int(
+        row.get("reconstruction_accepted")
+        if row.get("reconstruction_accepted") is not None
+        else row.get("accepted")
+    )
+    reconstruction_rejection_reason = normalize_whitespace(
+        str(
+            row.get("reconstruction_rejection_reason")
+            or row.get("rejection_reason")
+            or ""
+        )
+    ) or None
     return {
         "name": normalize_whitespace(str(row.get("name") or "")) or None,
         "title": normalize_whitespace(str(row.get("title") or "")) or None,
@@ -4226,6 +4649,29 @@ def _trace_row_payload(row: dict[str, object]) -> dict[str, object]:
         "is_likely_noise": _coerce_int(row.get("is_likely_noise")),
         "normalization_flag": normalize_whitespace(str(row.get("normalization_flag") or "")) or None,
         "confidence": float(row.get("confidence") or 0.0),
+        "original_lines": original_lines,
+        "reconstructed_name": normalize_whitespace(
+            str(row.get("reconstructed_name") or row.get("name") or "")
+        ) or None,
+        "reconstructed_title": normalize_whitespace(
+            str(row.get("reconstructed_title") or row.get("title") or "")
+        ) or None,
+        "reconstructed_email": (
+            str(row.get("reconstructed_email") or row.get("email") or "").strip().lower() or None
+        ),
+        "reconstructed_phone": normalize_whitespace(
+            str(row.get("reconstructed_phone") or row.get("phone") or "")
+        ) or None,
+        "reconstructed_phone_ext": normalize_whitespace(
+            str(
+                row.get("reconstructed_phone_ext")
+                or row.get("reconstructed_ext")
+                or row.get("phone_ext")
+                or ""
+            )
+        ) or None,
+        "accepted": reconstruction_accepted,
+        "rejection_reason": reconstruction_rejection_reason,
     }
 
 
