@@ -812,6 +812,48 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 0)
         self.assertEqual(int(unresolved["cnt"]), 0)
 
+    def test_vacancy_label_stays_disqualified(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="vacancy_tax_label",
+            municipality_id="ct_vacancy_label",
+            role_normalized="Tax Collector",
+            role_family="tax_collector",
+            name="Filling Vacancies",
+            title="Filling Vacancies for Town Clerk and Tax Collector",
+            department="Office of the First Selectman",
+            source_url="https://town.example.org/departments/first_selectman.php",
+            source_context="revize:labeled_staff|page_class=department_page",
+            page_type="department_page",
+            email="",
+            phone="",
+            display_confidence=0.63,
+            suspicious_reason="invalid_person_name",
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_vacancy_label", "Tax Collector"),
+        ).fetchone()
+        candidate = conn.execute(
+            """
+            SELECT candidate_state, winner_disqualifier_reason, invalid_candidate_disqualified
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_vacancy_label", "Tax Collector"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(winner)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["candidate_state"], "disqualified")
+        self.assertEqual(candidate["winner_disqualifier_reason"], "artifact_name")
+        self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 1)
+
     def test_blank_name_office_contact_becomes_review_candidate(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(

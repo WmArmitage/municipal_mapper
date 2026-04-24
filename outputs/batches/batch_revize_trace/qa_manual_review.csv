@@ -7,6 +7,7 @@ ct_avon,Avon,candidate_for_review,Planner,"Hiram Peck III, AICP, CFM, CZEO",,860
 ct_avon,Avon,missing_role_groups_2plus,,,,,,,,executive; tax; clerk,3,,normal_coverage_gap
 ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
 ct_griswold,Griswold,candidate_for_review,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,invalid_person_name,candidate_for_review
+ct_griswold,Griswold,candidate_for_review,Building Official,Building,buildingofficial@griswoldct.gov,8603767060,,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,invalid_person_name,candidate_for_review
 ct_griswold,Griswold,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; planning; finance,6,,normal_coverage_gap
 ct_griswold,Griswold,suspicious_winner,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,invalid_person_name,suspicious_winner
 ct_griswold,Griswold,unresolved_role,Assessor,Your Link Name,,,Assessor's,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,,,artifact_name,unresolved_role
