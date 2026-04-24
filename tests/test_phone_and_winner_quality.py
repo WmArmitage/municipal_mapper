@@ -33,6 +33,7 @@ CONTACT_COLUMNS = (
     "hours",
     "page_type",
     "source_url",
+    "source_context",
     "display_confidence",
     "record_rank",
     "is_likely_noise",
@@ -231,6 +232,198 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "staff_winner")
 
+    def test_reconstructed_row_beats_affidavit_garbage(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="groton_assessor_garbage",
+            municipality_id="ct_groton",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Antique Motor Vehicle Affidavit",
+            title="Assessor Forms",
+            department="Assessor",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="forms@town.org",
+            phone="8602001000",
+            display_confidence=0.99,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="groton_assessor_reconstructed",
+            municipality_id="ct_groton",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Mary Gardner",
+            title="Assessor",
+            department="Assessor",
+            source_url="https://town.example.org/departments/assessor/index.php",
+            source_context="revize:reconstructed_contact_block|page_class=department_page",
+            page_type="department_page",
+            email="mgardner@town.org",
+            phone="8602001001",
+            display_confidence=0.72,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_groton", "Assessor"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "groton_assessor_reconstructed")
+
+    def test_reconstructed_row_beats_building_label_name(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="marlborough_building_garbage",
+            municipality_id="ct_marlborough",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Building",
+            title="Building Official",
+            department="Building",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="building@town.org",
+            phone="8603001000",
+            display_confidence=0.97,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="marlborough_building_reconstructed",
+            municipality_id="ct_marlborough",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Carl Brown",
+            title="Building Official",
+            department="Building",
+            source_url="https://town.example.org/departments/building/index.php",
+            source_context="revize:reconstructed_contact_block|page_class=department_page",
+            page_type="department_page",
+            email="cbrown@town.org",
+            phone="8603001001",
+            display_confidence=0.70,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_marlborough", "Building Official"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "marlborough_building_reconstructed")
+
+    def test_reconstructed_row_beats_filling_vacancies(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="stafford_tax_garbage",
+            municipality_id="ct_stafford",
+            role_normalized="Tax Collector",
+            role_family="tax_collector",
+            name="Filling Vacancies",
+            title="Tax Office",
+            department="Tax Collector",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="tax@town.org",
+            phone="8604001000",
+            display_confidence=0.98,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="stafford_tax_reconstructed",
+            municipality_id="ct_stafford",
+            role_normalized="Tax Collector",
+            role_family="tax_collector",
+            name="Jane Smith",
+            title="Tax Collector",
+            department="Tax Collector",
+            source_url="https://town.example.org/departments/tax_collector/index.php",
+            source_context="revize:reconstructed_contact_block|page_class=department_page",
+            page_type="department_page",
+            email="jsmith@town.org",
+            phone="8604001001",
+            display_confidence=0.71,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_stafford", "Tax Collector"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "stafford_tax_reconstructed")
+
+    def test_role_only_name_loses_to_real_name(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="role_only_name_row",
+            municipality_id="ct_role_only",
+            role_normalized="Tax Collector",
+            role_family="tax_collector",
+            name="Tax Collector",
+            title="Tax Collector",
+            department="Tax Collector",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="taxoffice@town.org",
+            phone="8605001000",
+            display_confidence=0.96,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="real_name_row",
+            municipality_id="ct_role_only",
+            role_normalized="Tax Collector",
+            role_family="tax_collector",
+            name="Mary Gardner",
+            title="Tax Collector",
+            department="Tax Collector",
+            source_url="https://town.example.org/departments/tax_collector/index.php",
+            source_context="revize:reconstructed_contact_block|page_class=department_page",
+            page_type="department_page",
+            email="mgardner@town.org",
+            phone="8605001001",
+            display_confidence=0.74,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_role_only", "Tax Collector"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "real_name_row")
+
     def _build_postprocess_test_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
@@ -254,6 +447,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
                 hours TEXT,
                 page_type TEXT,
                 source_url TEXT,
+                source_context TEXT,
                 display_confidence REAL,
                 record_rank INTEGER,
                 is_likely_noise INTEGER,
@@ -285,6 +479,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             "hours": "",
             "page_type": "department_page",
             "source_url": "",
+            "source_context": "",
             "display_confidence": 0.5,
             "record_rank": 1,
             "is_likely_noise": 0,

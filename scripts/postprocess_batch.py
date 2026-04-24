@@ -33,6 +33,7 @@ REQUIRED_CONTACT_COLUMNS: tuple[tuple[str, str], ...] = (
     ("semantic_confidence", "REAL"),
     ("display_confidence", "REAL"),
     ("suspicious_reason", "TEXT"),
+    ("source_context", "TEXT"),
 )
 
 REQUIRED_SERVICE_LINK_COLUMNS: tuple[tuple[str, str], ...] = (
@@ -103,13 +104,30 @@ WITH ranked AS (
     v.display_confidence,
     c.is_likely_noise,
     c.suspicious_reason,
+    c.source_context,
     ROW_NUMBER() OVER (
       PARTITION BY v.municipality_id, v.role_normalized
       ORDER BY
         CASE
+          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+               AND (
+                 LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%affidavit%'
+                 OR LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%vacanc%'
+                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'building'
+                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'tax collector'
+                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'department'
+                 OR LOWER(TRIM(COALESCE(v.name, ''))) = 'office'
+                 OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% department %'
+                 OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% office %'
+               )
+          THEN 1
+          ELSE 0
+        END ASC,
+        CASE
           WHEN COALESCE(c.suspicious_reason, '') IN (
               'role_department_mismatch',
               'invalid_person_name',
+              'role_only_name',
               'non_person_role_candidate',
               'contact_hub_candidate',
               'assistant_role_contamination'
@@ -151,6 +169,34 @@ WITH ranked AS (
                AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%mayor%'
                AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%town-manager%'
                AND LOWER(COALESCE(v.source_url, '')) NOT LIKE '%administrator%'
+          THEN 1
+          ELSE 0
+        END ASC,
+        CASE
+          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
+               AND NULLIF(TRIM(COALESCE(v.name, '')), '') IS NOT NULL
+               AND (
+                   LENGTH(TRIM(COALESCE(v.name, '')))
+                   - LENGTH(REPLACE(TRIM(COALESCE(v.name, '')), ' ', ''))
+                   + 1
+               ) >= 2
+               AND LOWER(TRIM(COALESCE(v.name, ''))) NOT IN ('building', 'tax collector', 'department', 'office')
+               AND LOWER(TRIM(COALESCE(v.name, ''))) NOT LIKE '%affidavit%'
+               AND LOWER(TRIM(COALESCE(v.name, ''))) NOT LIKE '%vacanc%'
+               AND NULLIF(TRIM(COALESCE(v.role_family, '')), '') IS NOT NULL
+               AND COALESCE(c.suspicious_reason, '') NOT IN ('invalid_person_name', 'role_only_name')
+          THEN 3
+          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
+          THEN 1
+          ELSE 0
+        END DESC,
+        CASE
+          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+               AND NULLIF(TRIM(COALESCE(v.name, '')), '') IS NOT NULL
+               AND (
+                   LOWER(TRIM(COALESCE(v.name, ''))) = LOWER(TRIM(COALESCE(v.role_normalized, '')))
+                   OR LOWER(TRIM(COALESCE(v.name, ''))) = LOWER(TRIM(COALESCE(v.title, '')))
+               )
           THEN 1
           ELSE 0
         END ASC,
@@ -230,6 +276,19 @@ WITH ranked AS (
     ON v.contact_id = c.contact_id
   WHERE v.role_normalized IS NOT NULL
     AND COALESCE(v.entity_type, '') = 'person'
+    AND NOT (
+        LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+        AND (
+            LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%affidavit%'
+            OR LOWER(TRIM(COALESCE(v.name, ''))) LIKE '%vacanc%'
+            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'building'
+            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'tax collector'
+            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'department'
+            OR LOWER(TRIM(COALESCE(v.name, ''))) = 'office'
+            OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% department %'
+            OR (' ' || LOWER(TRIM(COALESCE(v.name, ''))) || ' ') LIKE '% office %'
+        )
+    )
 )
 SELECT *
 FROM ranked
@@ -402,6 +461,22 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
             """,
             params,
         ).fetchone()[0],
+        "revize_reconstructed_rows_promoted_to_winner": 0,
+        "revize_garbage_rows_demoted": conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM contacts
+            WHERE municipality_id IN ({where_in})
+              AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
+              AND (
+                    COALESCE(suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+                    OR LOWER(TRIM(COALESCE(name, ''))) LIKE '%affidavit%'
+                    OR LOWER(TRIM(COALESCE(name, ''))) LIKE '%vacanc%'
+                    OR LOWER(TRIM(COALESCE(name, ''))) IN ('building', 'tax collector', 'department', 'office')
+                  )
+            """,
+            params,
+        ).fetchone()[0],
     }
 
     if view_exists(conn, "vw_contacts_clean"):
@@ -453,6 +528,16 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
                 LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=contact_hub%'
                 OR LOWER(COALESCE(c.page_type, '')) = 'contact_hub'
               )
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_reconstructed_rows_promoted_to_winner"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_best_role_per_town v
+            JOIN contacts c ON c.contact_id = v.contact_id
+            WHERE v.municipality_id IN ({where_in})
+              AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%'
             """,
             params,
         ).fetchone()[0]
@@ -1043,6 +1128,36 @@ def run_batch_enrichment(conn: sqlite3.Connection, municipality_ids: list[str]) 
     conn.execute(
         f"""
         UPDATE contacts
+        SET suspicious_reason = CASE
+            WHEN LOWER(COALESCE(source_context, '')) NOT LIKE 'revize:%'
+            THEN suspicious_reason
+            WHEN (
+                LOWER(TRIM(COALESCE(name, ''))) LIKE '%affidavit%'
+                OR LOWER(TRIM(COALESCE(name, ''))) LIKE '%vacanc%'
+                OR LOWER(TRIM(COALESCE(name, ''))) = 'building'
+                OR LOWER(TRIM(COALESCE(name, ''))) = 'tax collector'
+                OR LOWER(TRIM(COALESCE(name, ''))) = 'department'
+                OR LOWER(TRIM(COALESCE(name, ''))) = 'office'
+                OR (' ' || LOWER(TRIM(COALESCE(name, ''))) || ' ') LIKE '% department %'
+                OR (' ' || LOWER(TRIM(COALESCE(name, ''))) || ' ') LIKE '% office %'
+            )
+            THEN 'invalid_person_name'
+            WHEN NULLIF(TRIM(COALESCE(name, '')), '') IS NOT NULL
+                 AND (
+                    LOWER(TRIM(COALESCE(name, ''))) = LOWER(TRIM(COALESCE(title, '')))
+                    OR LOWER(TRIM(COALESCE(name, ''))) = LOWER(TRIM(COALESCE(role_normalized, '')))
+                 )
+            THEN 'role_only_name'
+            ELSE suspicious_reason
+        END
+        WHERE {where_contacts}
+        """,
+        params,
+    )
+
+    conn.execute(
+        f"""
+        UPDATE contacts
         SET semantic_confidence = MAX(
             0.0,
             MIN(
@@ -1336,6 +1451,11 @@ def print_metrics(title: str, metrics: dict[str, int]) -> None:
         f"  revize winner penalty (role/department mismatch): {metrics['revize_winner_penalty_role_department_mismatch']}"
     )
     print(f"  revize winner penalty (office row): {metrics['revize_winner_penalty_office_row']}")
+    print(
+        "  revize reconstructed rows promoted to winner: "
+        f"{metrics['revize_reconstructed_rows_promoted_to_winner']}"
+    )
+    print(f"  revize garbage rows demoted: {metrics['revize_garbage_rows_demoted']}")
 
 
 def main() -> None:

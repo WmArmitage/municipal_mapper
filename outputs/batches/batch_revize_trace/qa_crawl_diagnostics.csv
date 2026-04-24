@@ -1,5 +1,5 @@
 municipality_id,batch_id,seed_url_attempted,final_url_fetched,fallback_used,http_status,redirect_count,content_type,page_title,response_text_length,extracted_link_count,candidate_service_link_count,candidate_directory_link_count,contact_rows_extracted,detected_block_signal,detected_js_shell_signal,diagnostic_class
-ct_avon,batch_revize_trace,https://www.avonct.gov/,https://www.avonct.gov/,0,200,0,text/html,"Avon, CT",113821,1046,0,0,83,1,1,ok
+ct_avon,batch_revize_trace,https://www.avonct.gov/,https://www.avonct.gov/,0,200,0,text/html,"Avon, CT",113854,1046,0,0,83,1,1,ok
 ct_fairfield,batch_revize_trace,https://www.fairfieldct.org/,https://fairfieldct.gov/,0,200,1,text/html,"Home - Town of Fairfield, Connecticut",77286,242,0,0,2,1,1,ok
 ct_griswold,batch_revize_trace,https://www.griswold-ct.org/,https://www.griswold-ct.org/,0,200,0,text/html,"Welcome to Griswold, CT",90955,269,0,0,35,1,1,ok
 ct_groton,batch_revize_trace,https://www.groton-ct.gov/,https://www.groton-ct.gov/,0,200,0,text/html,"Welcome to the Town of Groton, Connecticut",108924,382,0,0,33,0,1,ok
