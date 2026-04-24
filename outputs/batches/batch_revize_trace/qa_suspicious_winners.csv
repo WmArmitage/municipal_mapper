@@ -1,8 +1,4 @@
 municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,candidate_score,winner_disqualifier_reason,suspicious_reason
-ct_griswold,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,18,,invalid_person_name
 ct_griswold,Planner,,townplanner@griswoldct.gov,8603767060,Planning & Development,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,13,blank_name,blank_name
 ct_guilford,Building Official,,,2034538038,Building,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,0,10,blank_name,blank_name
-ct_marlborough,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,0,14,,invalid_person_name
 ct_north_haven,Building Official,,floriano.elio@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,0,10,blank_name,blank_name
-ct_north_haven,Land Use,Land Use,magaraci.laura@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,0,13,,role_only_name
-ct_ridgefield,Assessor,Al Garzi,,2034312706,Tax Assessor,department_page,https://www.ridgefieldct.gov/departments/tax_assessors_office/index.php,0,26,,assessor_tax_mismatch

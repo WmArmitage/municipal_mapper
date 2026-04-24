@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.export_batch_qa import fetch_suspicious_winners
 from scripts.export_csvs import export_query
 from scripts.postprocess_batch import (
     FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL,
@@ -495,6 +496,99 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(int(heading_candidate["invalid_candidate_disqualified"]), 1)
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "ridgefield_profile")
+
+    def test_revize_role_only_person_name_is_disqualified(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="bad_building_name",
+            municipality_id="ct_role_only_name",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Building",
+            title="Building Inspector",
+            department="Building Department",
+            email="inspector@town.org",
+            phone="8605550410",
+            page_type="staff_directory",
+            source_url="https://town.example.org/departments/building/index.php",
+            source_context="revize:table_directory|page_class=staff_directory|page_priority=1.00 | Building | Ray | Steadward | Building Inspector | inspector@town.org | (860) 555-0410",
+            display_confidence=0.80,
+            suspicious_reason="invalid_person_name",
+        )
+        self._insert_contact(
+            conn,
+            contact_id="good_building_name",
+            municipality_id="ct_role_only_name",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Jason Celestino",
+            title="Building Official",
+            department="Building Department",
+            email="jason@town.org",
+            phone="8605550411",
+            page_type="staff_directory",
+            source_url="https://town.example.org/departments/building/index.php",
+            source_context="revize:contact_card|page_class=staff_directory|page_priority=1.00 | Town Hall Annex (860) 555-0411",
+            display_confidence=0.80,
+            suspicious_reason=None,
+        )
+        bad_candidate = conn.execute(
+            """
+            SELECT candidate_state, winner_disqualifier_reason, invalid_candidate_disqualified
+            FROM vw_role_candidates_scored
+            WHERE contact_id = ?
+            """,
+            ("bad_building_name",),
+        ).fetchone()
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_group = ?
+            """,
+            ("ct_role_only_name", "building_primary"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(bad_candidate)
+        self.assertEqual(bad_candidate["candidate_state"], "disqualified")
+        self.assertEqual(bad_candidate["winner_disqualifier_reason"], "invalid_person_name")
+        self.assertEqual(int(bad_candidate["invalid_candidate_disqualified"]), 1)
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "good_building_name")
+
+    def test_tax_assessor_context_is_not_flagged_as_suspicious(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="tax_assessor_valid",
+            municipality_id="ct_tax_assessor_valid",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Al Garzi",
+            title="Tax Assessor",
+            department="Tax Assessor",
+            email="",
+            phone="8605550412",
+            page_type="department_page",
+            source_url="https://town.example.org/departments/tax_assessors_office/index.php",
+            source_context="revize:contact_card|page_class=department_page|page_priority=0.75 | Town Hall (860) 555-0412",
+            display_confidence=0.74,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_group = ?
+            """,
+            ("ct_tax_assessor_valid", "assessor_primary"),
+        ).fetchone()
+        suspicious = fetch_suspicious_winners(conn, ["ct_tax_assessor_valid"])
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "tax_assessor_valid")
+        self.assertEqual(suspicious, [])
 
     def test_role_group_ranking_keeps_single_winner_when_high_confidence_exists_in_family(self) -> None:
         conn = self._build_postprocess_test_db()
@@ -1173,7 +1267,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(unresolved["top_candidate_name"], "Land Use")
         self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
 
-    def test_structured_role_label_with_contact_details_can_fallback(self) -> None:
+    def test_structured_role_label_with_contact_details_stays_disqualified(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
             conn,
@@ -1217,15 +1311,12 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             ("ct_structured_building", "Building Official"),
         ).fetchone()
         conn.close()
-        self.assertIsNotNone(winner)
-        self.assertEqual(winner["contact_id"], "structured_building_label")
-        self.assertEqual(winner["candidate_state"], "candidate_for_review")
-        self.assertEqual(int(winner["forced_fallback"]), 1)
+        self.assertIsNone(winner)
         self.assertIsNotNone(candidate)
-        self.assertEqual(candidate["candidate_state"], "candidate_for_review")
-        self.assertEqual(candidate["winner_disqualifier_reason"], "")
-        self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 0)
-        self.assertEqual(int(unresolved["cnt"]), 0)
+        self.assertEqual(candidate["candidate_state"], "disqualified")
+        self.assertEqual(candidate["winner_disqualifier_reason"], "invalid_person_name")
+        self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 1)
+        self.assertEqual(int(unresolved["cnt"]), 1)
 
     def test_vacancy_label_stays_disqualified(self) -> None:
         conn = self._build_postprocess_test_db()

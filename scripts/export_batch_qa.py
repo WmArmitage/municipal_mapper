@@ -489,6 +489,8 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
                      LOWER(COALESCE(source_url, '')) LIKE '%tax%'
                      OR LOWER(COALESCE(email, '')) LIKE '%tax%'
                  )
+                 AND LOWER(COALESCE(department, '')) NOT LIKE '%tax assessor%'
+                 AND LOWER(COALESCE(title, '')) NOT LIKE '%tax assessor%'
             THEN 'assessor_tax_mismatch'
             WHEN role_normalized = 'Tax Collector'
                  AND (
@@ -555,6 +557,8 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
                     LOWER(COALESCE(source_url, '')) LIKE '%tax%'
                     OR LOWER(COALESCE(email, '')) LIKE '%tax%'
                 )
+                AND LOWER(COALESCE(department, '')) NOT LIKE '%tax assessor%'
+                AND LOWER(COALESCE(title, '')) NOT LIKE '%tax assessor%'
             )
             OR (
                 role_normalized = 'Tax Collector'
