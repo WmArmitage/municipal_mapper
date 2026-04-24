@@ -892,6 +892,20 @@ WITH eligible_candidates AS (
           WHEN v.candidate_state = 'role_only_fallback' THEN 3
           ELSE 4
         END,
+        CASE
+          WHEN NULLIF(TRIM(COALESCE(v.name, '')), '') IS NOT NULL
+               AND (
+                 NULLIF(TRIM(COALESCE(v.email, '')), '') IS NOT NULL
+                 OR NULLIF(TRIM(COALESCE(v.phone, '')), '') IS NOT NULL
+               )
+          THEN 1
+          WHEN NULLIF(TRIM(COALESCE(v.name, '')), '') IS NOT NULL
+          THEN 2
+          WHEN NULLIF(TRIM(COALESCE(v.email, '')), '') IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(v.phone, '')), '') IS NOT NULL
+          THEN 3
+          ELSE 4
+        END,
         v.candidate_score DESC,
         COALESCE(v.display_confidence, 0.0) DESC,
         COALESCE(v.contact_id, '') ASC

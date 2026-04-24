@@ -224,6 +224,75 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(review_candidate["winner_disqualifier_reason"], "")
         self.assertIsNone(unresolved)
 
+    def test_structural_priority_beats_higher_score_with_weaker_contact_shape(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="score_favored_assessor",
+            municipality_id="ct_structural_priority",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Jordan Strong",
+            title="Assessor",
+            department="Assessor's Office",
+            email="",
+            phone="",
+            page_type="department_page",
+            source_url="https://town.example.org/assessor",
+            source_context="revize:contact_card|page_class=department_page",
+            display_confidence=0.88,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="structure_favored_assessor",
+            municipality_id="ct_structural_priority",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Taylor Contact",
+            title="Assessor",
+            department="",
+            email="",
+            phone="8605550102",
+            page_type="department_page",
+            source_url="https://town.example.org/assessor",
+            source_context="revize:contact_card|page_class=department_page",
+            display_confidence=0.72,
+            suspicious_reason=None,
+        )
+        candidates = conn.execute(
+            """
+            SELECT contact_id, candidate_state, candidate_score
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            ORDER BY contact_id
+            """,
+            ("ct_structural_priority", "Assessor"),
+        ).fetchall()
+        winner = conn.execute(
+            """
+            SELECT contact_id, candidate_state
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_structural_priority", "Assessor"),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(
+            [(row["contact_id"], row["candidate_state"]) for row in candidates],
+            [
+                ("score_favored_assessor", "candidate_for_review"),
+                ("structure_favored_assessor", "candidate_for_review"),
+            ],
+        )
+        candidate_scores = {row["contact_id"]: int(row["candidate_score"]) for row in candidates}
+        self.assertGreater(
+            candidate_scores["score_favored_assessor"],
+            candidate_scores["structure_favored_assessor"],
+        )
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "structure_favored_assessor")
+
     def test_role_group_ranking_keeps_single_winner_when_high_confidence_exists_in_family(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
