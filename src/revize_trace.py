@@ -19,7 +19,9 @@ STAGE_COUNT_FIELDS = (
     "revize_rows_dropped_pre_clean_contacts",
     "revize_rows_in_clean_contacts",
     "revize_rows_considered_for_role_winners",
+    "revize_rows_retained_for_review",
     "revize_rows_selected_as_role_winners",
+    "revize_roles_unresolved",
 )
 
 
@@ -141,6 +143,8 @@ class RevizeTraceCollector:
 
     def finalize_from_db(self, conn) -> None:
         clean_view_exists = _object_exists(conn, "vw_contacts_clean", "view")
+        scored_view_exists = _object_exists(conn, "vw_role_candidates_scored", "view")
+        unresolved_view_exists = _object_exists(conn, "vw_unresolved_roles", "view")
         winners_view_exists = _object_exists(conn, "vw_best_role_per_town", "view")
         for municipality_id in sorted(self.revize_municipalities):
             stage = self.stage_counts.setdefault(municipality_id, self._default_stage_counts(municipality_id))
@@ -173,6 +177,11 @@ class RevizeTraceCollector:
                     count=clean_count,
                 )
 
+            review_count, review_rows = (0, [])
+            if scored_view_exists:
+                review_count, review_rows = self._count_and_fetch_review_candidates(conn, municipality_id)
+            stage["revize_rows_retained_for_review"] = review_count
+
             winner_count, winner_rows = (0, [])
             if winners_view_exists:
                 winner_count, winner_rows = self._count_and_fetch_role_winners(conn, municipality_id)
@@ -184,11 +193,14 @@ class RevizeTraceCollector:
                     count=considered_count,
                 )
             stage["revize_rows_selected_as_role_winners"] = winner_count
+            stage["revize_roles_unresolved"] = self._count_unresolved_roles(conn, municipality_id) if unresolved_view_exists else 0
 
             for row in clean_rows:
                 self._record_row_stage(municipality_id, row, "clean_contacts", drop_stage="", drop_reason="")
             for row in considered_rows:
                 self._record_row_stage(municipality_id, row, "role_candidate", drop_stage="", drop_reason="")
+            for row in review_rows:
+                self._record_row_stage(municipality_id, row, "candidate_for_review", drop_stage="", drop_reason="")
             for row in winner_rows:
                 self._record_row_stage(municipality_id, row, "role_winner", drop_stage="", drop_reason="")
 
@@ -247,7 +259,9 @@ class RevizeTraceCollector:
             "revize_rows_dropped_pre_clean_contacts": 0,
             "revize_rows_in_clean_contacts": 0,
             "revize_rows_considered_for_role_winners": 0,
+            "revize_rows_retained_for_review": 0,
             "revize_rows_selected_as_role_winners": 0,
+            "revize_roles_unresolved": 0,
         }
 
     def _row_fingerprint(self, municipality_id: str, row: dict[str, Any]) -> str:
@@ -539,6 +553,62 @@ class RevizeTraceCollector:
             (municipality_id, max(12, self.sample_size * 2)),
         ).fetchall()
         return int(count), [dict(row) for row in rows]
+
+    def _count_and_fetch_review_candidates(self, conn, municipality_id: str) -> tuple[int, list[dict[str, Any]]]:
+        if not _object_exists(conn, "vw_role_candidates_scored", "view"):
+            return 0, []
+        scored_columns = _object_columns(conn, "vw_role_candidates_scored")
+        count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ?
+              AND COALESCE(is_revize, 0) = 1
+              AND candidate_state = 'candidate_for_review'
+            """,
+            (municipality_id,),
+        ).fetchone()[0]
+        selected_columns = [
+            "municipality_id",
+            "source_url",
+            "name",
+            "title",
+            "department",
+            "email",
+            "phone",
+        ]
+        for candidate_column in ("page_type", "role_normalized", "source_context"):
+            if candidate_column in scored_columns:
+                selected_columns.append(candidate_column)
+            else:
+                selected_columns.append(f"'' AS {candidate_column}")
+        confidence_column = "display_confidence" if "display_confidence" in scored_columns else "0.0"
+        rows = conn.execute(
+            f"""
+            SELECT {", ".join(selected_columns)}, COALESCE({confidence_column}, 0.0) AS confidence
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ?
+              AND COALESCE(is_revize, 0) = 1
+              AND candidate_state = 'candidate_for_review'
+            ORDER BY COALESCE(candidate_score, 0.0) DESC, COALESCE({confidence_column}, 0.0) DESC
+            LIMIT ?
+            """,
+            (municipality_id, max(12, self.sample_size * 2)),
+        ).fetchall()
+        return int(count), [dict(row) for row in rows]
+
+    def _count_unresolved_roles(self, conn, municipality_id: str) -> int:
+        if not _object_exists(conn, "vw_unresolved_roles", "view"):
+            return 0
+        count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ?
+            """,
+            (municipality_id,),
+        ).fetchone()[0]
+        return int(count)
 
     def _count_pre_clean_drop_reasons(self, conn, municipality_id: str) -> Counter[str]:
         if not _object_exists(conn, "contacts", "table"):

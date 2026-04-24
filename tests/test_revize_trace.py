@@ -12,7 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.postprocess_batch import FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL, FALLBACK_VW_CONTACTS_CLEAN_SQL
+from scripts.postprocess_batch import (
+    FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL,
+    FALLBACK_VW_CONTACTS_CLEAN_SQL,
+    FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL,
+    FALLBACK_VW_UNRESOLVED_ROLES_SQL,
+)
 from src.revize_trace import RevizeTraceCollector
 
 
@@ -345,6 +350,8 @@ class RevizeTraceCollectorTests(unittest.TestCase):
             """
         )
         conn.execute(FALLBACK_VW_CONTACTS_CLEAN_SQL)
+        conn.execute(FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL)
+        conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
         conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
         return conn
 

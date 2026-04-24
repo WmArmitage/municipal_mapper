@@ -11,7 +11,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.export_csvs import export_query
-from scripts.postprocess_batch import FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL, FALLBACK_VW_CONTACTS_CLEAN_SQL
+from scripts.postprocess_batch import (
+    FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL,
+    FALLBACK_VW_CONTACTS_CLEAN_SQL,
+    FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL,
+    FALLBACK_VW_UNRESOLVED_ROLES_SQL,
+)
 from src.normalize import safe_phone_str
 
 
@@ -129,6 +134,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             phone="8605559999",
             page_type="department_page",
             source_url="https://town.example.org/board-of-education/staff",
+            source_context="revize:profile_block|page_class=department_page",
             display_confidence=0.92,
             suspicious_reason="role_department_mismatch",
         )
@@ -140,9 +146,30 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             """,
             ("ct_only", "Finance Director"),
         ).fetchone()
+        review_candidate = conn.execute(
+            """
+            SELECT contact_id, candidate_state, winner_disqualifier_reason
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_only", "Finance Director"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT role_normalized, forced_fallback_blocked
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_only", "Finance Director"),
+        ).fetchone()
         conn.close()
-        self.assertIsNotNone(winner)
-        self.assertEqual(winner["contact_id"], "only_finance")
+        self.assertIsNone(winner)
+        self.assertIsNotNone(review_candidate)
+        self.assertEqual(review_candidate["contact_id"], "only_finance")
+        self.assertEqual(review_candidate["candidate_state"], "candidate_for_review")
+        self.assertEqual(review_candidate["winner_disqualifier_reason"], "role_department_mismatch")
+        self.assertIsNotNone(unresolved)
+        self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
 
     def test_directory_context_not_over_penalized(self) -> None:
         conn = self._build_postprocess_test_db()
@@ -472,7 +499,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(winner)
         self.assertEqual(winner["contact_id"], "good_link_case")
 
-    def test_forced_fallback_keeps_winner_when_only_hard_disqualified_candidates_exist(self) -> None:
+    def test_only_hard_disqualified_candidate_leaves_role_unresolved(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
             conn,
@@ -493,18 +520,38 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         )
         winner = conn.execute(
             """
-            SELECT contact_id, forced_fallback
+            SELECT contact_id
             FROM vw_best_role_per_town
             WHERE municipality_id = ? AND role_normalized = ?
             """,
             ("ct_fallback_case", "Town Clerk"),
         ).fetchone()
+        candidate = conn.execute(
+            """
+            SELECT candidate_state, invalid_candidate_disqualified
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_fallback_case", "Town Clerk"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT forced_fallback_blocked, top_candidate_winner_block_reason
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_fallback_case", "Town Clerk"),
+        ).fetchone()
         conn.close()
-        self.assertIsNotNone(winner)
-        self.assertEqual(winner["contact_id"], "fallback_only_candidate")
-        self.assertEqual(int(winner["forced_fallback"]), 1)
+        self.assertIsNone(winner)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["candidate_state"], "disqualified")
+        self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 1)
+        self.assertIsNotNone(unresolved)
+        self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
+        self.assertEqual(unresolved["top_candidate_winner_block_reason"], "artifact_name")
 
-    def test_weak_candidate_still_selected_when_it_is_only_role_option(self) -> None:
+    def test_weak_artifact_candidate_leaves_role_unresolved(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
             conn,
@@ -531,9 +578,126 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             """,
             ("ct_north_haven", "Building Official"),
         ).fetchone()
+        candidate = conn.execute(
+            """
+            SELECT candidate_state, invalid_candidate_disqualified
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_north_haven", "Building Official"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT top_candidate_name, top_candidate_state, forced_fallback_blocked
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_north_haven", "Building Official"),
+        ).fetchone()
         conn.close()
-        self.assertIsNotNone(winner)
-        self.assertEqual(winner["contact_id"], "north_haven_land_use")
+        self.assertIsNone(winner)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["candidate_state"], "disqualified")
+        self.assertEqual(int(candidate["invalid_candidate_disqualified"]), 1)
+        self.assertIsNotNone(unresolved)
+        self.assertEqual(unresolved["top_candidate_name"], "Land Use")
+        self.assertEqual(unresolved["top_candidate_state"], "disqualified")
+        self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
+
+    def test_land_use_label_cannot_win_land_use_role(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="land_use_label_only",
+            municipality_id="ct_land_use_only",
+            role_normalized="Land Use",
+            role_family="planning",
+            name="Land Use",
+            title="",
+            department="Planning & Zoning",
+            source_url="https://town.example.org/contact_us/index.php",
+            source_context="revize:profile_block|page_class=contact_hub",
+            page_type="contact_hub",
+            email="",
+            phone="",
+            display_confidence=0.52,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_land_use_only", "Land Use"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT top_candidate_name, forced_fallback_blocked
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_land_use_only", "Land Use"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(winner)
+        self.assertIsNotNone(unresolved)
+        self.assertEqual(unresolved["top_candidate_name"], "Land Use")
+        self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
+
+    def test_blank_name_office_contact_becomes_review_candidate(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="office_contact_review",
+            municipality_id="ct_review",
+            entity_type="role",
+            role_normalized="Tax Collector",
+            role_family="tax_collector",
+            name="",
+            title="Tax Collector",
+            department="Tax Collector",
+            source_url="https://town.example.org/departments/tax_collector/index.php",
+            source_context="revize:department_contact_block|page_class=department_page",
+            page_type="department_page",
+            email="taxoffice@town.org",
+            phone="8605550101",
+            display_confidence=0.66,
+            suspicious_reason="non_person_role_candidate",
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_review", "Tax Collector"),
+        ).fetchone()
+        review_candidate = conn.execute(
+            """
+            SELECT contact_id, candidate_state, winner_disqualifier_reason
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_review", "Tax Collector"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT top_candidate_contact_id, top_candidate_winner_block_reason
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_review", "Tax Collector"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(winner)
+        self.assertIsNotNone(review_candidate)
+        self.assertEqual(review_candidate["contact_id"], "office_contact_review")
+        self.assertEqual(review_candidate["candidate_state"], "candidate_for_review")
+        self.assertEqual(review_candidate["winner_disqualifier_reason"], "blank_name")
+        self.assertIsNotNone(unresolved)
+        self.assertEqual(unresolved["top_candidate_contact_id"], "office_contact_review")
+        self.assertEqual(unresolved["top_candidate_winner_block_reason"], "blank_name")
 
     def _build_postprocess_test_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")
@@ -568,6 +732,8 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             """
         )
         conn.execute(FALLBACK_VW_CONTACTS_CLEAN_SQL)
+        conn.execute(FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL)
+        conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
         conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
         return conn
 

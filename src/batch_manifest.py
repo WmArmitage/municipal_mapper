@@ -16,6 +16,8 @@ MANIFEST_COLUMNS = (
 QA_PLACEHOLDER_FILENAMES = (
     "qa_batch_summary.csv",
     "qa_role_winners.csv",
+    "qa_role_candidates_for_review.csv",
+    "qa_unresolved_roles.csv",
     "qa_suspicious_winners.csv",
     "qa_missing_key_roles.csv",
     "qa_manual_review.csv",

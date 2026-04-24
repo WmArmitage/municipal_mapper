@@ -61,6 +61,9 @@ ROLE_WINNER_FIELDS = (
     "source_url",
     "display_confidence",
     "is_likely_noise",
+    "candidate_score",
+    "candidate_state",
+    "winner_disqualifier_reason",
     "rn",
 )
 
@@ -74,7 +77,62 @@ SUSPICIOUS_FIELDS = (
     "page_type",
     "source_url",
     "is_likely_noise",
+    "candidate_score",
+    "winner_disqualifier_reason",
     "suspicious_reason",
+)
+
+ROLE_CANDIDATE_REVIEW_FIELDS = (
+    "contact_id",
+    "municipality_id",
+    "entity_type",
+    "name",
+    "title",
+    "role_normalized",
+    "role_family",
+    "department",
+    "department_normalized",
+    "email",
+    "email_type",
+    "phone",
+    "phone_ext",
+    "page_type",
+    "source_url",
+    "source_context",
+    "candidate_score",
+    "person_name_score",
+    "role_match_score",
+    "source_score",
+    "reconstruction_score",
+    "contact_score",
+    "department_score",
+    "suspicious_score",
+    "winner_disqualifier_reason",
+    "suspicious_reason",
+    "is_likely_noise",
+    "candidate_rank",
+    "candidate_state",
+)
+
+UNRESOLVED_ROLE_FIELDS = (
+    "municipality_id",
+    "town_name",
+    "role_normalized",
+    "candidate_count",
+    "review_candidate_count",
+    "invalid_candidate_disqualified_count",
+    "forced_fallback_blocked",
+    "top_candidate_contact_id",
+    "top_candidate_name",
+    "top_candidate_title",
+    "top_candidate_department",
+    "top_candidate_email",
+    "top_candidate_phone",
+    "top_candidate_page_type",
+    "top_candidate_source_url",
+    "top_candidate_score",
+    "top_candidate_state",
+    "top_candidate_winner_block_reason",
 )
 
 MISSING_KEY_ROLE_FIELDS = (
@@ -247,7 +305,12 @@ BLOCKED_RECOVERY_RESULT_VALUES = {
     "partial_deep_path_recovery",
     "deep_path_present_no_extract",
 }
-REQUIRED_POSTPROCESS_VIEWS = ("vw_contacts_clean", "vw_best_role_per_town")
+REQUIRED_POSTPROCESS_VIEWS = (
+    "vw_contacts_clean",
+    "vw_role_candidates_scored",
+    "vw_unresolved_roles",
+    "vw_best_role_per_town",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -351,6 +414,34 @@ def fetch_role_winners(conn, municipality_ids: list[str]) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def fetch_role_candidates_for_review(conn, municipality_ids: list[str]) -> list[dict]:
+    if not municipality_ids or not object_exists(conn, "vw_role_candidates_scored", "view"):
+        return []
+    sql = f"""
+        SELECT *
+        FROM vw_role_candidates_scored
+        WHERE municipality_id IN ({placeholders(len(municipality_ids))})
+          AND COALESCE(is_revize, 0) = 1
+          AND candidate_state = 'candidate_for_review'
+        ORDER BY municipality_id, role_normalized, candidate_rank, COALESCE(contact_id, '')
+    """
+    rows = conn.execute(sql, tuple(municipality_ids)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def fetch_unresolved_roles(conn, municipality_ids: list[str]) -> list[dict]:
+    if not municipality_ids or not object_exists(conn, "vw_unresolved_roles", "view"):
+        return []
+    sql = f"""
+        SELECT *
+        FROM vw_unresolved_roles
+        WHERE municipality_id IN ({placeholders(len(municipality_ids))})
+        ORDER BY municipality_id, role_normalized
+    """
+    rows = conn.execute(sql, tuple(municipality_ids)).fetchall()
+    return [dict(row) for row in rows]
+
+
 def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
     if not municipality_ids or not object_exists(conn, "vw_best_role_per_town", "view"):
         return []
@@ -365,8 +456,11 @@ def fetch_suspicious_winners(conn, municipality_ids: list[str]) -> list[dict]:
           page_type,
           source_url,
           COALESCE(is_likely_noise, 0) AS is_likely_noise,
+          COALESCE(candidate_score, 0.0) AS candidate_score,
+          COALESCE(winner_disqualifier_reason, '') AS winner_disqualifier_reason,
           CASE
             WHEN (email IS NULL OR TRIM(email) = '') AND (phone IS NULL OR TRIM(phone) = '') THEN 'missing_email_and_phone'
+            WHEN NULLIF(TRIM(COALESCE(winner_disqualifier_reason, '')), '') IS NOT NULL THEN TRIM(winner_disqualifier_reason)
             WHEN NULLIF(TRIM(COALESCE(suspicious_reason, '')), '') IS NOT NULL THEN TRIM(suspicious_reason)
             WHEN (
                 role_normalized = 'Assessor'
@@ -1139,9 +1233,26 @@ def build_missing_key_roles(
     return out
 
 
+def build_unresolved_role_rows(
+    municipalities: list[dict[str, str]],
+    unresolved_rows: list[dict],
+) -> list[dict[str, str | int | float]]:
+    town_name_by_id = {row["municipality_id"]: row["town_name"] for row in municipalities}
+    out: list[dict[str, str | int | float]] = []
+    for row in unresolved_rows:
+        municipality_id = str(row.get("municipality_id") or "")
+        payload = dict(row)
+        payload["town_name"] = town_name_by_id.get(municipality_id, "")
+        out.append(payload)
+    out.sort(key=lambda row: (str(row.get("municipality_id") or ""), str(row.get("role_normalized") or "")))
+    return out
+
+
 def build_manual_review_rows(
     municipalities: list[dict[str, str]],
     suspicious_rows: list[dict],
+    review_candidate_rows: list[dict],
+    unresolved_rows: list[dict[str, str | int | float]],
     missing_role_rows: list[dict[str, str | int]],
     raw_counts: dict[str, int],
     clean_counts: dict[str, int],
@@ -1174,6 +1285,48 @@ def build_manual_review_rows(
                 "missing_group_count": "",
                 "suspicious_reason": row.get("suspicious_reason"),
                 "coverage_interpretation": "suspicious_winner",
+            }
+        )
+
+    for row in review_candidate_rows:
+        municipality_id = str(row.get("municipality_id") or "")
+        out.append(
+            {
+                "municipality_id": municipality_id,
+                "town_name": town_name_by_id.get(municipality_id, ""),
+                "review_type": "candidate_for_review",
+                "role_normalized": row.get("role_normalized"),
+                "name": row.get("name"),
+                "email": row.get("email"),
+                "phone": row.get("phone"),
+                "department": row.get("department"),
+                "page_type": row.get("page_type"),
+                "source_url": row.get("source_url"),
+                "missing_role_groups": "",
+                "missing_group_count": "",
+                "suspicious_reason": row.get("winner_disqualifier_reason") or row.get("suspicious_reason"),
+                "coverage_interpretation": "candidate_for_review",
+            }
+        )
+
+    for row in unresolved_rows:
+        municipality_id = str(row.get("municipality_id") or "")
+        out.append(
+            {
+                "municipality_id": municipality_id,
+                "town_name": str(row.get("town_name") or town_name_by_id.get(municipality_id, "")),
+                "review_type": "unresolved_role",
+                "role_normalized": row.get("role_normalized"),
+                "name": row.get("top_candidate_name"),
+                "email": row.get("top_candidate_email"),
+                "phone": row.get("top_candidate_phone"),
+                "department": row.get("top_candidate_department"),
+                "page_type": row.get("top_candidate_page_type"),
+                "source_url": row.get("top_candidate_source_url"),
+                "missing_role_groups": "",
+                "missing_group_count": "",
+                "suspicious_reason": row.get("top_candidate_winner_block_reason"),
+                "coverage_interpretation": "unresolved_role",
             }
         )
 
@@ -1308,6 +1461,11 @@ def main() -> None:
         service_counts = fetch_count_map(conn, "service_links", municipality_ids)
 
         role_winners = fetch_role_winners(conn, municipality_ids)
+        review_candidates = fetch_role_candidates_for_review(conn, municipality_ids)
+        unresolved_roles = build_unresolved_role_rows(
+            municipalities,
+            fetch_unresolved_roles(conn, municipality_ids),
+        )
         suspicious_winners = fetch_suspicious_winners(conn, municipality_ids)
         crawl_diagnostics = fetch_crawl_diagnostics(conn, municipality_ids, args.batch_id)
         missing_key_roles = build_missing_key_roles(municipalities, role_winners)
@@ -1327,6 +1485,8 @@ def main() -> None:
         manual_review_rows = build_manual_review_rows(
             municipalities=municipalities,
             suspicious_rows=suspicious_winners,
+            review_candidate_rows=review_candidates,
+            unresolved_rows=unresolved_roles,
             missing_role_rows=missing_key_roles,
             raw_counts=raw_counts,
             clean_counts=clean_counts,
@@ -1361,6 +1521,16 @@ def main() -> None:
             batch_dir / "qa_role_winners.csv",
             role_winners,
             ROLE_WINNER_FIELDS,
+        ),
+        "qa_role_candidates_for_review.csv": write_csv(
+            batch_dir / "qa_role_candidates_for_review.csv",
+            review_candidates,
+            ROLE_CANDIDATE_REVIEW_FIELDS,
+        ),
+        "qa_unresolved_roles.csv": write_csv(
+            batch_dir / "qa_unresolved_roles.csv",
+            unresolved_roles,
+            UNRESOLVED_ROLE_FIELDS,
         ),
         "qa_suspicious_winners.csv": write_csv(
             batch_dir / "qa_suspicious_winners.csv",

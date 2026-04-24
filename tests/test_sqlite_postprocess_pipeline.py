@@ -9,7 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.export_batch_qa import ensure_required_postprocess_views, fetch_count_map
+from scripts.export_batch_qa import (
+    ensure_required_postprocess_views,
+    fetch_count_map,
+    fetch_role_candidates_for_review,
+    fetch_unresolved_roles,
+)
 from scripts.postprocess_batch import (
     count_metrics,
     ensure_postprocess_columns,
@@ -31,8 +36,11 @@ class SqlitePostprocessPipelineTests(unittest.TestCase):
         verification = verify_required_postprocess_objects(conn, [municipality_id], strict=True)
 
         self.assertEqual(int(verification["vw_contacts_clean_exists"]), 1)
+        self.assertEqual(int(verification["vw_role_candidates_scored_exists"]), 1)
+        self.assertEqual(int(verification["vw_unresolved_roles_exists"]), 1)
         self.assertEqual(int(verification["vw_best_role_per_town_exists"]), 1)
         self.assertGreaterEqual(int(verification["rows_in_vw_contacts_clean_scope"]), 1)
+        self.assertGreaterEqual(int(verification["rows_in_vw_role_candidates_scored_scope"]), 1)
         self.assertGreaterEqual(int(verification["rows_in_vw_best_role_per_town_scope"]), 1)
         conn.close()
 
@@ -61,8 +69,12 @@ class SqlitePostprocessPipelineTests(unittest.TestCase):
         self.assertEqual(missing, [])
         clean_counts = fetch_count_map(conn, "vw_contacts_clean", [municipality_id])
         winner_counts = fetch_count_map(conn, "vw_best_role_per_town", [municipality_id])
+        review_candidates = fetch_role_candidates_for_review(conn, [municipality_id])
+        unresolved_roles = fetch_unresolved_roles(conn, [municipality_id])
         self.assertGreaterEqual(int(clean_counts.get(municipality_id, 0)), 1)
         self.assertGreaterEqual(int(winner_counts.get(municipality_id, 0)), 1)
+        self.assertEqual(review_candidates, [])
+        self.assertEqual(unresolved_roles, [])
         conn.close()
 
     def test_count_metrics_does_not_fail_when_forced_fallback_column_absent(self) -> None:

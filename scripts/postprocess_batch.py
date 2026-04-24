@@ -13,6 +13,8 @@ from src.batch_manifest import load_manifest_rows, load_seed_platform_map
 
 REQUIRED_POSTPROCESS_OBJECTS = (
     ("view", "vw_contacts_clean"),
+    ("view", "vw_role_candidates_scored"),
+    ("view", "vw_unresolved_roles"),
     ("view", "vw_best_role_per_town"),
 )
 
@@ -80,9 +82,9 @@ WHERE COALESCE(c.record_rank, 1) = 1
 """.strip()
 
 
-FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL = """
-CREATE VIEW vw_best_role_per_town AS
-WITH scored AS (
+FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL = """
+CREATE VIEW vw_role_candidates_scored AS
+WITH base AS (
   SELECT
     c.contact_id,
     c.municipality_id,
@@ -103,109 +105,484 @@ WITH scored AS (
     c.source_url,
     c.display_confidence,
     c.source_context,
-    c.is_likely_noise,
+    COALESCE(c.is_likely_noise, 0) AS is_likely_noise,
     c.suspicious_reason,
     CASE
-      WHEN NULLIF(TRIM(COALESCE(c.name, '')), '') IS NULL
-           OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%your link name%'
-           OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%click here%'
-           OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%email me%'
-      THEN 1
+      WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%' THEN 1
       ELSE 0
-    END AS hard_disqualifier,
-    (
-      /* Name quality */
-      CASE
-        WHEN NULLIF(TRIM(COALESCE(c.name, '')), '') IS NOT NULL
-             AND (
-               LENGTH(TRIM(COALESCE(c.name, '')))
-               - LENGTH(REPLACE(TRIM(COALESCE(c.name, '')), ' ', ''))
-               + 1
-             ) >= 2
-        THEN 5
-        ELSE 0
-      END
-      + CASE
-          WHEN TRIM(COALESCE(c.name, '')) GLOB '[A-Z]* [A-Z]*' THEN 3
-          ELSE 0
-        END
-      + CASE
-          WHEN LOWER(TRIM(COALESCE(c.name, ''))) = LOWER(TRIM(COALESCE(c.role_normalized, ''))) THEN -5
-          ELSE 0
-        END
-      + CASE
-          WHEN LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%link%'
-               OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%click%'
-               OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%affidavit%'
-               OR LOWER(TRIM(COALESCE(c.name, ''))) LIKE '%vacanc%'
-          THEN -10
-          ELSE 0
-        END
-      /* Source quality */
-      + CASE
-          WHEN LOWER(COALESCE(c.page_type, '')) = 'staff_directory'
-               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=staff_directory%'
-          THEN 5
-          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%' THEN 3
-          WHEN LOWER(COALESCE(c.page_type, '')) = 'department_page'
-               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=department_page%'
-          THEN 2
-          WHEN LOWER(COALESCE(c.page_type, '')) = 'contact_hub'
-               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=contact_hub%'
-          THEN -3
-          WHEN LOWER(COALESCE(c.page_type, '')) IN ('generic', 'homepage', 'other')
-               OR LOWER(COALESCE(c.source_context, '')) LIKE '%page_class=generic%'
-          THEN -5
-          ELSE 0
-        END
-      /* Field completeness */
-      + CASE WHEN NULLIF(TRIM(COALESCE(c.email, '')), '') IS NOT NULL THEN 2 ELSE 0 END
-      + CASE WHEN NULLIF(TRIM(COALESCE(c.phone, '')), '') IS NOT NULL THEN 2 ELSE 0 END
-      + CASE WHEN NULLIF(TRIM(COALESCE(c.title, '')), '') IS NOT NULL THEN 1 ELSE 0 END
-      /* Reconstruction bonus */
-      + CASE
-          WHEN LOWER(COALESCE(c.source_context, '')) LIKE 'revize:reconstructed_contact_block%' THEN 4
-          ELSE 0
-        END
-      /* Soft quality penalties for known weak signals */
-      + CASE
-          WHEN COALESCE(c.suspicious_reason, '') = 'role_department_mismatch' THEN -3
-          WHEN COALESCE(c.suspicious_reason, '') IN ('invalid_person_name', 'non_person_role_candidate', 'role_only_name')
-          THEN -4
-          ELSE 0
-        END
-    ) AS candidate_score
+    END AS is_revize,
+    LOWER(TRIM(COALESCE(c.name, ''))) AS name_norm,
+    LOWER(TRIM(COALESCE(c.title, ''))) AS title_norm,
+    LOWER(TRIM(COALESCE(c.department, ''))) AS department_norm,
+    LOWER(TRIM(COALESCE(c.role_normalized, ''))) AS role_norm,
+    LOWER(COALESCE(c.source_url, '')) AS source_url_norm,
+    LOWER(COALESCE(c.page_type, '')) AS page_type_norm,
+    LOWER(COALESCE(c.source_context, '')) AS source_context_norm
   FROM contacts c
   WHERE NULLIF(TRIM(COALESCE(c.role_normalized, '')), '') IS NOT NULL
 ),
-scored_with_valid AS (
+component_scores AS (
+  SELECT
+    b.*,
+    (
+      CASE
+        WHEN COALESCE(b.entity_type, '') = 'person' THEN 4
+        ELSE 0
+      END
+      + CASE
+          WHEN NULLIF(TRIM(COALESCE(b.name, '')), '') IS NOT NULL
+               AND (
+                 LENGTH(TRIM(COALESCE(b.name, '')))
+                 - LENGTH(REPLACE(TRIM(COALESCE(b.name, '')), ' ', ''))
+                 + 1
+               ) >= 2
+          THEN 4
+          ELSE 0
+        END
+      + CASE
+          WHEN TRIM(COALESCE(b.name, '')) GLOB '[A-Z]* [A-Z]*' THEN 2
+          ELSE 0
+        END
+      + CASE
+          WHEN NULLIF(TRIM(COALESCE(b.name, '')), '') IS NOT NULL
+               AND LENGTH(TRIM(COALESCE(b.name, ''))) BETWEEN 5 AND 60
+          THEN 1
+          ELSE 0
+        END
+      + CASE
+          WHEN LOWER(TRIM(COALESCE(b.name, ''))) = LOWER(TRIM(COALESCE(b.role_normalized, '')))
+               OR LOWER(TRIM(COALESCE(b.name, ''))) = LOWER(TRIM(COALESCE(b.title, '')))
+               OR LOWER(TRIM(COALESCE(b.name, ''))) = LOWER(TRIM(COALESCE(b.department, '')))
+          THEN -8
+          ELSE 0
+        END
+    ) AS person_name_score,
+    CASE
+      WHEN b.page_type_norm = 'staff_directory'
+           OR b.source_context_norm LIKE '%page_class=staff_directory%'
+      THEN 5
+      WHEN b.source_context_norm LIKE 'revize:reconstructed_contact_block%' THEN 4
+      WHEN b.page_type_norm = 'department_page'
+           OR b.source_context_norm LIKE '%page_class=department_page%'
+      THEN 2
+      WHEN b.page_type_norm = 'contact_hub'
+           OR b.source_context_norm LIKE '%page_class=contact_hub%'
+      THEN -3
+      WHEN b.page_type_norm IN ('generic', 'homepage', 'other')
+           OR b.source_context_norm LIKE '%page_class=generic%'
+      THEN -5
+      ELSE 0
+    END AS source_score,
+    CASE
+      WHEN b.source_context_norm LIKE 'revize:reconstructed_contact_block%' THEN 4
+      ELSE 0
+    END AS reconstruction_score,
+    (
+      CASE WHEN NULLIF(TRIM(COALESCE(b.email, '')), '') IS NOT NULL THEN 2 ELSE 0 END
+      + CASE WHEN NULLIF(TRIM(COALESCE(b.phone, '')), '') IS NOT NULL THEN 2 ELSE 0 END
+      + CASE WHEN NULLIF(TRIM(COALESCE(b.title, '')), '') IS NOT NULL THEN 1 ELSE 0 END
+      + CASE WHEN NULLIF(TRIM(COALESCE(b.department, '')), '') IS NOT NULL THEN 1 ELSE 0 END
+      + CASE
+          WHEN NULLIF(TRIM(COALESCE(b.email, '')), '') IS NOT NULL
+               AND NULLIF(TRIM(COALESCE(b.phone, '')), '') IS NOT NULL
+          THEN 1
+          ELSE 0
+        END
+    ) AS contact_score,
+    CASE
+      WHEN COALESCE(b.suspicious_reason, '') = 'role_department_mismatch' THEN -6
+      WHEN b.role_normalized = 'Assessor'
+           AND (b.department_norm LIKE '%assessor%' OR b.department_norm LIKE '%assessment%')
+      THEN 3
+      WHEN b.role_normalized = 'Tax Collector'
+           AND (b.department_norm LIKE '%tax%' OR b.department_norm LIKE '%revenue%')
+      THEN 3
+      WHEN b.role_normalized = 'Town Clerk'
+           AND b.department_norm LIKE '%clerk%'
+      THEN 3
+      WHEN b.role_normalized = 'Building Official'
+           AND (b.department_norm LIKE '%building%' OR b.department_norm LIKE '%inspection%' OR b.department_norm LIKE '%zoning%')
+      THEN 3
+      WHEN b.role_normalized IN ('Land Use', 'Planner', 'Zoning Enforcement Officer', 'ZEO')
+           AND (b.department_norm LIKE '%land use%' OR b.department_norm LIKE '%planning%' OR b.department_norm LIKE '%zoning%')
+      THEN 3
+      WHEN b.role_normalized IN ('Finance Director', 'Treasurer')
+           AND (b.department_norm LIKE '%finance%' OR b.department_norm LIKE '%treasurer%' OR b.department_norm LIKE '%accounting%')
+      THEN 3
+      WHEN b.role_normalized = 'First Selectman'
+           AND (b.department_norm LIKE '%selectman%' OR b.department_norm LIKE '%board of selectmen%')
+      THEN 3
+      WHEN b.role_normalized = 'Mayor'
+           AND b.department_norm LIKE '%mayor%'
+      THEN 3
+      WHEN b.role_normalized IN ('Town Manager', 'Town Administrator')
+           AND (b.department_norm LIKE '%town manager%' OR b.department_norm LIKE '%town administrator%')
+      THEN 3
+      ELSE 0
+    END AS department_score,
+    CASE
+      WHEN b.role_normalized = 'Assessor'
+           AND (
+             b.title_norm LIKE '%assessor%'
+             OR b.department_norm LIKE '%assessor%'
+             OR b.department_norm LIKE '%assessment%'
+             OR b.source_url_norm LIKE '%assessor%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Tax Collector'
+           AND (
+             b.title_norm LIKE '%tax%'
+             OR b.title_norm LIKE '%revenue%'
+             OR b.department_norm LIKE '%tax%'
+             OR b.department_norm LIKE '%revenue%'
+             OR b.source_url_norm LIKE '%tax%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Town Clerk'
+           AND (
+             b.title_norm LIKE '%clerk%'
+             OR b.department_norm LIKE '%clerk%'
+             OR b.source_url_norm LIKE '%clerk%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Building Official'
+           AND (
+             b.title_norm LIKE '%building%'
+             OR b.title_norm LIKE '%inspection%'
+             OR b.department_norm LIKE '%building%'
+             OR b.department_norm LIKE '%inspection%'
+             OR b.department_norm LIKE '%zoning%'
+             OR b.source_url_norm LIKE '%building%'
+             OR b.source_url_norm LIKE '%inspection%'
+           )
+      THEN 6
+      WHEN b.role_normalized IN ('Land Use', 'Planner', 'Zoning Enforcement Officer', 'ZEO')
+           AND (
+             b.title_norm LIKE '%land use%'
+             OR b.title_norm LIKE '%planner%'
+             OR b.title_norm LIKE '%planning%'
+             OR b.title_norm LIKE '%zoning%'
+             OR b.department_norm LIKE '%land use%'
+             OR b.department_norm LIKE '%planning%'
+             OR b.department_norm LIKE '%zoning%'
+             OR b.source_url_norm LIKE '%land-use%'
+             OR b.source_url_norm LIKE '%planning%'
+             OR b.source_url_norm LIKE '%zoning%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Finance Director'
+           AND (
+             b.title_norm LIKE '%finance%'
+             OR b.title_norm LIKE '%treasurer%'
+             OR b.title_norm LIKE '%accounting%'
+             OR b.department_norm LIKE '%finance%'
+             OR b.department_norm LIKE '%treasurer%'
+             OR b.department_norm LIKE '%accounting%'
+             OR b.source_url_norm LIKE '%finance%'
+             OR b.source_url_norm LIKE '%treasurer%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Treasurer'
+           AND (
+             b.title_norm LIKE '%treasurer%'
+             OR b.department_norm LIKE '%treasurer%'
+             OR b.department_norm LIKE '%finance%'
+             OR b.source_url_norm LIKE '%treasurer%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'First Selectman'
+           AND (
+             b.title_norm LIKE '%first selectman%'
+             OR b.title_norm LIKE '%selectman%'
+             OR b.department_norm LIKE '%selectman%'
+             OR b.source_url_norm LIKE '%selectman%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Mayor'
+           AND (
+             b.title_norm LIKE '%mayor%'
+             OR b.department_norm LIKE '%mayor%'
+             OR b.source_url_norm LIKE '%mayor%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Town Manager'
+           AND (
+             b.title_norm LIKE '%town manager%'
+             OR b.department_norm LIKE '%town manager%'
+             OR b.source_url_norm LIKE '%town_manager%'
+             OR b.source_url_norm LIKE '%town-manager%'
+           )
+      THEN 6
+      WHEN b.role_normalized = 'Town Administrator'
+           AND (
+             b.title_norm LIKE '%town administrator%'
+             OR b.department_norm LIKE '%town administrator%'
+             OR b.source_url_norm LIKE '%town_administrator%'
+             OR b.source_url_norm LIKE '%town-administrator%'
+           )
+      THEN 6
+      WHEN b.title_norm LIKE '%' || b.role_norm || '%'
+           OR b.department_norm LIKE '%' || b.role_norm || '%'
+      THEN 5
+      ELSE 0
+    END AS role_match_score,
+    CASE
+      WHEN COALESCE(b.suspicious_reason, '') = 'role_department_mismatch' THEN -5
+      WHEN COALESCE(b.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name') THEN -8
+      WHEN COALESCE(b.suspicious_reason, '') IN ('contact_hub_candidate', 'assistant_role_contamination') THEN -4
+      WHEN COALESCE(b.suspicious_reason, '') = 'low_context' THEN -3
+      WHEN COALESCE(b.suspicious_reason, '') = 'non_person_role_candidate' THEN -2
+      ELSE 0
+    END AS suspicious_score,
+    CASE
+      WHEN b.is_revize = 1
+           AND NULLIF(TRIM(COALESCE(b.name, '')), '') IS NULL
+      THEN 1
+      ELSE 0
+    END AS blank_name_flag,
+    CASE
+      WHEN b.is_revize = 1
+           AND (
+             b.name_norm LIKE '%your link name%'
+             OR b.name_norm = 'link name'
+             OR b.name_norm LIKE '%click here%'
+             OR b.name_norm LIKE '%email me%'
+             OR b.name_norm LIKE '%affidavit%'
+             OR b.name_norm LIKE '%vacanc%'
+             OR b.name_norm IN ('building', 'land use', 'tax collector', 'assessor', 'department', 'office')
+             OR (' ' || b.name_norm || ' ') LIKE '% department %'
+             OR (' ' || b.name_norm || ' ') LIKE '% office %'
+           )
+      THEN 1
+      ELSE 0
+    END AS artifact_name_flag
+  FROM base b
+),
+scored AS (
   SELECT
     s.*,
-    MAX(CASE WHEN s.hard_disqualifier = 0 THEN 1 ELSE 0 END) OVER (
-      PARTITION BY s.municipality_id, s.role_normalized
-    ) AS has_non_disqualified_candidate
-  FROM scored s
+    CASE
+      WHEN s.person_name_score >= 7 THEN 1
+      ELSE 0
+    END AS strong_name_quality,
+    CASE
+      WHEN s.role_match_score >= 5 THEN 1
+      ELSE 0
+    END AS strong_role_match,
+    CASE
+      WHEN (s.source_score + s.reconstruction_score) >= 3 THEN 1
+      ELSE 0
+    END AS strong_source_match,
+    (
+      s.person_name_score
+      + s.role_match_score
+      + s.source_score
+      + s.reconstruction_score
+      + s.contact_score
+      + s.department_score
+      + s.suspicious_score
+    ) AS candidate_score,
+    CASE
+      WHEN s.is_revize = 1 AND s.artifact_name_flag = 1 THEN 'artifact_name'
+      WHEN s.is_revize = 1 AND s.blank_name_flag = 1 THEN 'blank_name'
+      WHEN s.is_revize = 1 AND COALESCE(s.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+      THEN TRIM(COALESCE(s.suspicious_reason, ''))
+      WHEN s.is_revize = 1 AND COALESCE(s.entity_type, '') <> 'person' THEN 'non_person_contact'
+      WHEN s.is_revize = 1
+           AND COALESCE(s.suspicious_reason, '') IN (
+             'contact_hub_candidate',
+             'role_department_mismatch',
+             'assistant_role_contamination',
+             'low_context'
+           )
+      THEN TRIM(COALESCE(s.suspicious_reason, ''))
+      WHEN s.is_revize = 1
+           AND s.page_type_norm = 'contact_hub'
+           AND s.source_context_norm NOT LIKE 'revize:reconstructed_contact_block%'
+      THEN 'contact_hub_candidate'
+      WHEN s.is_revize = 1
+           AND NULLIF(TRIM(COALESCE(s.email, '')), '') IS NULL
+           AND NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NULL
+      THEN 'missing_email_and_phone'
+      WHEN s.is_revize = 1 AND s.person_name_score < 7 THEN 'weak_name_quality'
+      WHEN s.is_revize = 1 AND s.role_match_score < 5 THEN 'weak_role_match'
+      WHEN s.is_revize = 1 AND (s.source_score + s.reconstruction_score) < 3 THEN 'weak_source_match'
+      ELSE ''
+    END AS winner_disqualifier_reason
+  FROM component_scores s
 ),
 ranked AS (
   SELECT
-    swv.*,
-    CASE WHEN swv.has_non_disqualified_candidate = 0 THEN 1 ELSE 0 END AS forced_fallback,
-    ROW_NUMBER() OVER (
-      PARTITION BY swv.municipality_id, swv.role_normalized
-      ORDER BY
+    s.*,
+    CASE
+      WHEN s.is_revize = 1 THEN
         CASE
-          WHEN swv.has_non_disqualified_candidate = 1 THEN swv.hard_disqualifier
+          WHEN s.artifact_name_flag = 0
+               AND s.blank_name_flag = 0
+               AND COALESCE(s.entity_type, '') = 'person'
+               AND NULLIF(TRIM(COALESCE(s.suspicious_reason, '')), '') IS NULL
+               AND s.strong_name_quality = 1
+               AND s.strong_role_match = 1
+               AND s.strong_source_match = 1
+               AND s.contact_score >= 3
+               AND s.candidate_score >= 12
+          THEN 1
           ELSE 0
-        END ASC,
-        swv.candidate_score DESC,
-        COALESCE(swv.display_confidence, 0.0) DESC,
-        COALESCE(swv.contact_id, '') ASC
-    ) AS rn
-  FROM scored_with_valid swv
+        END
+      ELSE 1
+    END AS high_confidence_eligible,
+    CASE
+      WHEN s.is_revize = 1
+           AND s.artifact_name_flag = 0
+           AND COALESCE(s.suspicious_reason, '') NOT IN ('invalid_person_name', 'role_only_name')
+           AND (
+             NULLIF(TRIM(COALESCE(s.name, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.department, '')), '') IS NOT NULL
+           )
+           AND (
+             NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.title, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.department, '')), '') IS NOT NULL
+           )
+      THEN 1
+      ELSE 0
+    END AS review_candidate_eligible,
+    ROW_NUMBER() OVER (
+      PARTITION BY s.municipality_id, s.role_normalized
+      ORDER BY
+        s.candidate_score DESC,
+        COALESCE(s.display_confidence, 0.0) DESC,
+        COALESCE(s.contact_id, '') ASC
+    ) AS candidate_rank,
+    ROW_NUMBER() OVER (
+      PARTITION BY s.municipality_id, s.role_normalized, CASE
+        WHEN s.is_revize = 1 THEN
+          CASE
+            WHEN s.artifact_name_flag = 0
+                 AND s.blank_name_flag = 0
+                 AND COALESCE(s.entity_type, '') = 'person'
+                 AND NULLIF(TRIM(COALESCE(s.suspicious_reason, '')), '') IS NULL
+                 AND s.strong_name_quality = 1
+                 AND s.strong_role_match = 1
+                 AND s.strong_source_match = 1
+                 AND s.contact_score >= 3
+                 AND s.candidate_score >= 12
+            THEN 1
+            ELSE 0
+          END
+        ELSE 1
+      END
+      ORDER BY
+        s.candidate_score DESC,
+        COALESCE(s.display_confidence, 0.0) DESC,
+        COALESCE(s.contact_id, '') ASC
+    ) AS high_confidence_rank,
+    SUM(
+      CASE
+        WHEN s.is_revize = 1 THEN
+          CASE
+            WHEN s.artifact_name_flag = 0
+                 AND s.blank_name_flag = 0
+                 AND COALESCE(s.entity_type, '') = 'person'
+                 AND NULLIF(TRIM(COALESCE(s.suspicious_reason, '')), '') IS NULL
+                 AND s.strong_name_quality = 1
+                 AND s.strong_role_match = 1
+                 AND s.strong_source_match = 1
+                 AND s.contact_score >= 3
+                 AND s.candidate_score >= 12
+            THEN 1
+            ELSE 0
+          END
+        ELSE 1
+      END
+    ) OVER (
+      PARTITION BY s.municipality_id, s.role_normalized
+    ) AS eligible_candidate_count
+  FROM scored s
+),
+labeled AS (
+  SELECT
+    r.*,
+    CASE
+      WHEN r.high_confidence_eligible = 1 AND r.high_confidence_rank = 1 THEN 'high_confidence_winner'
+      WHEN r.is_revize = 1 AND r.review_candidate_eligible = 1 THEN 'candidate_for_review'
+      ELSE 'disqualified'
+    END AS candidate_state,
+    CASE
+      WHEN r.is_revize = 1
+           AND (
+             r.artifact_name_flag = 1
+             OR COALESCE(r.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
+           )
+      THEN 1
+      ELSE 0
+    END AS invalid_candidate_disqualified
+  FROM ranked r
 )
 SELECT *
-FROM ranked
-WHERE rn = 1
+FROM labeled
+""".strip()
+
+
+FALLBACK_VW_UNRESOLVED_ROLES_SQL = """
+CREATE VIEW vw_unresolved_roles AS
+WITH role_counts AS (
+  SELECT
+    municipality_id,
+    role_normalized,
+    COUNT(*) AS candidate_count,
+    SUM(CASE WHEN candidate_state = 'candidate_for_review' THEN 1 ELSE 0 END) AS review_candidate_count,
+    SUM(CASE WHEN candidate_state = 'high_confidence_winner' THEN 1 ELSE 0 END) AS winner_count,
+    SUM(CASE WHEN invalid_candidate_disqualified = 1 THEN 1 ELSE 0 END) AS invalid_candidate_disqualified_count
+  FROM vw_role_candidates_scored
+  WHERE is_revize = 1
+  GROUP BY municipality_id, role_normalized
+),
+top_candidates AS (
+  SELECT *
+  FROM vw_role_candidates_scored
+  WHERE is_revize = 1
+    AND candidate_rank = 1
+)
+SELECT
+  rc.municipality_id,
+  rc.role_normalized,
+  rc.candidate_count,
+  rc.review_candidate_count,
+  rc.invalid_candidate_disqualified_count,
+  CASE
+    WHEN rc.candidate_count > 0 AND rc.winner_count = 0 THEN 1
+    ELSE 0
+  END AS forced_fallback_blocked,
+  tc.contact_id AS top_candidate_contact_id,
+  tc.name AS top_candidate_name,
+  tc.title AS top_candidate_title,
+  tc.department AS top_candidate_department,
+  tc.email AS top_candidate_email,
+  tc.phone AS top_candidate_phone,
+  tc.page_type AS top_candidate_page_type,
+  tc.source_url AS top_candidate_source_url,
+  tc.candidate_score AS top_candidate_score,
+  tc.candidate_state AS top_candidate_state,
+  tc.winner_disqualifier_reason AS top_candidate_winner_block_reason
+FROM role_counts rc
+LEFT JOIN top_candidates tc
+  ON tc.municipality_id = rc.municipality_id
+ AND tc.role_normalized = rc.role_normalized
+WHERE rc.winner_count = 0
+""".strip()
+
+
+FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL = """
+CREATE VIEW vw_best_role_per_town AS
+SELECT
+  v.*,
+  v.candidate_rank AS rn,
+  0 AS forced_fallback
+FROM vw_role_candidates_scored v
+WHERE v.candidate_state = 'high_confidence_winner'
 """.strip()
 
 
@@ -392,6 +769,11 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
             """,
             params,
         ).fetchone()[0],
+        "revize_winners_selected": 0,
+        "revize_candidates_for_review": 0,
+        "revize_roles_unresolved": 0,
+        "revize_invalid_candidates_disqualified": 0,
+        "revize_forced_fallback_blocked": 0,
         "revize_roles_with_no_candidates": conn.execute(
             f"""
             SELECT COUNT(*)
@@ -429,12 +811,81 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
             f"SELECT COUNT(*) FROM vw_contacts_clean WHERE municipality_id IN ({where_in})",
             params,
         ).fetchone()[0]
+    if view_exists(conn, "vw_role_candidates_scored"):
+        metrics["revize_candidates_scored"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_role_candidates_scored
+            WHERE municipality_id IN ({where_in})
+              AND COALESCE(is_revize, 0) = 1
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_candidates_for_review"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_role_candidates_scored
+            WHERE municipality_id IN ({where_in})
+              AND COALESCE(is_revize, 0) = 1
+              AND candidate_state = 'candidate_for_review'
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_invalid_candidates_disqualified"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_role_candidates_scored
+            WHERE municipality_id IN ({where_in})
+              AND COALESCE(is_revize, 0) = 1
+              AND COALESCE(invalid_candidate_disqualified, 0) = 1
+            """,
+            params,
+        ).fetchone()[0]
+    if view_exists(conn, "vw_unresolved_roles"):
+        metrics["revize_roles_unresolved"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_unresolved_roles
+            WHERE municipality_id IN ({where_in})
+            """,
+            params,
+        ).fetchone()[0]
+        metrics["revize_forced_fallback_blocked"] = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM vw_unresolved_roles
+            WHERE municipality_id IN ({where_in})
+              AND COALESCE(forced_fallback_blocked, 0) = 1
+            """,
+            params,
+        ).fetchone()[0]
     if view_exists(conn, "vw_best_role_per_town"):
         winner_columns = object_columns(conn, "vw_best_role_per_town")
         metrics["rows_in_vw_best_role_per_town"] = conn.execute(
             f"SELECT COUNT(*) FROM vw_best_role_per_town WHERE municipality_id IN ({where_in})",
             params,
         ).fetchone()[0]
+        if "source_context" in winner_columns:
+            metrics["revize_winners_selected"] = conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM vw_best_role_per_town v
+                WHERE v.municipality_id IN ({where_in})
+                  AND LOWER(COALESCE(v.source_context, '')) LIKE 'revize:%'
+                """,
+                params,
+            ).fetchone()[0]
+        else:
+            metrics["revize_winners_selected"] = conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM vw_best_role_per_town v
+                JOIN contacts c ON c.contact_id = v.contact_id
+                WHERE v.municipality_id IN ({where_in})
+                  AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+                """,
+                params,
+            ).fetchone()[0]
         metrics["revize_winner_rows_from_staff_directory"] = conn.execute(
             f"""
             SELECT COUNT(*)
@@ -511,30 +962,30 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
                     """,
                     params,
                 ).fetchone()[0]
-        metrics["revize_roles_with_no_candidates"] = conn.execute(
-            f"""
-            WITH revize_role_scope AS (
-              SELECT DISTINCT municipality_id, role_normalized
-              FROM contacts
-              WHERE municipality_id IN ({where_in})
-                AND LOWER(COALESCE(source_context, '')) LIKE 'revize:%'
-                AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
-            ),
-            winners AS (
-              SELECT DISTINCT municipality_id, role_normalized
-              FROM vw_best_role_per_town
-              WHERE municipality_id IN ({where_in})
-                AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
-            )
-            SELECT COUNT(*)
-            FROM revize_role_scope r
-            LEFT JOIN winners w
-              ON w.municipality_id = r.municipality_id
-             AND w.role_normalized = r.role_normalized
-            WHERE w.role_normalized IS NULL
-            """,
-            params + params,
-        ).fetchone()[0]
+        if view_exists(conn, "vw_role_candidates_scored"):
+            metrics["revize_roles_with_no_candidates"] = conn.execute(
+                f"""
+                WITH revize_role_scope AS (
+                  SELECT DISTINCT municipality_id, role_normalized
+                  FROM vw_role_candidates_scored
+                  WHERE municipality_id IN ({where_in})
+                    AND COALESCE(is_revize, 0) = 1
+                ),
+                winners AS (
+                  SELECT DISTINCT municipality_id, role_normalized
+                  FROM vw_best_role_per_town
+                  WHERE municipality_id IN ({where_in})
+                    AND NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+                )
+                SELECT COUNT(*)
+                FROM revize_role_scope r
+                LEFT JOIN winners w
+                  ON w.municipality_id = r.municipality_id
+                 AND w.role_normalized = r.role_normalized
+                WHERE w.role_normalized IS NULL
+                """,
+                params + params,
+            ).fetchone()[0]
     return {key: int(value) for key, value in metrics.items()}
 
 
@@ -1376,9 +1827,13 @@ def refresh_views(conn: sqlite3.Connection) -> None:
     current_vw_contacts_clean = get_view_sql(conn, "vw_contacts_clean")
 
     conn.execute("DROP VIEW IF EXISTS vw_best_role_per_town")
+    conn.execute("DROP VIEW IF EXISTS vw_unresolved_roles")
+    conn.execute("DROP VIEW IF EXISTS vw_role_candidates_scored")
     conn.execute("DROP VIEW IF EXISTS vw_contacts_clean")
 
     conn.execute(current_vw_contacts_clean or FALLBACK_VW_CONTACTS_CLEAN_SQL)
+    conn.execute(FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL)
+    conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
     conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
 
 
@@ -1411,14 +1866,30 @@ def verify_required_postprocess_objects(
 
     summary = {
         "vw_contacts_clean_exists": 1 if view_exists(conn, "vw_contacts_clean") else 0,
+        "vw_role_candidates_scored_exists": 1 if view_exists(conn, "vw_role_candidates_scored") else 0,
+        "vw_unresolved_roles_exists": 1 if view_exists(conn, "vw_unresolved_roles") else 0,
         "vw_best_role_per_town_exists": 1 if view_exists(conn, "vw_best_role_per_town") else 0,
         "rows_in_vw_contacts_clean_scope": 0,
+        "rows_in_vw_role_candidates_scored_scope": 0,
+        "rows_in_vw_unresolved_roles_scope": 0,
         "rows_in_vw_best_role_per_town_scope": 0,
     }
     if summary["vw_contacts_clean_exists"]:
         summary["rows_in_vw_contacts_clean_scope"] = _count_rows_for_scope(
             conn,
             "vw_contacts_clean",
+            municipality_ids,
+        )
+    if summary["vw_role_candidates_scored_exists"]:
+        summary["rows_in_vw_role_candidates_scored_scope"] = _count_rows_for_scope(
+            conn,
+            "vw_role_candidates_scored",
+            municipality_ids,
+        )
+    if summary["vw_unresolved_roles_exists"]:
+        summary["rows_in_vw_unresolved_roles_scope"] = _count_rows_for_scope(
+            conn,
+            "vw_unresolved_roles",
             municipality_ids,
         )
     if summary["vw_best_role_per_town_exists"]:
@@ -1437,6 +1908,7 @@ def print_metrics(title: str, metrics: dict[str, int]) -> None:
     print(f"  contacts with role_normalized: {metrics['contacts_with_role_normalized']}")
     print(f"  rows in vw_contacts_clean: {metrics['rows_in_vw_contacts_clean']}")
     print(f"  rows in vw_best_role_per_town: {metrics['rows_in_vw_best_role_per_town']}")
+    print(f"  revize winners selected: {metrics['revize_winners_selected']}")
     print(f"  revize winner rows (staff_directory): {metrics['revize_winner_rows_from_staff_directory']}")
     print(f"  revize winner rows (department_page): {metrics['revize_winner_rows_from_department_pages']}")
     print(f"  revize winner rows (contact_hub): {metrics['revize_winner_rows_from_contact_hubs']}")
@@ -1451,8 +1923,12 @@ def print_metrics(title: str, metrics: dict[str, int]) -> None:
     )
     print(f"  revize garbage rows demoted: {metrics['revize_garbage_rows_demoted']}")
     print(f"  revize candidates scored: {metrics['revize_candidates_scored']}")
+    print(f"  revize candidates for review: {metrics['revize_candidates_for_review']}")
+    print(f"  revize roles unresolved: {metrics['revize_roles_unresolved']}")
+    print(f"  revize invalid candidates disqualified: {metrics['revize_invalid_candidates_disqualified']}")
     print(f"  revize roles with no candidates: {metrics['revize_roles_with_no_candidates']}")
     print(f"  revize roles with forced fallback: {metrics['revize_roles_with_forced_fallback']}")
+    print(f"  revize forced fallback blocked: {metrics['revize_forced_fallback_blocked']}")
 
 
 def main() -> None:
@@ -1486,8 +1962,12 @@ def main() -> None:
     print(f"Municipalities in scope: {len(municipality_ids)}")
     print("Postprocess verification:")
     print(f"  vw_contacts_clean exists: {verification['vw_contacts_clean_exists']}")
+    print(f"  vw_role_candidates_scored exists: {verification['vw_role_candidates_scored_exists']}")
+    print(f"  vw_unresolved_roles exists: {verification['vw_unresolved_roles_exists']}")
     print(f"  vw_best_role_per_town exists: {verification['vw_best_role_per_town_exists']}")
     print(f"  vw_contacts_clean rows (scope): {verification['rows_in_vw_contacts_clean_scope']}")
+    print(f"  vw_role_candidates_scored rows (scope): {verification['rows_in_vw_role_candidates_scored_scope']}")
+    print(f"  vw_unresolved_roles rows (scope): {verification['rows_in_vw_unresolved_roles_scope']}")
     print(f"  vw_best_role_per_town rows (scope): {verification['rows_in_vw_best_role_per_town_scope']}")
     print_metrics("Before:", before)
     print_metrics("After:", after)

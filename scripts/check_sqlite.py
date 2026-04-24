@@ -20,7 +20,12 @@ def main() -> None:
             print(row[0])
 
         print("\n=== CHECK TARGET VIEWS ===")
-        for name in ["vw_contacts_clean", "vw_best_role_per_town"]:
+        for name in [
+            "vw_contacts_clean",
+            "vw_role_candidates_scored",
+            "vw_unresolved_roles",
+            "vw_best_role_per_town",
+        ]:
             exists = cur.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name=?",
                 (name,),
