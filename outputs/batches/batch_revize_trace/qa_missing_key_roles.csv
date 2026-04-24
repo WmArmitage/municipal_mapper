@@ -1,15 +1,15 @@
 municipality_id,town_name,missing_role_groups,missing_group_count,present_role_groups,present_group_roles
 ct_avon,Avon,executive; tax; clerk,3,assessment; building; planning; finance,assessment: Assessor; building: Building Official; planning: Planner; finance: Finance Director
 ct_fairfield,Fairfield,executive; assessment; tax; clerk; building; planning; finance,7,,
-ct_griswold,Griswold,executive; tax; clerk; building; planning; finance,6,assessment,assessment: Assessor
-ct_groton,Groton,executive; assessment; tax; clerk; building; planning; finance,7,,
-ct_guilford,Guilford,executive; assessment; tax; clerk; building; finance,6,planning,planning: Planner
+ct_griswold,Griswold,executive; assessment; tax; clerk; finance,5,building; planning,building: Building Official; planning: Planner
+ct_groton,Groton,executive; clerk; building; planning; finance,5,assessment; tax,assessment: Assessor; tax: Tax Collector
+ct_guilford,Guilford,executive; assessment; tax; clerk; finance,5,building; planning,building: Building Official; planning: Planner
 ct_killingly,Killingly,executive; tax; clerk; planning; finance,5,assessment; building,assessment: Assessor; building: Building Official
-ct_marlborough,Marlborough,executive; assessment; tax; clerk; building; finance,6,planning,planning: Planner
+ct_marlborough,Marlborough,executive; assessment; tax; clerk; finance,5,building; planning,building: Building Official; planning: Planner
 ct_new_canaan,New Canaan,executive; tax; clerk; finance,4,assessment; building; planning,assessment: Assessor; building: Building Official; planning: Planner
-ct_north_haven,North Haven,executive; assessment; tax; clerk; building; finance,6,planning,planning: Land Use
+ct_north_haven,North Haven,executive; assessment; tax; clerk; finance,5,building; planning,building: Building Official; planning: Land Use
 ct_plainfield,Plainfield,executive; tax; clerk; building; planning; finance,6,assessment,assessment: Assessor
 ct_ridgefield,Ridgefield,executive; tax; clerk; finance,4,assessment; building; planning,assessment: Assessor; building: Building Official; planning: Planner
 ct_southington,Southington,executive; tax; clerk; building; planning; finance,6,assessment,assessment: Assessor
-ct_stafford,Stafford,executive; assessment; tax; clerk; building; planning; finance,7,,
+ct_stafford,Stafford,executive; assessment; clerk; building; planning; finance,6,tax,tax: Tax Collector
 ct_watertown,Watertown,executive; assessment; tax; clerk; building; planning; finance,7,,

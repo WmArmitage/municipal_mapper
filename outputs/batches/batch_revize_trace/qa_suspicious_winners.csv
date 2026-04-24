@@ -1,4 +1,10 @@
 municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
-ct_griswold,Assessor,Your Link Name,,,Assessor's,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,missing_email_and_phone
+ct_griswold,Building Official,Building,buildingdepartment@griswoldct.gov,8603767060,Buildingdepartment@griswoldct.gov,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
+ct_griswold,Planner,,townplanner@griswoldct.gov,8603767060,Planning & Development,staff_directory,https://www.griswold-ct.org/staff_directory/index.php,0,invalid_person_name
+ct_groton,Assessor,Antique Motor Vehicle Affidavit,mgardner@groton-ct.gov,8604416660,Assessment,department_page,https://www.groton-ct.gov/departments/finance/assessment.php,0,invalid_person_name
+ct_guilford,Building Official,,,2034538038,Building,staff_directory,https://www.guilfordct.gov/town_of_guilford/staff_directory_.php,0,invalid_person_name
+ct_marlborough,Building Official,Building,inspector@marlboroughct.net,8602956202,,staff_directory,https://www.marlboroughct.net/contact_us/index.php,0,invalid_person_name
+ct_north_haven,Building Official,,floriano.elio@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,0,invalid_person_name
 ct_north_haven,Land Use,Land Use,magaraci.laura@northhaven-ct.gov,2032395321,Education Department,staff_directory,https://www.northhaven-ct.gov/contact_us/index.php,0,role_only_name
 ct_ridgefield,Assessor,Al Garzi,,2034312706,Tax Assessor,department_page,https://www.ridgefieldct.gov/departments/tax_assessors_office/index.php,0,assessor_tax_mismatch
+ct_stafford,Tax Collector,Filling Vacancies,,,Of The First Selectman,department_page,https://www.staffordct.org/departments/first_selectman.php,0,missing_email_and_phone
