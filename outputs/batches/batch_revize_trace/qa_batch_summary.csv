@@ -1,13 +1,13 @@
 municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
 ct_avon,Avon,Hartford County,83,78,4,0
 ct_fairfield,Fairfield,Fairfield County,2,1,0,0
-ct_griswold,Griswold,New London County,35,34,1,0
+ct_griswold,Griswold,New London County,35,34,2,0
 ct_groton,Groton,New London County,33,32,0,0
-ct_guilford,Guilford,New Haven County,42,40,1,0
+ct_guilford,Guilford,New Haven County,42,40,2,0
 ct_killingly,Killingly,Windham County,20,20,2,0
 ct_marlborough,Marlborough,Hartford County,23,22,2,0
 ct_new_canaan,New Canaan,Fairfield County,17,17,3,0
-ct_north_haven,North Haven,New Haven County,16,15,1,0
+ct_north_haven,North Haven,New Haven County,16,15,2,0
 ct_plainfield,Plainfield,Windham County,14,13,1,0
 ct_ridgefield,Ridgefield,Fairfield County,28,22,3,0
 ct_southington,Southington,Hartford County,16,16,1,0

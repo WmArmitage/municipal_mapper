@@ -897,7 +897,7 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(candidate["candidate_state"], "candidate_for_review")
         self.assertEqual(candidate["winner_disqualifier_reason"], "")
 
-    def test_blank_name_office_contact_becomes_review_candidate(self) -> None:
+    def test_blank_name_office_contact_becomes_role_only_fallback(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
             conn,
@@ -919,13 +919,13 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         )
         winner = conn.execute(
             """
-            SELECT contact_id
+            SELECT contact_id, candidate_state, forced_fallback
             FROM vw_best_role_per_town
             WHERE municipality_id = ? AND role_normalized = ?
             """,
             ("ct_review", "Tax Collector"),
         ).fetchone()
-        review_candidate = conn.execute(
+        role_only_candidate = conn.execute(
             """
             SELECT contact_id, candidate_state, winner_disqualifier_reason
             FROM vw_role_candidates_scored
@@ -942,14 +942,15 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
             ("ct_review", "Tax Collector"),
         ).fetchone()
         conn.close()
-        self.assertIsNone(winner)
-        self.assertIsNotNone(review_candidate)
-        self.assertEqual(review_candidate["contact_id"], "office_contact_review")
-        self.assertEqual(review_candidate["candidate_state"], "candidate_for_review")
-        self.assertEqual(review_candidate["winner_disqualifier_reason"], "blank_name")
-        self.assertIsNotNone(unresolved)
-        self.assertEqual(unresolved["top_candidate_contact_id"], "office_contact_review")
-        self.assertEqual(unresolved["top_candidate_winner_block_reason"], "blank_name")
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "office_contact_review")
+        self.assertEqual(winner["candidate_state"], "role_only_fallback")
+        self.assertEqual(int(winner["forced_fallback"]), 1)
+        self.assertIsNotNone(role_only_candidate)
+        self.assertEqual(role_only_candidate["contact_id"], "office_contact_review")
+        self.assertEqual(role_only_candidate["candidate_state"], "role_only_fallback")
+        self.assertEqual(role_only_candidate["winner_disqualifier_reason"], "blank_name")
+        self.assertIsNone(unresolved)
 
     def _build_postprocess_test_db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")

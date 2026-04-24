@@ -468,6 +468,22 @@ ranked AS (
   SELECT
     s.*,
     CASE
+      WHEN s.is_revize = 1
+           AND s.blank_name_flag = 1
+           AND (
+             NULLIF(TRIM(COALESCE(s.role_normalized, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.role_family, '')), '') IS NOT NULL
+           )
+           AND (
+             NULLIF(TRIM(COALESCE(s.email, '')), '') IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.phone, '')), '') IS NOT NULL
+           )
+           AND s.source_context_norm LIKE 'revize:%'
+           AND COALESCE(s.is_likely_noise, 0) = 0
+      THEN 1
+      ELSE 0
+    END AS blank_name_fallback_eligible,
+    CASE
       WHEN s.is_revize = 1 THEN
         CASE
           WHEN s.artifact_name_flag = 0
@@ -486,6 +502,7 @@ ranked AS (
     END AS high_confidence_eligible,
     CASE
       WHEN s.is_revize = 1
+           AND s.blank_name_flag = 0
            AND (
              s.artifact_name_flag = 0
              OR COALESCE(s.artifact_structural_allow_flag, 0) = 1
@@ -567,6 +584,7 @@ labeled AS (
     CASE
       WHEN r.high_confidence_eligible = 1 AND r.high_confidence_rank = 1 THEN 'high_confidence_winner'
       WHEN r.is_revize = 1 AND r.review_candidate_eligible = 1 THEN 'candidate_for_review'
+      WHEN r.is_revize = 1 AND COALESCE(r.blank_name_fallback_eligible, 0) = 1 THEN 'role_only_fallback'
       ELSE 'disqualified'
     END AS candidate_state,
     CASE
@@ -579,6 +597,7 @@ labeled AS (
              OR (
                COALESCE(r.suspicious_reason, '') IN ('invalid_person_name', 'role_only_name')
                AND NOT (r.artifact_name_flag = 1 AND COALESCE(r.artifact_structural_allow_flag, 0) = 1)
+               AND COALESCE(r.blank_name_fallback_eligible, 0) = 0
              )
            )
       THEN 1
@@ -684,7 +703,8 @@ WITH eligible_candidates AS (
                AND COALESCE(v.is_likely_noise, 0) = 0
                AND NULLIF(TRIM(COALESCE(v.winner_disqualifier_reason, '')), '') IS NULL
           THEN 2
-          ELSE 3
+          WHEN v.candidate_state = 'role_only_fallback' THEN 3
+          ELSE 4
         END,
         v.candidate_score DESC,
         COALESCE(v.display_confidence, 0.0) DESC,
@@ -701,6 +721,10 @@ WITH eligible_candidates AS (
        AND v.candidate_state = 'candidate_for_review'
        AND COALESCE(v.is_likely_noise, 0) = 0
        AND NULLIF(TRIM(COALESCE(v.winner_disqualifier_reason, '')), '') IS NULL
+     )
+     OR (
+       COALESCE(v.is_revize, 0) = 1
+       AND v.candidate_state = 'role_only_fallback'
      )
 )
 SELECT *
