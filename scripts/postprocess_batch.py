@@ -615,7 +615,11 @@ WITH eligible_candidates AS (
       ORDER BY
         CASE
           WHEN v.candidate_state = 'high_confidence_winner' THEN 1
-          WHEN v.candidate_state = 'candidate_for_review' THEN 2
+          WHEN v.candidate_state = 'candidate_for_review'
+               AND COALESCE(v.is_likely_noise, 0) = 0
+               AND NULLIF(TRIM(COALESCE(v.winner_disqualifier_reason, '')), '') IS NULL
+          THEN 2
+          ELSE 3
         END,
         v.candidate_score DESC,
         COALESCE(v.display_confidence, 0.0) DESC,
