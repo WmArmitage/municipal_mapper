@@ -246,12 +246,13 @@ class RevizeTraceCollectorTests(unittest.TestCase):
             self.assertTrue(any("normalized_rejected" in row.get("stages", {}) for row in trace_rows))
             self.assertTrue(any("clean_contacts" in row.get("stages", {}) for row in trace_rows))
             self.assertTrue(any("role_winner" in row.get("stages", {}) for row in trace_rows))
-            reconstructed_rows = [row for row in trace_rows if "reconstructed_candidate" in row.get("stages", {})]
+            reconstructed_rows = [row for row in trace_rows if "reconstructed_contact_block" in row.get("stages", {})]
             self.assertTrue(reconstructed_rows)
-            reconstructed_stage = reconstructed_rows[0]["stages"]["reconstructed_candidate"]
+            reconstructed_stage = reconstructed_rows[0]["stages"]["reconstructed_contact_block"]
             self.assertTrue(reconstructed_stage.get("original_lines"))
             self.assertIn("reconstructed_name", reconstructed_stage)
             self.assertIn("accepted", reconstructed_stage)
+            self.assertEqual(str(reconstructed_stage.get("revize_source_type") or ""), "reconstructed_contact_block")
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 

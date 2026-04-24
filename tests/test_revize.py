@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import sys
 import types
 import unittest
@@ -40,6 +41,7 @@ from src.revize import (
     score_revize_page_class,
     run_revize_strategy_for_municipality,
 )
+from scripts.run_town import persist_contact_rows
 
 
 def _build_fetch_result(
@@ -578,7 +580,7 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertGreaterEqual(int(diagnostics.get("revize_reconstruction_candidates_emitted") or 0), 1)
         self.assertTrue(any(str(row.get("name") or "") == "Carl Brown" for row in candidates))
         first = candidates[0]
-        self.assertEqual(str(first.get("revize_source_type") or ""), "reconstructed_candidate")
+        self.assertEqual(str(first.get("revize_source_type") or ""), "reconstructed_contact_block")
         self.assertEqual(str(first.get("phone") or ""), "8603767060")
         self.assertEqual(str(first.get("phone_ext") or ""), "2109")
 
@@ -613,7 +615,7 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertGreaterEqual(int(result.get("revize_reconstruction_blocks_seen") or 0), 1)
         self.assertGreaterEqual(int(result.get("revize_reconstruction_candidates_emitted") or 0), 1)
         source_counts = dict(result.get("extraction_source_counts") or {})
-        self.assertGreaterEqual(int(source_counts.get("reconstructed_candidate", 0)), 1)
+        self.assertGreaterEqual(int(source_counts.get("reconstructed_contact_block", 0)), 1)
         contact_names = {str(row.get("name") or "") for row in list(result.get("contacts") or [])}
         self.assertIn("Carl Brown", contact_names)
 
@@ -648,6 +650,95 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertTrue(any(int(row.get("accepted") or 0) == 0 for row in rows))
         self.assertTrue(any(str(row.get("reconstructed_name") or "") == "Carl Brown" for row in rows))
         self.assertTrue(any(str(row.get("rejection_reason") or "") == "vacancy_name" for row in rows))
+
+    def test_reconstructed_candidate_persists_to_contacts(self) -> None:
+        html = """
+        <html>
+          <body>
+            <h1>Building &amp; Zoning Enforcement</h1>
+            <aside id="staff-dr">
+              <div class="staff">
+                <div class="staff-head">
+                  <h4>Carl Brown<span>Building &amp; Zoning Enforcement Officer</span></h4>
+                </div>
+                <div class="staff-details">
+                  <span>86</span><span>0-376-7060x2109</span>
+                  <a href="mailto:buildingdepartment@griswold-ct.org">Email</a>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """
+        result = run_revize_strategy_for_municipality(
+            municipality_homepage="https://www.example.gov/departments/building/index.php",
+            harvested_links=["https://www.example.gov/departments/building/index.php"],
+            fetch_fn=lambda url, referer, headers: _build_fetch_result(url, 200, text=html),
+            max_total_candidates=6,
+            max_generated_candidates=6,
+        )
+        reconstructed_rows = [
+            row for row in list(result.get("contacts") or [])
+            if str(row.get("revize_source_type") or "") == "reconstructed_contact_block"
+        ]
+        self.assertTrue(reconstructed_rows)
+
+        conn = self._build_contacts_only_db()
+        debug_rows: list[dict[str, object]] = []
+        try:
+            persisted = persist_contact_rows(
+                conn=conn,
+                municipality_id="ct_griswold",
+                source_url="https://www.example.gov/departments/building/index.php",
+                contacts=list(result.get("contacts") or []),
+                debug_rows_out=debug_rows,
+            )
+            self.assertGreaterEqual(persisted, 1)
+            contact_count = conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
+            self.assertGreaterEqual(int(contact_count), 1)
+            persisted_reconstructed = [
+                event
+                for event in debug_rows
+                if str(event.get("stage") or "") == "insert_upsert"
+                and str((event.get("row") or {}).get("revize_source_type") or "") == "reconstructed_contact_block"
+            ]
+            self.assertTrue(persisted_reconstructed)
+        finally:
+            conn.close()
+
+    def test_reconstructed_candidate_rejection_reason_when_not_persisted(self) -> None:
+        conn = self._build_contacts_only_db()
+        debug_rows: list[dict[str, object]] = []
+        try:
+            persisted = persist_contact_rows(
+                conn=conn,
+                municipality_id="ct_griswold",
+                source_url="https://www.example.gov/departments/building/index.php",
+                contacts=[
+                    {
+                        "name": "Carl Brown",
+                        "title": "Building & Zoning Enforcement Officer",
+                        "department": "Building",
+                        "email": None,
+                        "phone": None,
+                        "source_url": "https://www.example.gov/departments/building/index.php",
+                        "revize_source_type": "reconstructed_contact_block",
+                        "reconstruction_rejection_reason": "missing_contact_fields",
+                    }
+                ],
+                debug_rows_out=debug_rows,
+            )
+            self.assertEqual(persisted, 0)
+            rejection_rows = [
+                event
+                for event in debug_rows
+                if str(event.get("stage") or "") == "insert_precheck"
+                and str((event.get("row") or {}).get("revize_source_type") or "") == "reconstructed_contact_block"
+            ]
+            self.assertTrue(rejection_rows)
+            self.assertEqual(str(rejection_rows[0].get("drop_reason") or ""), "missing_contact_fields")
+        finally:
+            conn.close()
 
     def test_phone_extension_formats_parse_consistently(self) -> None:
         html = """
@@ -984,6 +1075,31 @@ class RevizeStrategyTests(unittest.TestCase):
         self.assertFalse(str(row.get("name") or "").strip())
         self.assertEqual(str(row.get("is_likely_noise") or ""), "1")
         self.assertIn("invalid_name", str(row.get("normalization_flag") or ""))
+
+    def _build_contacts_only_db(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE contacts (
+                contact_id TEXT PRIMARY KEY,
+                municipality_id TEXT,
+                name TEXT,
+                title TEXT,
+                department TEXT,
+                email TEXT,
+                email_type TEXT,
+                phone TEXT,
+                phone_ext TEXT,
+                address TEXT,
+                hours TEXT,
+                source_context TEXT,
+                source_url TEXT,
+                confidence REAL
+            )
+            """
+        )
+        return conn
 
 
 if __name__ == "__main__":

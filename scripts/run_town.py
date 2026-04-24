@@ -335,6 +335,19 @@ def persist_contact_rows(
             "source_context": source_context or None,
             "source_url": str(contact.get("source_url") or source_url),
             "confidence": float(contact.get("confidence") or 0.45),
+            "revize_source_type": str(contact.get("revize_source_type") or ""),
+            "revize_page_class": str(contact.get("revize_page_class") or ""),
+            "revize_page_priority_score": float(contact.get("revize_page_priority_score") or 0.0),
+            "original_lines": list(contact.get("original_lines") or []),
+            "reconstructed_name": str(contact.get("reconstructed_name") or ""),
+            "reconstructed_title": str(contact.get("reconstructed_title") or ""),
+            "reconstructed_email": str(contact.get("reconstructed_email") or ""),
+            "reconstructed_phone": str(contact.get("reconstructed_phone") or ""),
+            "reconstructed_phone_ext": str(contact.get("reconstructed_phone_ext") or ""),
+            "reconstruction_accepted": _coerce_int(contact.get("reconstruction_accepted") or contact.get("accepted")),
+            "reconstruction_rejection_reason": str(
+                contact.get("reconstruction_rejection_reason") or contact.get("rejection_reason") or ""
+            ),
         }
         merge_key = build_contact_merge_key(merged_row, source_url)
         prior = merged_contacts.get(merge_key)
@@ -1060,7 +1073,7 @@ def crawl_single_municipality(
             1
             for event in revize_insert_debug_rows
             if str(event.get("stage") or "") == "insert_upsert"
-            and str((event.get("row") or {}).get("revize_source_type") or "") == "reconstructed_candidate"
+            and str((event.get("row") or {}).get("revize_source_type") or "") == "reconstructed_contact_block"
         )
         stats["revize_reconstruction_candidates_persisted"] = reconstructed_persisted
         stats["contacts"] += persisted_revize_contacts

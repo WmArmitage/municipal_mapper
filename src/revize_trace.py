@@ -82,7 +82,7 @@ class RevizeTraceCollector:
                 "email": sample.get("reconstructed_email") or "",
                 "phone": sample.get("reconstructed_phone") or "",
                 "phone_ext": sample.get("phone_ext") or sample.get("reconstructed_phone_ext") or "",
-                "revize_source_type": "reconstructed_candidate",
+                "revize_source_type": "reconstructed_contact_block",
                 "original_lines": list(sample.get("original_lines") or []),
                 "reconstructed_name": sample.get("reconstructed_name") or "",
                 "reconstructed_title": sample.get("reconstructed_title") or "",
@@ -97,7 +97,7 @@ class RevizeTraceCollector:
             self._record_row_stage(
                 municipality_id=municipality_id,
                 row=payload,
-                stage_name="reconstructed_candidate",
+                stage_name="reconstructed_contact_block",
                 drop_stage=drop_stage,
                 drop_reason=drop_reason,
             )
@@ -321,6 +321,8 @@ class RevizeTraceCollector:
         ) or ""
         return {
             "source_url": normalize_whitespace(str(row.get("source_url") or "")) or "",
+            "revize_source_type": normalize_whitespace(str(row.get("revize_source_type") or "")) or "",
+            "revize_page_class": normalize_whitespace(str(row.get("revize_page_class") or "")) or "",
             "name": normalize_whitespace(str(row.get("name") or "")) or "",
             "title": normalize_whitespace(str(row.get("title") or "")) or "",
             "department": normalize_whitespace(str(row.get("department") or "")) or "",

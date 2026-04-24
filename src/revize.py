@@ -306,7 +306,7 @@ REVIZE_CANDIDATE_ORIGIN_BOOST = {
     "section_root": 6,
     "discovered_link": 5,
 }
-REVIZE_RECONSTRUCTION_SOURCE_TYPE = "reconstructed_candidate"
+REVIZE_RECONSTRUCTION_SOURCE_TYPE = "reconstructed_contact_block"
 REVIZE_RECONSTRUCTION_SAMPLE_LIMIT = 5
 
 FetchFn = Callable[[str, str | None, dict[str, str] | None], FetchResult]
