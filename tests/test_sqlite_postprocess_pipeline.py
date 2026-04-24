@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.export_batch_qa import ensure_required_postprocess_views, fetch_count_map
 from scripts.postprocess_batch import (
+    count_metrics,
     ensure_postprocess_columns,
     refresh_views,
     run_batch_enrichment,
@@ -62,6 +63,31 @@ class SqlitePostprocessPipelineTests(unittest.TestCase):
         winner_counts = fetch_count_map(conn, "vw_best_role_per_town", [municipality_id])
         self.assertGreaterEqual(int(clean_counts.get(municipality_id, 0)), 1)
         self.assertGreaterEqual(int(winner_counts.get(municipality_id, 0)), 1)
+        conn.close()
+
+    def test_count_metrics_does_not_fail_when_forced_fallback_column_absent(self) -> None:
+        conn = self._build_base_schema_db()
+        municipality_id = "ct_legacy_view"
+        self._seed_minimum_rows(conn, municipality_id)
+        ensure_postprocess_columns(conn)
+        run_batch_enrichment(conn, [municipality_id])
+
+        conn.execute("DROP VIEW IF EXISTS vw_best_role_per_town")
+        conn.execute(
+            """
+            CREATE VIEW vw_best_role_per_town AS
+            SELECT
+                contact_id,
+                municipality_id,
+                role_normalized
+            FROM contacts
+            WHERE NULLIF(TRIM(COALESCE(role_normalized, '')), '') IS NOT NULL
+            """
+        )
+
+        metrics = count_metrics(conn, [municipality_id])
+        self.assertIn("revize_roles_with_forced_fallback", metrics)
+        self.assertEqual(int(metrics["revize_roles_with_forced_fallback"]), 0)
         conn.close()
 
     def _build_base_schema_db(self) -> sqlite3.Connection:

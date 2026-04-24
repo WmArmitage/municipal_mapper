@@ -270,6 +270,14 @@ def view_exists(conn: sqlite3.Connection, name: str) -> bool:
     return row is not None
 
 
+def object_columns(conn: sqlite3.Connection, name: str) -> set[str]:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({name})").fetchall()
+    except sqlite3.OperationalError:
+        return set()
+    return {str(row["name"]).strip().lower() for row in rows if row["name"]}
+
+
 def get_view_sql(conn: sqlite3.Connection, name: str) -> str | None:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'view' AND name = ?",
@@ -422,6 +430,7 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
             params,
         ).fetchone()[0]
     if view_exists(conn, "vw_best_role_per_town"):
+        winner_columns = object_columns(conn, "vw_best_role_per_town")
         metrics["rows_in_vw_best_role_per_town"] = conn.execute(
             f"SELECT COUNT(*) FROM vw_best_role_per_town WHERE municipality_id IN ({where_in})",
             params,
@@ -478,16 +487,30 @@ def count_metrics(conn: sqlite3.Connection, municipality_ids: list[str]) -> dict
             """,
             params,
         ).fetchone()[0]
-        metrics["revize_roles_with_forced_fallback"] = conn.execute(
-            f"""
-            SELECT COUNT(*)
-            FROM vw_best_role_per_town v
-            WHERE v.municipality_id IN ({where_in})
-              AND COALESCE(v.forced_fallback, 0) = 1
-              AND LOWER(COALESCE(v.source_context, '')) LIKE 'revize:%'
-            """,
-            params,
-        ).fetchone()[0]
+        if "forced_fallback" in winner_columns:
+            if "source_context" in winner_columns:
+                metrics["revize_roles_with_forced_fallback"] = conn.execute(
+                    f"""
+                    SELECT COUNT(*)
+                    FROM vw_best_role_per_town v
+                    WHERE v.municipality_id IN ({where_in})
+                      AND COALESCE(v.forced_fallback, 0) = 1
+                      AND LOWER(COALESCE(v.source_context, '')) LIKE 'revize:%'
+                    """,
+                    params,
+                ).fetchone()[0]
+            else:
+                metrics["revize_roles_with_forced_fallback"] = conn.execute(
+                    f"""
+                    SELECT COUNT(*)
+                    FROM vw_best_role_per_town v
+                    JOIN contacts c ON c.contact_id = v.contact_id
+                    WHERE v.municipality_id IN ({where_in})
+                      AND COALESCE(v.forced_fallback, 0) = 1
+                      AND LOWER(COALESCE(c.source_context, '')) LIKE 'revize:%'
+                    """,
+                    params,
+                ).fetchone()[0]
         metrics["revize_roles_with_no_candidates"] = conn.execute(
             f"""
             WITH revize_role_scope AS (
