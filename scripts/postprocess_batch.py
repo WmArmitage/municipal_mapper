@@ -358,6 +358,43 @@ component_scores AS (
     END AS artifact_name_flag,
     CASE
       WHEN b.is_revize = 1
+           AND b.source_context_norm LIKE 'revize:%'
+           AND b.source_context_norm LIKE '%page_class=department_page%'
+           AND (
+             b.source_context_norm LIKE 'revize:department_section%'
+             OR b.source_context_norm LIKE 'revize:labeled_staff%'
+           )
+           AND (
+             b.name_norm IN (
+               'development permit',
+               'adopted march',
+               'cover page',
+               'zoning regulations',
+               'certificate of zoning compliance',
+               'application',
+               'permit',
+               'regulations',
+               'ordinance',
+               'form',
+               'fees',
+               'requirements'
+             )
+             OR b.name_norm LIKE '%zoning regulations%'
+             OR b.name_norm LIKE '%certificate of zoning compliance%'
+             OR b.name_norm LIKE '%development permit%'
+             OR b.name_norm LIKE '%ordinance%'
+             OR b.name_norm LIKE '%regulations%'
+             OR b.name_norm LIKE '%application%'
+             OR b.name_norm LIKE '%permit%'
+             OR b.name_norm LIKE '%cover page%'
+             OR b.name_norm LIKE '%fees%'
+             OR b.name_norm LIKE '%requirements%'
+           )
+      THEN 1
+      ELSE 0
+    END AS revize_department_page_artifact_flag,
+    CASE
+      WHEN b.is_revize = 1
            AND (
              NULLIF(TRIM(COALESCE(b.role_normalized, '')), '') IS NOT NULL
              OR NULLIF(TRIM(COALESCE(b.role_family, '')), '') IS NOT NULL
@@ -426,6 +463,9 @@ scored AS (
     ) AS candidate_score,
     CASE
       WHEN s.is_revize = 1
+           AND COALESCE(s.revize_department_page_artifact_flag, 0) = 1
+      THEN 'revize_department_page_artifact'
+      WHEN s.is_revize = 1
            AND s.artifact_name_flag = 1
            AND COALESCE(s.artifact_structural_allow_flag, 0) = 0
       THEN 'artifact_name'
@@ -484,9 +524,11 @@ ranked AS (
       ELSE 0
     END AS blank_name_fallback_eligible,
     CASE
-      WHEN s.is_revize = 1 THEN
+      WHEN s.is_revize = 1
+      THEN
         CASE
           WHEN s.artifact_name_flag = 0
+               AND COALESCE(s.revize_department_page_artifact_flag, 0) = 0
                AND s.blank_name_flag = 0
                AND COALESCE(s.entity_type, '') = 'person'
                AND NULLIF(TRIM(COALESCE(s.suspicious_reason, '')), '') IS NULL
@@ -502,6 +544,7 @@ ranked AS (
     END AS high_confidence_eligible,
     CASE
       WHEN s.is_revize = 1
+           AND COALESCE(s.revize_department_page_artifact_flag, 0) = 0
            AND s.blank_name_flag = 0
            AND (
              s.artifact_name_flag = 0
@@ -537,6 +580,7 @@ ranked AS (
         WHEN s.is_revize = 1 THEN
           CASE
             WHEN s.artifact_name_flag = 0
+                 AND COALESCE(s.revize_department_page_artifact_flag, 0) = 0
                  AND s.blank_name_flag = 0
                  AND COALESCE(s.entity_type, '') = 'person'
                  AND NULLIF(TRIM(COALESCE(s.suspicious_reason, '')), '') IS NULL
@@ -560,6 +604,7 @@ ranked AS (
         WHEN s.is_revize = 1 THEN
           CASE
             WHEN s.artifact_name_flag = 0
+                 AND COALESCE(s.revize_department_page_artifact_flag, 0) = 0
                  AND s.blank_name_flag = 0
                  AND COALESCE(s.entity_type, '') = 'person'
                  AND NULLIF(TRIM(COALESCE(s.suspicious_reason, '')), '') IS NULL
@@ -591,6 +636,9 @@ labeled AS (
       WHEN r.is_revize = 1
            AND (
              (
+               COALESCE(r.revize_department_page_artifact_flag, 0) = 1
+             )
+             OR (
                r.artifact_name_flag = 1
                AND COALESCE(r.artifact_structural_allow_flag, 0) = 0
              )

@@ -360,6 +360,69 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(winner["contact_id"], "z_director")
         self.assertEqual(winner["title"], "Director of Finance")
 
+    def test_revize_department_page_document_headings_are_disqualified(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="ridgefield_heading",
+            municipality_id="ct_department_artifact",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Development Permit",
+            title="",
+            department="Planning & Zoning",
+            email="",
+            phone="8605550405",
+            page_type="department_page",
+            source_url="https://town.example.org/departments/planning_and_zoning/development_procedures.php",
+            source_context="revize:department_section|page_class=department_page|page_priority=0.75 | Certificate of Zoning Compliance A certificate of Zoning Compliance is provided to a property owner when work authorized under a Development Permit (building permit)",
+            display_confidence=0.74,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="ridgefield_profile",
+            municipality_id="ct_department_artifact",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Aarti Paranjape",
+            title="Director of Planning & Zoning Chief Zoning Enforcement Officer",
+            department="Planning & Zoning",
+            email="planner@town.org",
+            phone="8605550404",
+            page_type="department_page",
+            source_url="https://town.example.org/departments/planning_and_zoning/index.php",
+            source_context="revize:contact_card|page_class=department_page|page_priority=0.75 | Town Hall Annex 66 Prospect Street Second Floor (860) 555-0404 planner@town.org",
+            display_confidence=0.74,
+            suspicious_reason=None,
+        )
+        heading_candidate = conn.execute(
+            """
+            SELECT candidate_state, winner_disqualifier_reason, invalid_candidate_disqualified
+            FROM vw_role_candidates_scored
+            WHERE contact_id = ?
+            """,
+            ("ridgefield_heading",),
+        ).fetchone()
+        winner = conn.execute(
+            """
+            SELECT contact_id
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_group = ?
+            """,
+            ("ct_department_artifact", "planning_zoning_primary"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(heading_candidate)
+        self.assertEqual(heading_candidate["candidate_state"], "disqualified")
+        self.assertEqual(
+            heading_candidate["winner_disqualifier_reason"],
+            "revize_department_page_artifact",
+        )
+        self.assertEqual(int(heading_candidate["invalid_candidate_disqualified"]), 1)
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "ridgefield_profile")
+
     def test_role_group_ranking_keeps_single_winner_when_high_confidence_exists_in_family(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
