@@ -528,36 +528,49 @@ FROM labeled
 
 FALLBACK_VW_UNRESOLVED_ROLES_SQL = """
 CREATE VIEW vw_unresolved_roles AS
-WITH role_counts AS (
+WITH grouped_candidates AS (
+  SELECT
+    v.*,
+    COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), '')) AS role_group,
+    ROW_NUMBER() OVER (
+      PARTITION BY v.municipality_id,
+                   COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+      ORDER BY
+        v.candidate_score DESC,
+        COALESCE(v.display_confidence, 0.0) DESC,
+        COALESCE(v.contact_id, '') ASC
+    ) AS role_group_rank
+  FROM vw_role_candidates_scored v
+  WHERE v.is_revize = 1
+),
+role_counts AS (
   SELECT
     municipality_id,
-    role_normalized,
+    role_group,
     COUNT(*) AS candidate_count,
     SUM(CASE WHEN candidate_state = 'candidate_for_review' THEN 1 ELSE 0 END) AS review_candidate_count,
     SUM(CASE WHEN invalid_candidate_disqualified = 1 THEN 1 ELSE 0 END) AS invalid_candidate_disqualified_count
-  FROM vw_role_candidates_scored
-  WHERE is_revize = 1
-  GROUP BY municipality_id, role_normalized
+  FROM grouped_candidates
+  GROUP BY municipality_id, role_group
 ),
 selected_winners AS (
-  SELECT DISTINCT municipality_id, role_normalized
+  SELECT DISTINCT municipality_id, role_group
   FROM vw_best_role_per_town
   WHERE COALESCE(is_revize, 0) = 1
 ),
 top_candidates AS (
   SELECT *
-  FROM vw_role_candidates_scored
-  WHERE is_revize = 1
-    AND candidate_rank = 1
+  FROM grouped_candidates
+  WHERE role_group_rank = 1
 )
 SELECT
   rc.municipality_id,
-  rc.role_normalized,
+  COALESCE(tc.role_normalized, rc.role_group) AS role_normalized,
   rc.candidate_count,
   rc.review_candidate_count,
   rc.invalid_candidate_disqualified_count,
   CASE
-    WHEN rc.candidate_count > 0 AND sw.role_normalized IS NULL THEN 1
+    WHEN rc.candidate_count > 0 AND sw.role_group IS NULL THEN 1
     ELSE 0
   END AS forced_fallback_blocked,
   tc.contact_id AS top_candidate_contact_id,
@@ -574,54 +587,56 @@ SELECT
 FROM role_counts rc
 LEFT JOIN selected_winners sw
   ON sw.municipality_id = rc.municipality_id
- AND sw.role_normalized = rc.role_normalized
+ AND sw.role_group = rc.role_group
 LEFT JOIN top_candidates tc
   ON tc.municipality_id = rc.municipality_id
- AND tc.role_normalized = rc.role_normalized
-WHERE sw.role_normalized IS NULL
+ AND tc.role_group = rc.role_group
+WHERE sw.role_group IS NULL
 """.strip()
 
 
 FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL = """
 CREATE VIEW vw_best_role_per_town AS
-SELECT
-  v.*,
-  v.candidate_rank AS rn,
-  0 AS forced_fallback
-FROM vw_role_candidates_scored v
-WHERE v.candidate_state = 'high_confidence_winner'
-UNION ALL
-SELECT
-  v.*,
-  v.candidate_rank AS rn,
-  1 AS forced_fallback
-FROM vw_role_candidates_scored v
-WHERE COALESCE(v.is_revize, 0) = 1
-  AND v.candidate_state = 'candidate_for_review'
-  AND COALESCE(v.is_likely_noise, 0) = 0
-  AND NULLIF(TRIM(COALESCE(v.winner_disqualifier_reason, '')), '') IS NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM vw_role_candidates_scored w
-    WHERE w.municipality_id = v.municipality_id
-      AND w.role_normalized = v.role_normalized
-      AND w.candidate_state = 'high_confidence_winner'
-  )
-  AND v.contact_id = (
-    SELECT w.contact_id
-    FROM vw_role_candidates_scored w
-    WHERE w.municipality_id = v.municipality_id
-      AND w.role_normalized = v.role_normalized
-      AND COALESCE(w.is_revize, 0) = 1
-      AND w.candidate_state = 'candidate_for_review'
-      AND COALESCE(w.is_likely_noise, 0) = 0
-      AND NULLIF(TRIM(COALESCE(w.winner_disqualifier_reason, '')), '') IS NULL
-    ORDER BY
-      w.candidate_score DESC,
-      COALESCE(w.display_confidence, 0.0) DESC,
-      COALESCE(w.contact_id, '') ASC
-    LIMIT 1
-  )
+WITH eligible_candidates AS (
+  SELECT
+    v.*,
+    CASE
+      WHEN COALESCE(v.is_revize, 0) = 1
+      THEN COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+      ELSE NULLIF(TRIM(COALESCE(v.role_normalized, '')), '')
+    END AS role_group,
+    ROW_NUMBER() OVER (
+      PARTITION BY v.municipality_id,
+                   CASE
+                     WHEN COALESCE(v.is_revize, 0) = 1
+                     THEN COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+                     ELSE NULLIF(TRIM(COALESCE(v.role_normalized, '')), '')
+                   END
+      ORDER BY
+        CASE
+          WHEN v.candidate_state = 'high_confidence_winner' THEN 1
+          WHEN v.candidate_state = 'candidate_for_review' THEN 2
+        END,
+        v.candidate_score DESC,
+        COALESCE(v.display_confidence, 0.0) DESC,
+        COALESCE(v.contact_id, '') ASC
+    ) AS rn,
+    CASE
+      WHEN v.candidate_state = 'high_confidence_winner' THEN 0
+      ELSE 1
+    END AS forced_fallback
+  FROM vw_role_candidates_scored v
+  WHERE v.candidate_state = 'high_confidence_winner'
+     OR (
+       COALESCE(v.is_revize, 0) = 1
+       AND v.candidate_state = 'candidate_for_review'
+       AND COALESCE(v.is_likely_noise, 0) = 0
+       AND NULLIF(TRIM(COALESCE(v.winner_disqualifier_reason, '')), '') IS NULL
+     )
+)
+SELECT *
+FROM eligible_candidates
+WHERE rn = 1
 """.strip()
 
 

@@ -224,6 +224,66 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(review_candidate["winner_disqualifier_reason"], "")
         self.assertIsNone(unresolved)
 
+    def test_role_group_ranking_keeps_single_winner_when_high_confidence_exists_in_family(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="planner_winner",
+            municipality_id="ct_group_rank",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Pat Planner",
+            title="Town Planner",
+            department="Planning & Zoning",
+            email="planner@town.org",
+            phone="8605550200",
+            page_type="staff_directory",
+            source_url="https://town.example.org/planning",
+            source_context="revize:labeled_staff|page_class=staff_directory",
+            display_confidence=0.83,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="land_use_review",
+            municipality_id="ct_group_rank",
+            role_normalized="Land Use",
+            role_family="planning_zoning",
+            name="Lana Use",
+            title="Land Use Administrator",
+            department="Planning & Zoning",
+            email="",
+            phone="8605550201",
+            page_type="staff_directory",
+            source_url="https://town.example.org/land-use",
+            source_context="revize:labeled_staff|page_class=staff_directory",
+            display_confidence=0.79,
+            suspicious_reason=None,
+        )
+        winners = conn.execute(
+            """
+            SELECT contact_id, role_normalized, forced_fallback
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ?
+            ORDER BY contact_id
+            """,
+            ("ct_group_rank",),
+        ).fetchall()
+        unresolved = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ?
+            """,
+            ("ct_group_rank",),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(winners[0]["contact_id"], "planner_winner")
+        self.assertEqual(winners[0]["role_normalized"], "Planner")
+        self.assertEqual(int(winners[0]["forced_fallback"]), 0)
+        self.assertEqual(int(unresolved["cnt"]), 0)
+
     def test_directory_context_not_over_penalized(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
