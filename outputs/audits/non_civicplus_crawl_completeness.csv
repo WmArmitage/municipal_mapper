@@ -1,0 +1,84 @@
+municipality_id,town_name,platform_vendor,homepage_url,batch_id,processed_in_db,pages_count,contacts_count,winners_count,blocked_403_count,crawl_diagnostic_class,classification
+ct_bloomfield,Bloomfield,,https://www.bloomfieldct.gov/,batch_non_civicplus_baseline,no,,108,6,0,ok,ready_for_extraction_qa
+ct_cornwall,Cornwall,,https://cornwallct.org/,batch_non_civicplus_baseline,no,,54,6,0,ok,ready_for_extraction_qa
+ct_east_lyme,East Lyme,,https://eltownhall.com/,batch_non_civicplus_baseline,no,,0,0,0,probable_js_shell,needs_deep_page_scrape
+ct_hebron,Hebron,,https://www.hebronct.com/,batch_non_civicplus_baseline,no,,17,7,0,ok,no_action_until_manual_review
+ct_lyme,Lyme,,https://townlyme.org/,batch_non_civicplus_baseline,no,,29,7,0,ok,no_action_until_manual_review
+ct_norfolk,Norfolk,,https://norfolkct.org/,batch_non_civicplus_baseline,no,,29,6,0,ok,no_action_until_manual_review
+ct_portland,Portland,,https://www.portlandct.org/,batch_non_civicplus_baseline,no,,70,6,0,ok,no_action_until_manual_review
+ct_redding,Redding,,https://reddingct.gov/,batch_non_civicplus_baseline,no,,66,8,0,ok,no_action_until_manual_review
+ct_union,Union,,https://www.unionconnecticut.org/,batch_non_civicplus_baseline,no,,31,6,0,ok,no_action_until_manual_review
+ct_east_granby,East Granby,AWR Web Design,https://eastgranbyct.org/,batch_non_civicplus_baseline,no,,52,7,0,ok,ready_for_extraction_qa
+ct_hartland,Hartland,AWR Web Design,https://www.hartlandct.org/,batch_non_civicplus_baseline,no,,22,6,0,ok,no_action_until_manual_review
+ct_stratford,Stratford,Apptegy,https://www.townofstratford.com/,batch_non_civicplus_baseline,no,,0,0,0,probable_js_shell,needs_deep_page_scrape
+ct_vernon,Vernon,Apptegy,https://www.vernon-ct.gov/,batch_non_civicplus_baseline,no,,0,0,0,probable_js_shell,needs_deep_page_scrape
+ct_bolton,Bolton,Aptuitiv,https://www.boltonct.gov/,batch_non_civicplus_baseline,no,,27,6,0,ok,ready_for_extraction_qa
+ct_monroe,Monroe,Catalis,https://www.monroect.gov/,batch_non_civicplus_baseline,no,,75,6,0,ok,ready_for_extraction_qa
+ct_naugatuck,Naugatuck,Catalis,http://www.naugatuck-ct.gov/,batch_non_civicplus_baseline,no,,9,0,0,ok,extraction_gap
+ct_new_london,New London,Catalis,https://newlondonct.gov/,batch_non_civicplus_baseline,no,,2,0,0,ok,extraction_gap
+ct_new_milford,New Milford,Catalis,https://www.newmilford.org/,batch_non_civicplus_baseline,no,,76,6,0,ok,ready_for_extraction_qa
+ct_shelton,Shelton,Catalis,https://cityofshelton.org/,batch_non_civicplus_baseline,no,,30,5,0,ok,ready_for_extraction_qa
+ct_southbury,Southbury,Catalis,https://www.southbury-ct.org/,batch_non_civicplus_baseline,no,,37,6,0,ok,ready_for_extraction_qa
+ct_waterbury,Waterbury,Catalis,https://www.waterburyct.org/,batch_non_civicplus_baseline,no,,89,4,0,ok,ready_for_extraction_qa
+ct_woodbury,Woodbury,Catalis,https://woodburyct.org/,batch_non_civicplus_baseline,no,,40,7,0,ok,ready_for_extraction_qa
+ct_ansonia,Ansonia,Catalisgov,https://www.cityofansonia.com/,batch_non_civicplus_baseline,no,,55,6,0,ok,ready_for_extraction_qa
+ct_bethany,Bethany,Catalisgov,https://bethany-ct.com/,batch_non_civicplus_baseline,no,,40,8,0,ok,ready_for_extraction_qa
+ct_bethel,Bethel,Catalisgov,https://bethel-ct.gov/,batch_non_civicplus_baseline,no,,64,8,0,ok,no_action_until_manual_review
+ct_bethlehem,Bethlehem,Catalisgov,https://bethlehemct.org/,batch_non_civicplus_baseline,no,,24,6,0,ok,no_action_until_manual_review
+ct_canton,Canton,Catalisgov,https://www.townofcantonct.org/,batch_non_civicplus_baseline,no,,80,8,0,ok,ready_for_extraction_qa
+ct_barkhamsted,Barkhamsted,CivicLift,https://www.barkhamsted.us/,batch_non_civicplus_baseline,no,,97,7,0,ok,ready_for_extraction_qa
+ct_canaan,Canaan,CivicLift,https://www.canaanfallsvillage.org/,batch_non_civicplus_baseline,no,,67,7,0,ok,ready_for_extraction_qa
+ct_durham,Durham,CivicLift,https://www.townofdurhamct.org/,batch_non_civicplus_baseline,no,,61,8,0,ok,no_action_until_manual_review
+ct_litchfield,Litchfield,CivicLift,https://www.townoflitchfieldct.gov/,batch_non_civicplus_baseline,no,,55,7,0,ok,no_action_until_manual_review
+ct_morris,Morris,CivicLift,https://www.morrisct.gov/,batch_non_civicplus_baseline,no,,48,6,0,ok,ready_for_extraction_qa
+ct_north_canaan,North Canaan,CivicLift,https://www.northcanaan.org/,batch_non_civicplus_baseline,no,,28,7,0,ok,ready_for_extraction_qa
+ct_scotland,Scotland,CivicLift,https://www.scotlandct.org/,batch_non_civicplus_baseline,no,,46,8,0,ok,no_action_until_manual_review
+ct_sherman,Sherman,CivicLift,https://www.shermanct.gov/,batch_non_civicplus_baseline,no,,48,8,0,ok,no_action_until_manual_review
+ct_thomaston,Thomaston,CivicLift,https://www.thomastonct.gov/,batch_non_civicplus_baseline,no,,52,7,0,ok,no_action_until_manual_review
+ct_winchester,Winchester,CivicLift,https://www.townofwinchester.org/,batch_non_civicplus_baseline,no,,66,10,0,ok,no_action_until_manual_review
+ct_berlin,Berlin,CoreBT,https://www.berlinct.gov/,batch_non_civicplus_baseline,no,,88,6,0,ok,no_action_until_manual_review
+ct_east_haddam,East Haddam,EvoGov,https://www.easthaddam.org/,batch_non_civicplus_baseline,no,,90,8,0,ok,no_action_until_manual_review
+ct_plymouth,Plymouth,EvoGov,https://www.plymouthct.gov/,batch_non_civicplus_baseline,no,,22,4,0,ok,no_action_until_manual_review
+ct_seymour,Seymour,EvoGov,https://www.seymourct.org/,batch_non_civicplus_baseline,no,,60,8,0,ok,no_action_until_manual_review
+ct_derby,Derby,Evogov,https://www.derbyct.gov/,batch_non_civicplus_baseline,no,,1,0,0,ok,needs_deep_page_scrape
+ct_putnam,Putnam,Finalsite,https://www.putnamct.us/,batch_non_civicplus_baseline,no,,15,7,0,ok,no_action_until_manual_review
+ct_suffield,Suffield,Finalsite,https://www.suffieldct.gov/,batch_non_civicplus_baseline,no,,74,8,0,ok,no_action_until_manual_review
+ct_west_hartford,West Hartford,Finalsite,https://www.westhartfordct.gov/,batch_non_civicplus_baseline,no,,62,6,0,ok,no_action_until_manual_review
+ct_farmington,Farmington,Granicus,https://www.farmington-ct.org/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_glastonbury,Glastonbury,Granicus,https://www.glastonburyct.gov/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_hartford,Hartford,Granicus,https://www.hartfordct.gov/Home,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_manchester,Manchester,Granicus,https://www.manchesterct.gov/Home,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_new_fairfield,New Fairfield,Granicus,https://www.newfairfield.org/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_new_haven,New Haven,Granicus,https://www.newhavenct.gov/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_stamford,Stamford,Granicus,https://www.stamfordct.gov/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_weston,Weston,Granicus,https://www.westonct.gov/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_westport,Westport,Granicus,https://www.westportct.gov/,batch_granicus_vendor_probe,no,,0,0,2,blocked_or_forbidden,blocked_or_403
+ct_killingworth,Killingworth,PurpleDog,https://townofkillingworth.com/,batch_non_civicplus_baseline,no,,60,7,0,ok,no_action_until_manual_review
+ct_chaplin,Chaplin,Quasar,https://www.chaplinct.org/,batch_non_civicplus_baseline,no,,52,7,0,ok,no_action_until_manual_review
+ct_hampton,Hampton,Quasar Internet Solutions,https://www.hamptonct.org/,batch_non_civicplus_baseline,no,,24,5,0,ok,no_action_until_manual_review
+ct_sprague,Sprague,"Quasar Internet Solutions, they use news page to post job listings",https://www.ctsprague.org/,batch_non_civicplus_baseline,no,,65,8,0,ok,no_action_until_manual_review
+ct_avon,Avon,Revize,https://www.avonct.gov/,batch_revize_trace,yes,92,78,7,0,ok,ready_for_extraction_qa
+ct_fairfield,Fairfield,Revize,https://www.fairfieldct.org/,batch_revize_trace,yes,7,1,0,0,ok,needs_deep_page_scrape
+ct_griswold,Griswold,Revize,https://www.griswold-ct.org/,batch_revize_trace,yes,9,34,1,0,ok,no_action_until_manual_review
+ct_groton,Groton,Revize,https://www.groton-ct.gov/,batch_revize_trace,yes,19,32,0,0,ok,extraction_gap
+ct_guilford,Guilford,Revize,https://www.guilfordct.gov/,batch_revize_trace,yes,18,40,2,0,ok,no_action_until_manual_review
+ct_killingly,Killingly,Revize,https://www.killinglyct.gov/,batch_revize_trace,yes,16,20,2,0,ok,ready_for_extraction_qa
+ct_marlborough,Marlborough,Revize,https://www.marlboroughct.net/,batch_revize_trace,yes,7,22,1,0,ok,ready_for_extraction_qa
+ct_new_canaan,New Canaan,Revize,https://www.newcanaan.info/,batch_revize_trace,yes,13,17,3,0,ok,ready_for_extraction_qa
+ct_north_haven,North Haven,Revize,https://www.northhaven-ct.gov/,batch_revize_trace,yes,5,15,1,0,ok,no_action_until_manual_review
+ct_plainfield,Plainfield,Revize,https://www.plainfieldct.org/,batch_revize_trace,yes,13,13,1,0,ok,ready_for_extraction_qa
+ct_ridgefield,Ridgefield,Revize,https://www.ridgefieldct.gov/,batch_revize_trace,yes,11,22,3,0,ok,ready_for_extraction_qa
+ct_southington,Southington,Revize,https://www.southington.org/,batch_revize_trace,yes,7,16,1,0,ok,ready_for_extraction_qa
+ct_stafford,Stafford,Revize,https://www.staffordct.org/,batch_revize_trace,yes,18,46,0,0,ok,extraction_gap
+ct_watertown,Watertown,Revize,https://www.watertownct.org/,batch_revize_trace,yes,5,17,0,0,ok,extraction_gap
+ct_windsor_locks,Windsor Locks,Town Web,https://windsorlocksct.org/,batch_non_civicplus_baseline,no,,46,7,0,ok,no_action_until_manual_review
+ct_prospect,Prospect,TownWeb,https://townofprospect.gov/,batch_non_civicplus_baseline,no,,17,5,0,ok,no_action_until_manual_review
+ct_meriden,Meriden,Web Solutions,https://www.meridenct.gov/,batch_non_civicplus_baseline,no,,94,5,0,ok,ready_for_extraction_qa
+ct_montville,Montville,Web Solutions,https://www.townofmontville.org/,batch_non_civicplus_baseline,no,,107,7,0,ok,no_action_until_manual_review
+ct_wallingford,Wallingford,Web Solutions,https://www.wallingfordct.gov/,batch_non_civicplus_baseline,no,,123,6,0,ok,ready_for_extraction_qa
+ct_colebrook,Colebrook,Wordpress,https://www.townofcolebrook.org/,batch_non_civicplus_baseline,no,,33,7,0,ok,ready_for_extraction_qa
+ct_salisbury,Salisbury,Wordpress,https://www.salisburyct.us/,batch_non_civicplus_baseline,no,,40,7,0,ok,no_action_until_manual_review
+ct_somers,Somers,egovlink,https://www.somersct.gov/,batch_non_civicplus_baseline,no,,38,6,0,ok,ready_for_extraction_qa
+ct_ellington,Ellington,finalsite,https://www.ellington-ct.gov/,batch_non_civicplus_baseline,no,,23,5,0,ok,ready_for_extraction_qa
+ct_new_britain,New Britain,finalsite,https://www.newbritainct.gov/,batch_non_civicplus_baseline,no,,48,4,0,ok,ready_for_extraction_qa
+ct_bridgeport,Bridgeport,ifsight,https://www.bridgeportct.gov/,batch_non_civicplus_baseline,no,,52,5,0,ok,no_action_until_manual_review
