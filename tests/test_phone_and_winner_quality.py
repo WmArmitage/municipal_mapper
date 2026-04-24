@@ -171,6 +171,59 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertIsNotNone(unresolved)
         self.assertEqual(int(unresolved["forced_fallback_blocked"]), 1)
 
+    def test_clean_review_candidate_promotes_when_no_high_confidence_winner_exists(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="review_assessor",
+            municipality_id="ct_review_promote",
+            role_normalized="Assessor",
+            role_family="assessor",
+            name="Jane Doe",
+            title="",
+            department="",
+            email="",
+            phone="8605550100",
+            page_type="staff_directory",
+            source_url="https://town.example.org/departments/assessor/index.php",
+            source_context="revize:labeled_staff|page_class=staff_directory",
+            display_confidence=0.81,
+            suspicious_reason=None,
+        )
+        winner = conn.execute(
+            """
+            SELECT contact_id, candidate_state, forced_fallback
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_review_promote", "Assessor"),
+        ).fetchone()
+        review_candidate = conn.execute(
+            """
+            SELECT contact_id, candidate_state, winner_disqualifier_reason
+            FROM vw_role_candidates_scored
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_review_promote", "Assessor"),
+        ).fetchone()
+        unresolved = conn.execute(
+            """
+            SELECT role_normalized
+            FROM vw_unresolved_roles
+            WHERE municipality_id = ? AND role_normalized = ?
+            """,
+            ("ct_review_promote", "Assessor"),
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["contact_id"], "review_assessor")
+        self.assertEqual(winner["candidate_state"], "candidate_for_review")
+        self.assertEqual(int(winner["forced_fallback"]), 1)
+        self.assertIsNotNone(review_candidate)
+        self.assertEqual(review_candidate["candidate_state"], "candidate_for_review")
+        self.assertEqual(review_candidate["winner_disqualifier_reason"], "")
+        self.assertIsNone(unresolved)
+
     def test_directory_context_not_over_penalized(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(
@@ -733,8 +786,8 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         )
         conn.execute(FALLBACK_VW_CONTACTS_CLEAN_SQL)
         conn.execute(FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL)
-        conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
         conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
+        conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
         return conn
 
     def _insert_contact(self, conn: sqlite3.Connection, **overrides: object) -> None:

@@ -351,8 +351,8 @@ class RevizeTraceCollectorTests(unittest.TestCase):
         )
         conn.execute(FALLBACK_VW_CONTACTS_CLEAN_SQL)
         conn.execute(FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL)
-        conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
         conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
+        conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
         return conn
 
     def _insert_contact(self, conn: sqlite3.Connection, **overrides: object) -> None:

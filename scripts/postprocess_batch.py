@@ -534,11 +534,15 @@ WITH role_counts AS (
     role_normalized,
     COUNT(*) AS candidate_count,
     SUM(CASE WHEN candidate_state = 'candidate_for_review' THEN 1 ELSE 0 END) AS review_candidate_count,
-    SUM(CASE WHEN candidate_state = 'high_confidence_winner' THEN 1 ELSE 0 END) AS winner_count,
     SUM(CASE WHEN invalid_candidate_disqualified = 1 THEN 1 ELSE 0 END) AS invalid_candidate_disqualified_count
   FROM vw_role_candidates_scored
   WHERE is_revize = 1
   GROUP BY municipality_id, role_normalized
+),
+selected_winners AS (
+  SELECT DISTINCT municipality_id, role_normalized
+  FROM vw_best_role_per_town
+  WHERE COALESCE(is_revize, 0) = 1
 ),
 top_candidates AS (
   SELECT *
@@ -553,7 +557,7 @@ SELECT
   rc.review_candidate_count,
   rc.invalid_candidate_disqualified_count,
   CASE
-    WHEN rc.candidate_count > 0 AND rc.winner_count = 0 THEN 1
+    WHEN rc.candidate_count > 0 AND sw.role_normalized IS NULL THEN 1
     ELSE 0
   END AS forced_fallback_blocked,
   tc.contact_id AS top_candidate_contact_id,
@@ -568,10 +572,13 @@ SELECT
   tc.candidate_state AS top_candidate_state,
   tc.winner_disqualifier_reason AS top_candidate_winner_block_reason
 FROM role_counts rc
+LEFT JOIN selected_winners sw
+  ON sw.municipality_id = rc.municipality_id
+ AND sw.role_normalized = rc.role_normalized
 LEFT JOIN top_candidates tc
   ON tc.municipality_id = rc.municipality_id
  AND tc.role_normalized = rc.role_normalized
-WHERE rc.winner_count = 0
+WHERE sw.role_normalized IS NULL
 """.strip()
 
 
@@ -583,6 +590,38 @@ SELECT
   0 AS forced_fallback
 FROM vw_role_candidates_scored v
 WHERE v.candidate_state = 'high_confidence_winner'
+UNION ALL
+SELECT
+  v.*,
+  v.candidate_rank AS rn,
+  1 AS forced_fallback
+FROM vw_role_candidates_scored v
+WHERE COALESCE(v.is_revize, 0) = 1
+  AND v.candidate_state = 'candidate_for_review'
+  AND COALESCE(v.is_likely_noise, 0) = 0
+  AND NULLIF(TRIM(COALESCE(v.winner_disqualifier_reason, '')), '') IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM vw_role_candidates_scored w
+    WHERE w.municipality_id = v.municipality_id
+      AND w.role_normalized = v.role_normalized
+      AND w.candidate_state = 'high_confidence_winner'
+  )
+  AND v.contact_id = (
+    SELECT w.contact_id
+    FROM vw_role_candidates_scored w
+    WHERE w.municipality_id = v.municipality_id
+      AND w.role_normalized = v.role_normalized
+      AND COALESCE(w.is_revize, 0) = 1
+      AND w.candidate_state = 'candidate_for_review'
+      AND COALESCE(w.is_likely_noise, 0) = 0
+      AND NULLIF(TRIM(COALESCE(w.winner_disqualifier_reason, '')), '') IS NULL
+    ORDER BY
+      w.candidate_score DESC,
+      COALESCE(w.display_confidence, 0.0) DESC,
+      COALESCE(w.contact_id, '') ASC
+    LIMIT 1
+  )
 """.strip()
 
 
@@ -1833,8 +1872,8 @@ def refresh_views(conn: sqlite3.Connection) -> None:
 
     conn.execute(current_vw_contacts_clean or FALLBACK_VW_CONTACTS_CLEAN_SQL)
     conn.execute(FALLBACK_VW_ROLE_CANDIDATES_SCORED_SQL)
-    conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
     conn.execute(FALLBACK_VW_BEST_ROLE_PER_TOWN_SQL)
+    conn.execute(FALLBACK_VW_UNRESOLVED_ROLES_SQL)
 
 
 def _count_rows_for_scope(conn: sqlite3.Connection, object_name: str, municipality_ids: list[str]) -> int:
