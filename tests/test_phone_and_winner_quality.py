@@ -284,6 +284,115 @@ class PhoneAndWinnerQualityTests(unittest.TestCase):
         self.assertEqual(int(winners[0]["forced_fallback"]), 0)
         self.assertEqual(int(unresolved["cnt"]), 0)
 
+    def test_building_primary_and_secondary_subgroups_can_both_win(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="building_primary",
+            municipality_id="ct_building_subgroups",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Pat Official",
+            title="Building Official",
+            department="Building",
+            email="official@town.org",
+            phone="8605550400",
+            page_type="staff_directory",
+            source_url="https://town.example.org/building",
+            source_context="revize:labeled_staff|page_class=staff_directory",
+            display_confidence=0.82,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="building_secondary",
+            municipality_id="ct_building_subgroups",
+            role_normalized="Building Official",
+            role_family="building",
+            name="Sam Inspector",
+            title="Building Inspector",
+            department="Building",
+            email="inspector@town.org",
+            phone="8605550401",
+            page_type="staff_directory",
+            source_url="https://town.example.org/building",
+            source_context="revize:labeled_staff|page_class=staff_directory",
+            display_confidence=0.79,
+            suspicious_reason=None,
+        )
+        winners = conn.execute(
+            """
+            SELECT contact_id, role_group
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ?
+            ORDER BY role_group
+            """,
+            ("ct_building_subgroups",),
+        ).fetchall()
+        conn.close()
+        self.assertEqual(len(winners), 2)
+        self.assertEqual(
+            [(row["contact_id"], row["role_group"]) for row in winners],
+            [
+                ("building_primary", "building_primary"),
+                ("building_secondary", "building_secondary"),
+            ],
+        )
+
+    def test_planning_director_with_zeo_stays_primary(self) -> None:
+        conn = self._build_postprocess_test_db()
+        self._insert_contact(
+            conn,
+            contact_id="planning_director_primary",
+            municipality_id="ct_planning_subgroups",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Aarti Paranjape",
+            title="Director of Planning & Zoning Chief Zoning Enforcement Officer",
+            department="Planning And Zoning",
+            email="planner@town.org",
+            phone="8605550402",
+            page_type="department_page",
+            source_url="https://town.example.org/planning",
+            source_context="revize:contact_card|page_class=department_page",
+            display_confidence=0.74,
+            suspicious_reason=None,
+        )
+        self._insert_contact(
+            conn,
+            contact_id="planning_secondary",
+            municipality_id="ct_planning_subgroups",
+            role_normalized="Planner",
+            role_family="planning_zoning",
+            name="Emily Kyle",
+            title="Assistant Zoning Enforcement Officer",
+            department="Planning And Zoning",
+            email="assistant@town.org",
+            phone="8605550403",
+            page_type="staff_directory",
+            source_url="https://town.example.org/planning",
+            source_context="revize:labeled_staff|page_class=staff_directory",
+            display_confidence=0.79,
+            suspicious_reason=None,
+        )
+        winners = conn.execute(
+            """
+            SELECT contact_id, role_group
+            FROM vw_best_role_per_town
+            WHERE municipality_id = ?
+            ORDER BY role_group
+            """,
+            ("ct_planning_subgroups",),
+        ).fetchall()
+        conn.close()
+        self.assertEqual(
+            [(row["contact_id"], row["role_group"]) for row in winners],
+            [
+                ("planning_director_primary", "planning_zoning_primary"),
+                ("planning_secondary", "planning_zoning_secondary"),
+            ],
+        )
+
     def test_directory_context_not_over_penalized(self) -> None:
         conn = self._build_postprocess_test_db()
         self._insert_contact(

@@ -615,10 +615,62 @@ CREATE VIEW vw_unresolved_roles AS
 WITH grouped_candidates AS (
   SELECT
     v.*,
-    COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), '')) AS role_group,
+    CASE
+      WHEN COALESCE(v.is_revize, 0) = 1 AND COALESCE(v.role_family, '') = 'building'
+      THEN CASE
+        WHEN v.title_norm LIKE '%assistant%'
+             OR v.title_norm LIKE '%inspector%'
+        THEN 'building_secondary'
+        ELSE 'building_primary'
+      END
+      WHEN COALESCE(v.is_revize, 0) = 1 AND COALESCE(v.role_family, '') = 'planning_zoning'
+      THEN CASE
+        WHEN v.title_norm LIKE '%director%'
+             OR v.title_norm LIKE '%planner%'
+        THEN 'planning_zoning_primary'
+        WHEN v.title_norm LIKE '%assistant%'
+             OR v.title_norm LIKE '%zoning enforcement officer%'
+             OR (' ' || v.title_norm || ' ') LIKE '% zeo %'
+        THEN 'planning_zoning_secondary'
+        ELSE 'planning_zoning_primary'
+      END
+      WHEN COALESCE(v.is_revize, 0) = 1 AND COALESCE(v.role_family, '') = 'assessor'
+      THEN CASE
+        WHEN v.title_norm LIKE '%assistant%'
+        THEN 'assessor_secondary'
+        ELSE 'assessor_primary'
+      END
+      ELSE COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+    END AS role_group,
     ROW_NUMBER() OVER (
       PARTITION BY v.municipality_id,
-                   COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+                   CASE
+                     WHEN COALESCE(v.is_revize, 0) = 1 AND COALESCE(v.role_family, '') = 'building'
+                     THEN CASE
+                       WHEN v.title_norm LIKE '%assistant%'
+                            OR v.title_norm LIKE '%inspector%'
+                       THEN 'building_secondary'
+                       ELSE 'building_primary'
+                     END
+                     WHEN COALESCE(v.is_revize, 0) = 1 AND COALESCE(v.role_family, '') = 'planning_zoning'
+                     THEN CASE
+                       WHEN v.title_norm LIKE '%director%'
+                            OR v.title_norm LIKE '%planner%'
+                       THEN 'planning_zoning_primary'
+                       WHEN v.title_norm LIKE '%assistant%'
+                            OR v.title_norm LIKE '%zoning enforcement officer%'
+                            OR (' ' || v.title_norm || ' ') LIKE '% zeo %'
+                       THEN 'planning_zoning_secondary'
+                       ELSE 'planning_zoning_primary'
+                     END
+                     WHEN COALESCE(v.is_revize, 0) = 1 AND COALESCE(v.role_family, '') = 'assessor'
+                     THEN CASE
+                       WHEN v.title_norm LIKE '%assistant%'
+                       THEN 'assessor_secondary'
+                       ELSE 'assessor_primary'
+                     END
+                     ELSE COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+                   END
       ORDER BY
         v.candidate_score DESC,
         COALESCE(v.display_confidence, 0.0) DESC,
@@ -768,14 +820,66 @@ WITH eligible_candidates AS (
     v.*,
     CASE
       WHEN COALESCE(v.is_revize, 0) = 1
-      THEN COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+      THEN CASE
+        WHEN COALESCE(v.role_family, '') = 'building'
+        THEN CASE
+          WHEN v.title_norm LIKE '%assistant%'
+               OR v.title_norm LIKE '%inspector%'
+          THEN 'building_secondary'
+          ELSE 'building_primary'
+        END
+        WHEN COALESCE(v.role_family, '') = 'planning_zoning'
+        THEN CASE
+          WHEN v.title_norm LIKE '%director%'
+               OR v.title_norm LIKE '%planner%'
+          THEN 'planning_zoning_primary'
+          WHEN v.title_norm LIKE '%assistant%'
+               OR v.title_norm LIKE '%zoning enforcement officer%'
+               OR (' ' || v.title_norm || ' ') LIKE '% zeo %'
+          THEN 'planning_zoning_secondary'
+          ELSE 'planning_zoning_primary'
+        END
+        WHEN COALESCE(v.role_family, '') = 'assessor'
+        THEN CASE
+          WHEN v.title_norm LIKE '%assistant%'
+          THEN 'assessor_secondary'
+          ELSE 'assessor_primary'
+        END
+        ELSE COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+      END
       ELSE NULLIF(TRIM(COALESCE(v.role_normalized, '')), '')
     END AS role_group,
     ROW_NUMBER() OVER (
       PARTITION BY v.municipality_id,
                    CASE
                      WHEN COALESCE(v.is_revize, 0) = 1
-                     THEN COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+                     THEN CASE
+                       WHEN COALESCE(v.role_family, '') = 'building'
+                       THEN CASE
+                         WHEN v.title_norm LIKE '%assistant%'
+                              OR v.title_norm LIKE '%inspector%'
+                         THEN 'building_secondary'
+                         ELSE 'building_primary'
+                       END
+                       WHEN COALESCE(v.role_family, '') = 'planning_zoning'
+                       THEN CASE
+                         WHEN v.title_norm LIKE '%director%'
+                              OR v.title_norm LIKE '%planner%'
+                         THEN 'planning_zoning_primary'
+                         WHEN v.title_norm LIKE '%assistant%'
+                              OR v.title_norm LIKE '%zoning enforcement officer%'
+                              OR (' ' || v.title_norm || ' ') LIKE '% zeo %'
+                         THEN 'planning_zoning_secondary'
+                         ELSE 'planning_zoning_primary'
+                       END
+                       WHEN COALESCE(v.role_family, '') = 'assessor'
+                       THEN CASE
+                         WHEN v.title_norm LIKE '%assistant%'
+                         THEN 'assessor_secondary'
+                         ELSE 'assessor_primary'
+                       END
+                       ELSE COALESCE(NULLIF(TRIM(COALESCE(v.role_family, '')), ''), NULLIF(TRIM(COALESCE(v.role_normalized, '')), ''))
+                     END
                      ELSE NULLIF(TRIM(COALESCE(v.role_normalized, '')), '')
                    END
       ORDER BY

@@ -1,5 +1,5 @@
 municipality_id,town_name,county,raw_contacts,clean_contacts,role_winners,service_links
-ct_avon,Avon,Hartford County,83,78,4,0
+ct_avon,Avon,Hartford County,83,78,7,0
 ct_fairfield,Fairfield,Fairfield County,2,1,0,0
 ct_griswold,Griswold,New London County,35,34,2,0
 ct_groton,Groton,New London County,33,32,0,0
