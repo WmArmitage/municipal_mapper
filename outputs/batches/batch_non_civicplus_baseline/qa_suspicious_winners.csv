@@ -1,56 +1,55 @@
-municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,suspicious_reason
-ct_avon,Town Clerk,,bsd@ct.gov,8604094300,,staff_directory,https://www.avonct.gov/departments/town_clerk/trade_names_.php,0,role_department_mismatch
-ct_berlin,Assessor,,mgiusti@berlinct.gov,8608287060,,staff_directory,https://www.berlinct.gov/egov/apps/staff/directory.egov?view=detail;id=33,0,role_department_mismatch
-ct_bethel,Assessor,Michael Connors,connorsm@bethel-ct.gov,2037948518,,homepage,https://bethel-ct.gov/fire-forms,0,role_department_mismatch
-ct_bethel,Finance Director,Assistant Finance,prestons@bethel-ct.gov,2037948513,,homepage,https://bethel-ct.gov/budget,0,low_context
-ct_bethel,Town Clerk,CARLOS GALLEGOS,caralbt@aol.com,2037948506,,department_page,https://bethel-ct.gov/depts-clerk,0,role_department_mismatch
-ct_bethlehem,Assessor,Assistant Elsie White,assessor.assistant@bethlehemct.org,2032667510,Assessor,department_page,https://bethlehemct.org/tax-collector,0,assessor_tax_mismatch
-ct_bridgeport,Assessor,,,2035767241,Assessor,staff_directory,https://www.bridgeportct.gov/government/departments/tax-collector/frequently-asked-questions,0,assessor_tax_mismatch
-ct_chaplin,Building Official,Joe Smith,assessor@chaplinct.org,8604550073,assessor,staff_directory,https://www.chaplinct.org/directory.htm,0,role_department_mismatch
-ct_durham,Finance Director,UNA Finance,bmoncata@townofdurhamct.org,8603499366,,board_page,https://www.townofdurhamct.org/entities/board-of-finance,0,low_context
-ct_east_haddam,Finance Director,Valerie Belles,financeadmin@easthaddam.org,8608735022,,staff_directory,https://www.easthaddam.org/staff-directory,0,role_department_mismatch
-ct_fairfield,Building Official,Building Building,pmahoney@fairfieldct.org,2032563036,,department_page,https://fairfieldct.gov/service/building_department/index.php,0,role_department_mismatch
-ct_fairfield,Town Clerk,ACO Paul Miller,pmiller@fairfieldct.org,2032544857,,other,https://fpdct.com/divisions/field_services_bureau/animal_control.php,0,role_department_mismatch
-ct_griswold,Finance Director,of Finance,financedirector@griswoldct.gov,8603767060,,staff_directory,https://www.griswold-ct.org/departments/finance_office/index.php,0,role_department_mismatch
-ct_groton,Finance Director,Richard Freeman,rfreeman@groton-ct.gov,8604416690,,staff_directory,https://www.groton-ct.gov/departments/finance/index.php,0,role_department_mismatch
-ct_guilford,Building Official,,building.perm@guilfordct.gov,2034538029,,staff_directory,https://www.guilfordct.gov/town_departments/building_department/index.php,0,role_department_mismatch
-ct_guilford,Finance Director,,,2034538027,,staff_directory,https://www.guilfordct.gov/town_departments/finance_department/index.php,0,role_department_mismatch
-ct_hampton,Tax Collector,,firstselectman@hamptonct.org,8604559132,,homepage,https://www.hamptonct.org/contact.htm,0,role_department_mismatch
-ct_hartland,Tax Collector,Reminder sticker on,,8606530287,Assessor,staff_directory,https://www.hartlandct.org/departments/town-clerk-3,0,role_department_mismatch
-ct_hebron,Assessor,,,8602285971,Tax Collector,staff_directory,https://hebronct.com/town-departments/tax-collectors-office/,0,role_department_mismatch
-ct_hebron,Finance Director,,,8602285971,,staff_directory,https://hebronct.com/town-departments/finance-department/,0,role_department_mismatch
-ct_killingworth,Finance Director,Regina Regolo,rregolo@townofkillingworth.com,8606631765,,other,https://townofkillingworth.com/finance-department/,0,low_context
-ct_litchfield,Finance Director,of Finance,financedirector@townoflitchfieldct.gov,8605676077,,other,https://www.townoflitchfieldct.gov/entities/finance-department,0,low_context
-ct_lyme,Finance Director,,financedirector@townlyme.org,8604347733,,staff_directory,https://townlyme.org/town-departments/,0,role_department_mismatch
-ct_marlborough,Building Official,Teresa Murdock,building@marlboroughct.gov,8602956202,,department_page,https://www.marlboroughct.net/government/building/index.php,0,role_department_mismatch
-ct_montville,Finance Director,Julie Chapman,,8608486714,,staff_directory,https://www.townofmontville.org/town-directory/finance-department/,0,role_department_mismatch
-ct_new_canaan,First Selectman,Alan Badanes,alan.badanes@newcanaanct.gov,,,board_page,https://www.newcanaan.info/government/boards_councils___elected_officials/finance.php,0,first_selectman_role_page_mismatch
-ct_norfolk,Assessor,Jennifer Pfaltz,events@norfolkct.org,8605425287,,other,https://norfolkct.org/contact-us/,0,role_department_mismatch
-ct_plainfield,Building Official,Administrative Assistant,bhewitt@plainfieldct.org,8602303012,,staff_directory,https://www.plainfieldct.org/departments/building_official/index.php,0,role_department_mismatch
-ct_plainfield,Finance Director,Assistant Finance,dmineau@plainfieldct.org,8602303004,,staff_directory,https://www.plainfieldct.org/departments/finance/index.php,0,role_department_mismatch
-ct_plymouth,Tax Collector,,,8605854036,,staff_directory,https://www.plymouthct.gov/departments/,0,role_department_mismatch
-ct_plymouth,Town Clerk,Judith Giguere,giguerejudy01@gmail.com,8605854039,,staff_directory,https://www.plymouthct.gov/departments/TownClerk/TownHistorian,0,role_department_mismatch
-ct_portland,Finance Director,,trobinson@portlandct.org,8603426726,,homepage,https://www.portlandct.org/finance,0,low_context
-ct_prospect,Town Clerk,,,2037584461,,department_page,https://townofprospect.gov/townclerk/,0,role_department_mismatch
-ct_putnam,Building Official,,,8609636800,,staff_directory,https://www.putnamct.us/departments/building-official,0,role_department_mismatch
-ct_putnam,Finance Director,,,8609636800,,staff_directory,https://www.putnamct.us/departments/finance,0,role_department_mismatch
-ct_redding,Finance Director,Krista Gramer,kgramer@reddingct.gov,2039388481,,department_page,https://reddingct.gov/government/finance-and-taxes/finance-director/,0,low_context
-ct_ridgefield,Assessor,,,2034312768,Planning,staff_directory,https://www.ridgefieldct.gov/departments/planning_and_zoning/index.php,0,role_department_mismatch
-ct_ridgefield,Town Clerk,Military Discharge All,,2034312706,Assessor,staff_directory,https://www.ridgefieldct.gov/departments/town_clerk/military_discharge.php,0,role_department_mismatch
-ct_salisbury,Building Official,Press Release,assessor@salisburyct.us,8604355176,assessor,staff_directory,https://www.salisburyct.us/directory/,0,role_department_mismatch
-ct_scotland,Assessor,Denise Rodriguez,drodriguez@windhamct.gov,8604653029,,other,https://windhamct.gov/199/Revenue-Office,0,role_department_mismatch
-ct_seymour,Finance Director,Christine Olownia,colownia@seymourct.org,2038880581,,staff_directory,https://www.seymourct.org/departments/Finance,0,role_department_mismatch
-ct_sherman,Assessor,Working Families,taxcollector@shermanct.gov,8603544146,"Tabitha Fazzone, CCMC Democrat Republican Independent UNAffiliated GREEN Libertarian Working Families Tax Collector Term",department_page,https://www.shermanct.gov/entities/tax-collector,0,role_department_mismatch
-ct_southington,Tax Collector,Revenue Collector,monnerath@southington.org,8602766259,,staff_directory,https://www.southingtonct.gov/departments/tax_collector/index.php,0,role_department_mismatch
-ct_sprague,Assessor,Building Inspector,buildinginspector@ctsprague.org,8608223000,,staff_directory,https://www.ctsprague.org/departments.htm,0,role_department_mismatch
-ct_sprague,Building Official,Fire Marshal,firemarshal@ctsprague.org,8605018417,,staff_directory,https://www.ctsprague.org/departments.htm,0,role_department_mismatch
-ct_suffield,Finance Director,of Finance Work,,8606683851,,staff_directory,https://www.suffieldct.gov/departments/finance,0,role_department_mismatch
-ct_suffield,Town Clerk,,erecording@cscglobal.com,8666520111,,staff_directory,https://www.suffieldct.gov/departments/townclerk,0,role_department_mismatch
-ct_thomaston,Assessor,of Police jmadden,jmadden@thomastonct.gov,8602834343,,other,https://www.thomastonct.gov/entities/police-department,0,role_department_mismatch
-ct_thomaston,Finance Director,Working Families,tdecker@thomastonct.gov,8602839678,,other,https://www.thomastonct.gov/entities/finance,0,low_context
-ct_union,Building Official,,building@unionconnecticut.org,8602341053,,other,https://www.unionconnecticut.org/contact/,0,role_department_mismatch
-ct_watertown,Assessor,,,8008271000,,staff_directory,https://www.watertownct.org/departments/town_clerk/veterans_discharge.php,0,role_department_mismatch
-ct_watertown,Finance Director,Megan Guiliano,guiliano@watertownct.org,8609455258,,staff_directory,https://www.watertownct.org/departments/finance_department/index.php,0,role_department_mismatch
-ct_west_hartford,Finance Director,Library Director,,8605616970,,other,https://www.westhartfordct.gov/contact-us/town-officials,0,low_context
-ct_winchester,Finance Director,of Finance,,8607386961,,other,https://www.townofwinchester.org/entities/finance-7,0,low_context
-ct_windsor_locks,Finance Director,Steve Brown,,8606271449,,other,https://windsorlocksct.org/finance-department/,0,low_context
+municipality_id,role_normalized,name,email,phone,department,page_type,source_url,is_likely_noise,candidate_score,winner_disqualifier_reason,suspicious_reason
+ct_avon,Town Clerk,THE FOLLOWING,townclerk@avonct.gov,8604094300,for the Town Clerk's Office,staff_directory,https://www.avonct.gov/departments/town_clerk/marriage_license.php,1,32,,likely_noise_flag
+ct_bethany,First Selectman,Patterson,dpatterson@bethanyct.gov,5168146893,Fi rst Selectman,staff_directory,https://bethanyct.gov/directory,0,26,,chief_role_assistant_contamination
+ct_bethel,Finance Director,Assistant Finance,prestons@bethel-ct.gov,2037948513,,homepage,https://bethel-ct.gov/budget,0,15,,low_context
+ct_bethlehem,Assessor,Assistant Elsie White,assessor.assistant@bethlehemct.org,2032667510,Assessor,department_page,https://bethlehemct.org/tax-collector,0,29,,assessor_tax_mismatch
+ct_bloomfield,Town Manager,Senior Administrative,akingland@bloomfieldct.gov,8607693585,,other,https://www.bloomfieldct.gov/493/Town-Managers-Office,0,18,,chief_role_assistant_contamination
+ct_bridgeport,Assessor,,,2035767241,Assessor,staff_directory,https://www.bridgeportct.gov/government/departments/tax-collector/frequently-asked-questions,0,18,,assessor_tax_mismatch
+ct_chaplin,Building Official,Joe Smith,assessor@chaplinct.org,8604550073,assessor,staff_directory,https://www.chaplinct.org/directory.htm,0,29,,role_department_mismatch
+ct_colebrook,Tax Collector,The Tax,lbartlett@colebrooktownhall.org,8603793359,Tax Collector: Laura Bartlett – 204; Assessor: David Dietsch – 206,other,https://www.townofcolebrook.org/location-contact/,1,22,,likely_noise_flag
+ct_colebrook,Town Clerk,Fire Chief,firechief@colebrooktownhall.org,8603522333,,staff_directory,https://www.townofcolebrook.org/town-hall-directory/,0,28,,role_department_mismatch
+ct_durham,Finance Director,UNA Finance,bmoncata@townofdurhamct.org,8603499366,,board_page,https://www.townofdurhamct.org/entities/board-of-finance,0,20,,low_context
+ct_east_haddam,Finance Director,Valerie Belles,financeadmin@easthaddam.org,8608735022,,staff_directory,https://www.easthaddam.org/staff-directory,0,28,,role_department_mismatch
+ct_fairfield,Assessor,Reddit Close,,2032563000,Assessor,department_page,https://fairfieldct.gov/service/tax_assessor/contact_us.php,0,25,,assessor_tax_mismatch
+ct_fairfield,Building Official,Building Building,pmahoney@fairfieldct.org,2032563036,,department_page,https://fairfieldct.gov/service/building_department/index.php,0,25,,role_department_mismatch
+ct_griswold,Finance Director,of Finance,financedirector@griswoldct.gov,8603767060,,staff_directory,https://www.griswold-ct.org/departments/finance_office/index.php,0,26,,role_department_mismatch
+ct_groton,Finance Director,Richard Freeman,rfreeman@groton-ct.gov,8604416690,,staff_directory,https://www.groton-ct.gov/departments/finance/index.php,0,28,,role_department_mismatch
+ct_groton,Town Manager,Lisa Hylton,lhylton@groton-ct.gov,8604416630,,staff_directory,https://www.groton-ct.gov/departments/twnmgr/index.php,0,28,,chief_role_assistant_contamination
+ct_guilford,Finance Director,,,2034538027,,staff_directory,https://www.guilfordct.gov/town_departments/finance_department/index.php,0,6,,role_department_mismatch
+ct_hartland,Tax Collector,Reminder sticker on,,8606530609,Tax Collector,staff_directory,https://www.hartlandct.org/departments/town-clerk-3,0,26,,tax_collector_role_page_mismatch
+ct_hebron,Finance Director,,,8602285971,,staff_directory,https://hebronct.com/town-departments/finance-department/,0,6,,role_department_mismatch
+ct_killingworth,Finance Director,Regina Regolo,rregolo@townofkillingworth.com,8606631765,,other,https://townofkillingworth.com/finance-department/,0,15,,low_context
+ct_litchfield,Finance Director,Erich Marriott,e.marriott@townoflitchfieldct.gov,8605676077,Erich Marriott Town Treasurer,other,https://www.townoflitchfieldct.gov/entities/finance-department,0,22,,role_department_mismatch
+ct_meriden,Tax Collector,The Tax,,2036304053,The Tax Office is open Monday- Friday from 8am - 5pm. Meriden Tax Collector Staff Tax Payment Dates and Information,department_page,https://www.meridenct.gov/city-services/finance/tax-collection/,1,26,,likely_noise_flag
+ct_montville,Assessor,Questions Regarding,,8608480422,Assessor,department_page,https://www.townofmontville.org/department-services/tax-collection/,0,26,,assessor_tax_mismatch
+ct_montville,Finance Director,Julie Chapman,,8608486714,,staff_directory,https://www.townofmontville.org/town-directory/finance-department/,0,25,,role_department_mismatch
+ct_new_canaan,First Selectman,Dionna Carlson,dionna.carlson@newcanaanct.gov,,,board_page,https://www.newcanaan.info/government/boards_councils___elected_officials/finance.php,0,20,,first_selectman_role_page_mismatch
+ct_norfolk,Assessor,Jennifer Pfaltz,events@norfolkct.org,8605425287,,other,https://norfolkct.org/contact-us/,0,18,,role_department_mismatch
+ct_plainfield,Building Official,Administrative Assistant,bhewitt@plainfieldct.org,8602303012,,staff_directory,https://www.plainfieldct.org/departments/building_official/index.php,0,28,,role_department_mismatch
+ct_plainfield,Finance Director,Assistant Finance,dmineau@plainfieldct.org,8602303004,,staff_directory,https://www.plainfieldct.org/departments/finance/index.php,0,28,,role_department_mismatch
+ct_plymouth,Tax Collector,,,8605854036,,staff_directory,https://www.plymouthct.gov/departments/,0,6,,role_department_mismatch
+ct_plymouth,Town Clerk,Judith Giguere,giguerejudy01@gmail.com,8605854039,,staff_directory,https://www.plymouthct.gov/departments/TownClerk/TownHistorian,0,28,,role_department_mismatch
+ct_portland,Finance Director,,trobinson@portlandct.org,8603426726,,homepage,https://www.portlandct.org/finance,0,-4,,low_context
+ct_prospect,Town Clerk,,,2037584461,,department_page,https://townofprospect.gov/townclerk/,0,3,,role_department_mismatch
+ct_putnam,Building Official,,,8609636800,,staff_directory,https://www.putnamct.us/departments/building-official,0,6,,role_department_mismatch
+ct_putnam,Finance Director,,,8609636800,Human Resources,staff_directory,https://www.putnamct.us/departments/human-resources/staff-directory?const_page=3&,0,15,,role_department_mismatch
+ct_redding,Assessor,Pamela Ferraina,pferraina@reddingct.gov,2039382626,"Assessor, CCMA Pamela Ferraina , Assistant Assessor Phone",department_page,https://reddingct.gov/government/finance-and-taxes/assessor-town-of-redding-connecticut/,0,29,,assessor_tax_mismatch
+ct_redding,Finance Director,Krista Gramer,kgramer@reddingct.gov,2039388481,,department_page,https://reddingct.gov/government/finance-and-taxes/finance-director/,0,22,,low_context
+ct_ridgefield,Assessor,Motor Vehicle,,2034312706,Assessor,staff_directory,https://www.ridgefieldct.gov/departments/tax_collector/frequently_asked_questions.php,0,28,,assessor_tax_mismatch
+ct_ridgefield,Town Clerk,Military Discharge All,,2034312706,Assessor,staff_directory,https://www.ridgefieldct.gov/departments/town_clerk/military_discharge.php,0,26,,role_department_mismatch
+ct_salisbury,Building Official,Press Release,assessor@salisburyct.us,8604355176,assessor,staff_directory,https://www.salisburyct.us/directory/,0,29,,role_department_mismatch
+ct_seymour,Finance Director,Christine Olownia,colownia@seymourct.org,2038880581,,staff_directory,https://www.seymourct.org/departments/Finance,0,28,,role_department_mismatch
+ct_sherman,Assessor,,,8603550376,"Yes, to inquire about eligibility or for information contact the Assessor’s office at",department_page,https://www.shermanct.gov/entities/tax-collector,0,15,,assessor_tax_mismatch
+ct_southington,Tax Collector,Revenue Collector,monnerath@southington.org,8602766259,,staff_directory,https://www.southingtonct.gov/departments/tax_collector/index.php,0,28,,role_department_mismatch
+ct_sprague,Assessor,Building Inspector,buildinginspector@ctsprague.org,8608223000,,staff_directory,https://www.ctsprague.org/departments.htm,0,28,,role_department_mismatch
+ct_sprague,Building Official,Fire Marshal,firemarshal@ctsprague.org,8605018417,,staff_directory,https://www.ctsprague.org/departments.htm,0,28,,role_department_mismatch
+ct_suffield,Finance Director,of Finance Work,,8606683851,,staff_directory,https://www.suffieldct.gov/departments/finance,0,23,,role_department_mismatch
+ct_thomaston,Finance Director,Working Families,tdecker@thomastonct.org,8602839678,,board_page,https://www.thomastonct.gov/entities/board-of-finance,0,20,,low_context
+ct_union,Assessor,The Tax,assessor@unionconnecticut.org,8606845705,assessor,department_page,https://www.unionconnecticut.org/assessors-office/,1,28,,likely_noise_flag
+ct_union,Building Official,,building@unionconnecticut.org,8602341053,,other,https://www.unionconnecticut.org/contact/,0,-1,,role_department_mismatch
+ct_watertown,Assessor,this may be,vicenzi@watertownct.org,8602748130,Assessor,staff_directory,https://www.watertownct.org/departments/tax_collector/frequently_asked_questions.php,0,29,,assessor_tax_mismatch
+ct_watertown,Finance Director,Maria Guerrera,mguerrera@watertownct.org,8609455259,,staff_directory,https://www.watertownct.org/departments/finance_department/index.php,0,28,,role_department_mismatch
+ct_west_hartford,Finance Director,Library Director,,8605616970,,other,https://www.westhartfordct.gov/contact-us/town-officials,0,12,,low_context
+ct_winchester,Finance Director,of Finance,,8607386961,,other,https://www.townofwinchester.org/entities/finance-7,0,10,,low_context
+ct_windsor_locks,Building Official,Blight Officer,,8606271447,"McGowan, James Blight Officer Margolfo, Patricia Administrative Assistant, Building, Planning & Zoning",staff_directory,https://windsorlocksct.org/town-employee-directory/,1,25,,likely_noise_flag
+ct_windsor_locks,Finance Director,Steve Brown,,8606271449,,other,https://windsorlocksct.org/finance-department/,0,12,,low_context

@@ -1,47 +1,45 @@
 municipality_id,town_name,review_type,role_normalized,name,email,phone,department,page_type,source_url,missing_role_groups,missing_group_count,suspicious_reason,coverage_interpretation
 ct_ansonia,Ansonia,missing_role_groups_2plus,,,,,,,,tax; building,2,,normal_coverage_gap
 ct_avon,Avon,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; building; finance,5,,normal_coverage_gap
-ct_avon,Avon,suspicious_winner,Town Clerk,,bsd@ct.gov,8604094300,,staff_directory,https://www.avonct.gov/departments/town_clerk/trade_names_.php,,,role_department_mismatch,suspicious_winner
-ct_berlin,Berlin,suspicious_winner,Assessor,,mgiusti@berlinct.gov,8608287060,,staff_directory,https://www.berlinct.gov/egov/apps/staff/directory.egov?view=detail;id=33,,,role_department_mismatch,suspicious_winner
-ct_bethel,Bethel,suspicious_winner,Assessor,Michael Connors,connorsm@bethel-ct.gov,2037948518,,homepage,https://bethel-ct.gov/fire-forms,,,role_department_mismatch,suspicious_winner
+ct_avon,Avon,suspicious_winner,Town Clerk,THE FOLLOWING,townclerk@avonct.gov,8604094300,for the Town Clerk's Office,staff_directory,https://www.avonct.gov/departments/town_clerk/marriage_license.php,,,likely_noise_flag,suspicious_winner
+ct_bethany,Bethany,suspicious_winner,First Selectman,Patterson,dpatterson@bethanyct.gov,5168146893,Fi rst Selectman,staff_directory,https://bethanyct.gov/directory,,,chief_role_assistant_contamination,suspicious_winner
 ct_bethel,Bethel,suspicious_winner,Finance Director,Assistant Finance,prestons@bethel-ct.gov,2037948513,,homepage,https://bethel-ct.gov/budget,,,low_context,suspicious_winner
-ct_bethel,Bethel,suspicious_winner,Town Clerk,CARLOS GALLEGOS,caralbt@aol.com,2037948506,,department_page,https://bethel-ct.gov/depts-clerk,,,role_department_mismatch,suspicious_winner
 ct_bethlehem,Bethlehem,suspicious_winner,Assessor,Assistant Elsie White,assessor.assistant@bethlehemct.org,2032667510,Assessor,department_page,https://bethlehemct.org/tax-collector,,,assessor_tax_mismatch,suspicious_winner
+ct_bloomfield,Bloomfield,suspicious_winner,Town Manager,Senior Administrative,akingland@bloomfieldct.gov,8607693585,,other,https://www.bloomfieldct.gov/493/Town-Managers-Office,,,chief_role_assistant_contamination,suspicious_winner
 ct_bolton,Bolton,missing_role_groups_2plus,,,,,,,,planning; finance,2,,normal_coverage_gap
 ct_bridgeport,Bridgeport,missing_role_groups_2plus,,,,,,,,building; finance,2,,normal_coverage_gap
 ct_bridgeport,Bridgeport,suspicious_winner,Assessor,,,2035767241,Assessor,staff_directory,https://www.bridgeportct.gov/government/departments/tax-collector/frequently-asked-questions,,,assessor_tax_mismatch,suspicious_winner
 ct_chaplin,Chaplin,suspicious_winner,Building Official,Joe Smith,assessor@chaplinct.org,8604550073,assessor,staff_directory,https://www.chaplinct.org/directory.htm,,,role_department_mismatch,suspicious_winner
+ct_colebrook,Colebrook,suspicious_winner,Tax Collector,The Tax,lbartlett@colebrooktownhall.org,8603793359,Tax Collector: Laura Bartlett – 204; Assessor: David Dietsch – 206,other,https://www.townofcolebrook.org/location-contact/,,,likely_noise_flag,suspicious_winner
+ct_colebrook,Colebrook,suspicious_winner,Town Clerk,Fire Chief,firechief@colebrooktownhall.org,8603522333,,staff_directory,https://www.townofcolebrook.org/town-hall-directory/,,,role_department_mismatch,suspicious_winner
 ct_derby,Derby,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
 ct_durham,Durham,suspicious_winner,Finance Director,UNA Finance,bmoncata@townofdurhamct.org,8603499366,,board_page,https://www.townofdurhamct.org/entities/board-of-finance,,,low_context,suspicious_winner
 ct_east_haddam,East Haddam,suspicious_winner,Finance Director,Valerie Belles,financeadmin@easthaddam.org,8608735022,,staff_directory,https://www.easthaddam.org/staff-directory,,,role_department_mismatch,suspicious_winner
 ct_east_lyme,East Lyme,crawl_diagnostic_zero_yield,,,,,,,https://eltownhall.com/,,,crawl_diagnostic:probable_js_shell,crawl_diagnostic_nonblocked_failure
 ct_ellington,Ellington,missing_role_groups_2plus,,,,,,,,building; finance,2,,normal_coverage_gap
-ct_fairfield,Fairfield,missing_role_groups_2plus,,,,,,,,planning; finance,2,,normal_coverage_gap
+ct_fairfield,Fairfield,suspicious_winner,Assessor,Reddit Close,,2032563000,Assessor,department_page,https://fairfieldct.gov/service/tax_assessor/contact_us.php,,,assessor_tax_mismatch,suspicious_winner
 ct_fairfield,Fairfield,suspicious_winner,Building Official,Building Building,pmahoney@fairfieldct.org,2032563036,,department_page,https://fairfieldct.gov/service/building_department/index.php,,,role_department_mismatch,suspicious_winner
-ct_fairfield,Fairfield,suspicious_winner,Town Clerk,ACO Paul Miller,pmiller@fairfieldct.org,2032544857,,other,https://fpdct.com/divisions/field_services_bureau/animal_control.php,,,role_department_mismatch,suspicious_winner
 ct_farmington,Farmington,crawl_diagnostic_zero_yield,,,,,,,https://www.farmington-ct.org/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_glastonbury,Glastonbury,crawl_diagnostic_zero_yield,,,,,,,https://www.glastonburyct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_griswold,Griswold,suspicious_winner,Finance Director,of Finance,financedirector@griswoldct.gov,8603767060,,staff_directory,https://www.griswold-ct.org/departments/finance_office/index.php,,,role_department_mismatch,suspicious_winner
 ct_groton,Groton,suspicious_winner,Finance Director,Richard Freeman,rfreeman@groton-ct.gov,8604416690,,staff_directory,https://www.groton-ct.gov/departments/finance/index.php,,,role_department_mismatch,suspicious_winner
-ct_guilford,Guilford,suspicious_winner,Building Official,,building.perm@guilfordct.gov,2034538029,,staff_directory,https://www.guilfordct.gov/town_departments/building_department/index.php,,,role_department_mismatch,suspicious_winner
+ct_groton,Groton,suspicious_winner,Town Manager,Lisa Hylton,lhylton@groton-ct.gov,8604416630,,staff_directory,https://www.groton-ct.gov/departments/twnmgr/index.php,,,chief_role_assistant_contamination,suspicious_winner
 ct_guilford,Guilford,suspicious_winner,Finance Director,,,2034538027,,staff_directory,https://www.guilfordct.gov/town_departments/finance_department/index.php,,,role_department_mismatch,suspicious_winner
 ct_hampton,Hampton,missing_role_groups_2plus,,,,,,,,executive; planning,2,,normal_coverage_gap
-ct_hampton,Hampton,suspicious_winner,Tax Collector,,firstselectman@hamptonct.org,8604559132,,homepage,https://www.hamptonct.org/contact.htm,,,role_department_mismatch,suspicious_winner
 ct_hartford,Hartford,crawl_diagnostic_zero_yield,,,,,,,https://www.hartfordct.gov/Home,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
-ct_hartland,Hartland,suspicious_winner,Tax Collector,Reminder sticker on,,8606530287,Assessor,staff_directory,https://www.hartlandct.org/departments/town-clerk-3,,,role_department_mismatch,suspicious_winner
-ct_hebron,Hebron,suspicious_winner,Assessor,,,8602285971,Tax Collector,staff_directory,https://hebronct.com/town-departments/tax-collectors-office/,,,role_department_mismatch,suspicious_winner
+ct_hartland,Hartland,suspicious_winner,Tax Collector,Reminder sticker on,,8606530609,Tax Collector,staff_directory,https://www.hartlandct.org/departments/town-clerk-3,,,tax_collector_role_page_mismatch,suspicious_winner
 ct_hebron,Hebron,suspicious_winner,Finance Director,,,8602285971,,staff_directory,https://hebronct.com/town-departments/finance-department/,,,role_department_mismatch,suspicious_winner
 ct_killingly,Killingly,missing_role_groups_2plus,,,,,,,,tax; building; finance,3,,normal_coverage_gap
 ct_killingworth,Killingworth,suspicious_winner,Finance Director,Regina Regolo,rregolo@townofkillingworth.com,8606631765,,other,https://townofkillingworth.com/finance-department/,,,low_context,suspicious_winner
-ct_litchfield,Litchfield,suspicious_winner,Finance Director,of Finance,financedirector@townoflitchfieldct.gov,8605676077,,other,https://www.townoflitchfieldct.gov/entities/finance-department,,,low_context,suspicious_winner
-ct_lyme,Lyme,suspicious_winner,Finance Director,,financedirector@townlyme.org,8604347733,,staff_directory,https://townlyme.org/town-departments/,,,role_department_mismatch,suspicious_winner
+ct_litchfield,Litchfield,suspicious_winner,Finance Director,Erich Marriott,e.marriott@townoflitchfieldct.gov,8605676077,Erich Marriott Town Treasurer,other,https://www.townoflitchfieldct.gov/entities/finance-department,,,role_department_mismatch,suspicious_winner
 ct_manchester,Manchester,crawl_diagnostic_zero_yield,,,,,,,https://www.manchesterct.gov/Home,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
-ct_marlborough,Marlborough,suspicious_winner,Building Official,Teresa Murdock,building@marlboroughct.gov,8602956202,,department_page,https://www.marlboroughct.net/government/building/index.php,,,role_department_mismatch,suspicious_winner
 ct_meriden,Meriden,missing_role_groups_2plus,,,,,,,,clerk; finance,2,,normal_coverage_gap
+ct_meriden,Meriden,suspicious_winner,Tax Collector,The Tax,,2036304053,The Tax Office is open Monday- Friday from 8am - 5pm. Meriden Tax Collector Staff Tax Payment Dates and Information,department_page,https://www.meridenct.gov/city-services/finance/tax-collection/,,,likely_noise_flag,suspicious_winner
+ct_montville,Montville,suspicious_winner,Assessor,Questions Regarding,,8608480422,Assessor,department_page,https://www.townofmontville.org/department-services/tax-collection/,,,assessor_tax_mismatch,suspicious_winner
 ct_montville,Montville,suspicious_winner,Finance Director,Julie Chapman,,8608486714,,staff_directory,https://www.townofmontville.org/town-directory/finance-department/,,,role_department_mismatch,suspicious_winner
 ct_naugatuck,Naugatuck,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
 ct_new_britain,New Britain,missing_role_groups_2plus,,,,,,,,building; planning; finance,3,,normal_coverage_gap
-ct_new_canaan,New Canaan,suspicious_winner,First Selectman,Alan Badanes,alan.badanes@newcanaanct.gov,,,board_page,https://www.newcanaan.info/government/boards_councils___elected_officials/finance.php,,,first_selectman_role_page_mismatch,suspicious_winner
+ct_new_canaan,New Canaan,suspicious_winner,First Selectman,Dionna Carlson,dionna.carlson@newcanaanct.gov,,,board_page,https://www.newcanaan.info/government/boards_councils___elected_officials/finance.php,,,first_selectman_role_page_mismatch,suspicious_winner
 ct_new_fairfield,New Fairfield,crawl_diagnostic_zero_yield,,,,,,,https://www.newfairfield.org/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_new_haven,New Haven,crawl_diagnostic_zero_yield,,,,,,,https://www.newhavenct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_new_london,New London,missing_role_groups_2plus,,,,,,,,executive; assessment; tax; clerk; building; planning; finance,7,,normal_coverage_gap
@@ -55,16 +53,16 @@ ct_portland,Portland,suspicious_winner,Finance Director,,trobinson@portlandct.or
 ct_prospect,Prospect,missing_role_groups_2plus,,,,,,,,planning; finance,2,,normal_coverage_gap
 ct_prospect,Prospect,suspicious_winner,Town Clerk,,,2037584461,,department_page,https://townofprospect.gov/townclerk/,,,role_department_mismatch,suspicious_winner
 ct_putnam,Putnam,suspicious_winner,Building Official,,,8609636800,,staff_directory,https://www.putnamct.us/departments/building-official,,,role_department_mismatch,suspicious_winner
-ct_putnam,Putnam,suspicious_winner,Finance Director,,,8609636800,,staff_directory,https://www.putnamct.us/departments/finance,,,role_department_mismatch,suspicious_winner
+ct_putnam,Putnam,suspicious_winner,Finance Director,,,8609636800,Human Resources,staff_directory,https://www.putnamct.us/departments/human-resources/staff-directory?const_page=3&,,,role_department_mismatch,suspicious_winner
+ct_redding,Redding,suspicious_winner,Assessor,Pamela Ferraina,pferraina@reddingct.gov,2039382626,"Assessor, CCMA Pamela Ferraina , Assistant Assessor Phone",department_page,https://reddingct.gov/government/finance-and-taxes/assessor-town-of-redding-connecticut/,,,assessor_tax_mismatch,suspicious_winner
 ct_redding,Redding,suspicious_winner,Finance Director,Krista Gramer,kgramer@reddingct.gov,2039388481,,department_page,https://reddingct.gov/government/finance-and-taxes/finance-director/,,,low_context,suspicious_winner
 ct_ridgefield,Ridgefield,missing_role_groups_2plus,,,,,,,,executive; building; finance,3,,normal_coverage_gap
-ct_ridgefield,Ridgefield,suspicious_winner,Assessor,,,2034312768,Planning,staff_directory,https://www.ridgefieldct.gov/departments/planning_and_zoning/index.php,,,role_department_mismatch,suspicious_winner
+ct_ridgefield,Ridgefield,suspicious_winner,Assessor,Motor Vehicle,,2034312706,Assessor,staff_directory,https://www.ridgefieldct.gov/departments/tax_collector/frequently_asked_questions.php,,,assessor_tax_mismatch,suspicious_winner
 ct_ridgefield,Ridgefield,suspicious_winner,Town Clerk,Military Discharge All,,2034312706,Assessor,staff_directory,https://www.ridgefieldct.gov/departments/town_clerk/military_discharge.php,,,role_department_mismatch,suspicious_winner
 ct_salisbury,Salisbury,suspicious_winner,Building Official,Press Release,assessor@salisburyct.us,8604355176,assessor,staff_directory,https://www.salisburyct.us/directory/,,,role_department_mismatch,suspicious_winner
-ct_scotland,Scotland,suspicious_winner,Assessor,Denise Rodriguez,drodriguez@windhamct.gov,8604653029,,other,https://windhamct.gov/199/Revenue-Office,,,role_department_mismatch,suspicious_winner
 ct_seymour,Seymour,suspicious_winner,Finance Director,Christine Olownia,colownia@seymourct.org,2038880581,,staff_directory,https://www.seymourct.org/departments/Finance,,,role_department_mismatch,suspicious_winner
 ct_shelton,Shelton,missing_role_groups_2plus,,,,,,,,assessment; finance,2,,normal_coverage_gap
-ct_sherman,Sherman,suspicious_winner,Assessor,Working Families,taxcollector@shermanct.gov,8603544146,"Tabitha Fazzone, CCMC Democrat Republican Independent UNAffiliated GREEN Libertarian Working Families Tax Collector Term",department_page,https://www.shermanct.gov/entities/tax-collector,,,role_department_mismatch,suspicious_winner
+ct_sherman,Sherman,suspicious_winner,Assessor,,,8603550376,"Yes, to inquire about eligibility or for information contact the Assessor’s office at",department_page,https://www.shermanct.gov/entities/tax-collector,,,assessor_tax_mismatch,suspicious_winner
 ct_somers,Somers,missing_role_groups_2plus,,,,,,,,tax; finance,2,,normal_coverage_gap
 ct_southington,Southington,suspicious_winner,Tax Collector,Revenue Collector,monnerath@southington.org,8602766259,,staff_directory,https://www.southingtonct.gov/departments/tax_collector/index.php,,,role_department_mismatch,suspicious_winner
 ct_sprague,Sprague,suspicious_winner,Assessor,Building Inspector,buildinginspector@ctsprague.org,8608223000,,staff_directory,https://www.ctsprague.org/departments.htm,,,role_department_mismatch,suspicious_winner
@@ -72,16 +70,16 @@ ct_sprague,Sprague,suspicious_winner,Building Official,Fire Marshal,firemarshal@
 ct_stamford,Stamford,crawl_diagnostic_zero_yield,,,,,,,https://www.stamfordct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_stratford,Stratford,crawl_diagnostic_zero_yield,,,,,,,https://www.townofstratford.com/,,,crawl_diagnostic:probable_js_shell,crawl_diagnostic_nonblocked_failure
 ct_suffield,Suffield,suspicious_winner,Finance Director,of Finance Work,,8606683851,,staff_directory,https://www.suffieldct.gov/departments/finance,,,role_department_mismatch,suspicious_winner
-ct_suffield,Suffield,suspicious_winner,Town Clerk,,erecording@cscglobal.com,8666520111,,staff_directory,https://www.suffieldct.gov/departments/townclerk,,,role_department_mismatch,suspicious_winner
-ct_thomaston,Thomaston,suspicious_winner,Assessor,of Police jmadden,jmadden@thomastonct.gov,8602834343,,other,https://www.thomastonct.gov/entities/police-department,,,role_department_mismatch,suspicious_winner
-ct_thomaston,Thomaston,suspicious_winner,Finance Director,Working Families,tdecker@thomastonct.gov,8602839678,,other,https://www.thomastonct.gov/entities/finance,,,low_context,suspicious_winner
+ct_thomaston,Thomaston,suspicious_winner,Finance Director,Working Families,tdecker@thomastonct.org,8602839678,,board_page,https://www.thomastonct.gov/entities/board-of-finance,,,low_context,suspicious_winner
+ct_union,Union,suspicious_winner,Assessor,The Tax,assessor@unionconnecticut.org,8606845705,assessor,department_page,https://www.unionconnecticut.org/assessors-office/,,,likely_noise_flag,suspicious_winner
 ct_union,Union,suspicious_winner,Building Official,,building@unionconnecticut.org,8602341053,,other,https://www.unionconnecticut.org/contact/,,,role_department_mismatch,suspicious_winner
 ct_vernon,Vernon,crawl_diagnostic_zero_yield,,,,,,,https://www.vernon-ct.gov/,,,crawl_diagnostic:probable_js_shell,crawl_diagnostic_nonblocked_failure
 ct_waterbury,Waterbury,missing_role_groups_2plus,,,,,,,,tax; planning; finance,3,,normal_coverage_gap
-ct_watertown,Watertown,suspicious_winner,Assessor,,,8008271000,,staff_directory,https://www.watertownct.org/departments/town_clerk/veterans_discharge.php,,,role_department_mismatch,suspicious_winner
-ct_watertown,Watertown,suspicious_winner,Finance Director,Megan Guiliano,guiliano@watertownct.org,8609455258,,staff_directory,https://www.watertownct.org/departments/finance_department/index.php,,,role_department_mismatch,suspicious_winner
+ct_watertown,Watertown,suspicious_winner,Assessor,this may be,vicenzi@watertownct.org,8602748130,Assessor,staff_directory,https://www.watertownct.org/departments/tax_collector/frequently_asked_questions.php,,,assessor_tax_mismatch,suspicious_winner
+ct_watertown,Watertown,suspicious_winner,Finance Director,Maria Guerrera,mguerrera@watertownct.org,8609455259,,staff_directory,https://www.watertownct.org/departments/finance_department/index.php,,,role_department_mismatch,suspicious_winner
 ct_west_hartford,West Hartford,suspicious_winner,Finance Director,Library Director,,8605616970,,other,https://www.westhartfordct.gov/contact-us/town-officials,,,low_context,suspicious_winner
 ct_weston,Weston,crawl_diagnostic_zero_yield,,,,,,,https://www.westonct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_westport,Westport,crawl_diagnostic_zero_yield,,,,,,,https://www.westportct.gov/,,,crawl_diagnostic:blocked_or_forbidden,blocked_town
 ct_winchester,Winchester,suspicious_winner,Finance Director,of Finance,,8607386961,,other,https://www.townofwinchester.org/entities/finance-7,,,low_context,suspicious_winner
+ct_windsor_locks,Windsor Locks,suspicious_winner,Building Official,Blight Officer,,8606271447,"McGowan, James Blight Officer Margolfo, Patricia Administrative Assistant, Building, Planning & Zoning",staff_directory,https://windsorlocksct.org/town-employee-directory/,,,likely_noise_flag,suspicious_winner
 ct_windsor_locks,Windsor Locks,suspicious_winner,Finance Director,Steve Brown,,8606271449,,other,https://windsorlocksct.org/finance-department/,,,low_context,suspicious_winner

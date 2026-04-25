@@ -10,7 +10,7 @@ ct_cornwall,Cornwall,finance,1,executive; assessment; tax; clerk; building; plan
 ct_derby,Derby,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_east_lyme,East Lyme,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_ellington,Ellington,building; finance,2,executive; assessment; tax; clerk; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner
-ct_fairfield,Fairfield,planning; finance,2,executive; assessment; tax; clerk; building,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official
+ct_fairfield,Fairfield,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
 ct_farmington,Farmington,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_glastonbury,Glastonbury,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_groton,Groton,building,1,executive; assessment; tax; clerk; planning; finance,"executive: Town Manager; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; planning: Planner; finance: Finance Director, Treasurer"
@@ -30,7 +30,7 @@ ct_new_canaan,New Canaan,finance,1,executive; assessment; tax; clerk; building; 
 ct_new_fairfield,New Fairfield,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_new_haven,New Haven,executive; assessment; tax; clerk; building; planning; finance,7,,
 ct_new_london,New London,executive; assessment; tax; clerk; building; planning; finance,7,,
-ct_new_milford,New Milford,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Land Use
+ct_new_milford,New Milford,finance,1,executive; assessment; tax; clerk; building; planning,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
 ct_norfolk,Norfolk,finance,1,executive; assessment; tax; clerk; building; planning,executive: First Selectman; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk; building: Building Official; planning: Planner
 ct_north_haven,North Haven,clerk,1,executive; assessment; tax; building; planning; finance,"executive: First Selectman; assessment: Assessor; tax: Tax Collector; building: Building Official; planning: Planner, Land Use; finance: Treasurer"
 ct_plymouth,Plymouth,building; planning; finance,3,executive; assessment; tax; clerk,executive: Mayor; assessment: Assessor; tax: Tax Collector; clerk: Town Clerk

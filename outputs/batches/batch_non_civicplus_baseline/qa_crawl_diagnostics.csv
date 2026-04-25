@@ -18,9 +18,9 @@ ct_derby,batch_non_civicplus_baseline,https://www.derbyct.gov/,https://www.derby
 ct_durham,batch_non_civicplus_baseline,https://www.townofdurhamct.org/,https://www.townofdurhamct.org/,0,200,0,text/html,"Welcome to Durham, CT!",102616,158,30,25,149,0,1,ok
 ct_east_granby,batch_non_civicplus_baseline,https://eastgranbyct.org/,https://eastgranbyct.org/,0,200,0,text/html,"Town of East Granby, CT – Incorporated in 1858, Town of East Granby, Connecticut",164234,317,32,27,204,1,1,ok
 ct_east_haddam,batch_non_civicplus_baseline,https://www.easthaddam.org/,https://www.easthaddam.org/,0,200,0,text/html,"Welcome to the Official Website of the Town of East Haddam, Connecticut - home",88679,3286,50,39,183,0,1,ok
-ct_east_lyme,batch_non_civicplus_baseline,https://eltownhall.com/,https://eltownhall.com/,0,200,0,text/html,,26544,10,0,0,0,0,1,probable_js_shell
+ct_east_lyme,batch_non_civicplus_baseline,https://eltownhall.com/,https://eltownhall.com/,0,200,0,text/html,,26585,10,0,0,0,0,1,probable_js_shell
 ct_ellington,batch_non_civicplus_baseline,https://www.ellington-ct.gov/,https://www.ellington-ct.gov/,0,200,0,text/html,Home - Town of Ellington,131383,1099,50,75,60,1,1,ok
-ct_fairfield,batch_non_civicplus_baseline,https://www.fairfieldct.org/,https://fairfieldct.gov/,0,200,1,text/html,"Home - Town of Fairfield, Connecticut",77286,242,39,4,158,1,1,ok
+ct_fairfield,batch_non_civicplus_baseline,https://www.fairfieldct.org/,https://fairfieldct.gov/,0,200,1,text/html,"Home - Town of Fairfield, Connecticut",77286,242,39,4,84,1,1,ok
 ct_farmington,batch_non_civicplus_baseline,https://www.farmington-ct.org/,https://www.farmington-ct.org/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
 ct_glastonbury,batch_non_civicplus_baseline,https://www.glastonburyct.gov/,https://www.glastonburyct.gov/,1,403,0,text/html,,0,0,0,0,0,0,0,blocked_or_forbidden
 ct_griswold,batch_non_civicplus_baseline,https://www.griswold-ct.org/,https://www.griswold-ct.org/,0,200,0,text/html,"Welcome to Griswold, CT",91863,270,33,28,142,1,1,ok
